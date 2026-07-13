@@ -1,0 +1,19 @@
+{{- if .Values.bff.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rhoai-brewet.fullname" . }}-bff
+  labels:
+    {{- include "rhoai-brewet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bff
+spec:
+  type: {{ .Values.bff.service.type }}
+  ports:
+    - port: {{ .Values.bff.service.port }}
+      targetPort: {{ .Values.bff.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "rhoai-brewet.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: bff
+{{- end }}
