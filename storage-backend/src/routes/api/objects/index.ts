@@ -16,6 +16,7 @@ import {
   validateQuery,
   validateAndDecodePrefix,
 } from '../../../utils/validation';
+import { validateFileType } from '../../../utils/fileValidation';
 
 function sanitizeFilename(name: string): string {
   return name.replace(/["\r\n\\]/g, '_');
@@ -505,6 +506,11 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       }
 
       const key = base64Decode(encodedKey);
+      const filename = key.split('/').pop() || key;
+      const { allowed, reason } = validateFileType(filename);
+      if (!allowed) {
+        return reply.code(400).send({ error: 'InvalidFileType', message: reason });
+      }
 
       let data;
       try {
