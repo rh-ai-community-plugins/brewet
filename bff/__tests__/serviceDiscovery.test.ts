@@ -1,7 +1,6 @@
 import {
   resolveStorageBackend,
   clearCache,
-  resetTokenCache,
   SERVICE_NAME,
   SERVICE_PORT,
 } from '../src/utils/serviceDiscovery';
@@ -21,7 +20,6 @@ describe('resolveStorageBackend', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clearCache();
-    resetTokenCache();
     process.env = { ...originalEnv };
     delete process.env.STORAGE_BACKEND_URL;
     delete process.env.K8S_SA_TOKEN;

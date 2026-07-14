@@ -5,6 +5,8 @@ import {
   clearCache,
 } from '../utils/serviceDiscovery';
 
+const K8S_NAMESPACE_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
 const proxy = httpProxy.createProxyServer({});
 
 proxy.on('proxyRes', (proxyRes, _req, res) => {
@@ -36,9 +38,10 @@ function handleProxyError(
       detail: `The storage backend in namespace "${namespace}" is not running. Start the Brewet container first.`,
     });
   } else {
+    console.error('Proxy error for namespace %s: %s', namespace, err.message);
     res.status(502).json({
       error: 'Proxy error',
-      detail: err.message,
+      detail: 'An internal proxy error occurred.',
     });
   }
 }
@@ -57,9 +60,10 @@ function handleDiscoveryError(err: Error, namespace: string, res: Response): voi
       detail: `The BFF service account does not have permission to access namespace "${namespace}".`,
     });
   } else {
+    console.error('Service discovery error for namespace %s: %s', namespace, err.message);
     res.status(502).json({
       error: 'Service discovery failed',
-      detail: err.message,
+      detail: 'An internal error occurred during service discovery.',
     });
   }
 }
@@ -72,6 +76,16 @@ export function createStorageProxyRouter(): Router {
   router.use('/:namespace', (req: Request, res: Response) => {
     const namespace = req.params.namespace;
     const remainingPath = req.url;
+
+    if (!K8S_NAMESPACE_RE.test(namespace)) {
+      res.status(400).json({ error: 'Invalid namespace format.' });
+      return;
+    }
+
+    if (remainingPath.includes('..')) {
+      res.status(400).json({ error: 'Invalid path.' });
+      return;
+    }
 
     resolveStorageBackend(namespace)
       .then((target) => {

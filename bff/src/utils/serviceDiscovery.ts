@@ -11,22 +11,18 @@ interface CacheEntry {
   expiresAt: number;
 }
 
-let saToken: string | undefined;
 const cache = new Map<string, CacheEntry>();
 const cacheTtlMs =
-  parseInt(process.env.SERVICE_CACHE_TTL_MS || '', 10) || DEFAULT_CACHE_TTL_MS;
+  Math.max(0, parseInt(process.env.SERVICE_CACHE_TTL_MS || '', 10)) ||
+  DEFAULT_CACHE_TTL_MS;
 
 function getServiceAccountToken(): string {
-  if (saToken) return saToken;
-
   if (process.env.K8S_SA_TOKEN) {
-    saToken = process.env.K8S_SA_TOKEN;
-    return saToken;
+    return process.env.K8S_SA_TOKEN;
   }
 
   try {
-    saToken = fs.readFileSync(SA_TOKEN_PATH, 'utf8').trim();
-    return saToken;
+    return fs.readFileSync(SA_TOKEN_PATH, 'utf8').trim();
   } catch {
     throw new Error(
       'ServiceAccount token not available. Set K8S_SA_TOKEN or run in-cluster.',
@@ -62,10 +58,6 @@ export function clearCache(namespace?: string): void {
   } else {
     cache.clear();
   }
-}
-
-export function resetTokenCache(): void {
-  saToken = undefined;
 }
 
 export { SERVICE_NAME, SERVICE_PORT, DEFAULT_CACHE_TTL_MS };

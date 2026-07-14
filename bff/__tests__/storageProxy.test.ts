@@ -201,6 +201,47 @@ describe('Storage Proxy', () => {
     });
   });
 
+  describe('input validation', () => {
+    it('rejects namespaces with uppercase letters', async () => {
+      const res = await request(bffPort, '/api/MyProject/buckets');
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('Invalid namespace format.');
+      expect(mockedResolve).not.toHaveBeenCalled();
+    });
+
+    it('rejects namespaces with special characters', async () => {
+      const res = await request(bffPort, '/api/ns@evil.com/buckets');
+      expect(res.statusCode).toBe(400);
+      expect(mockedResolve).not.toHaveBeenCalled();
+    });
+
+    it('rejects namespaces starting with a hyphen', async () => {
+      const res = await request(bffPort, '/api/-invalid/buckets');
+      expect(res.statusCode).toBe(400);
+      expect(mockedResolve).not.toHaveBeenCalled();
+    });
+
+    it('rejects namespaces longer than 63 characters', async () => {
+      const longNs = 'a'.repeat(64);
+      const res = await request(bffPort, `/api/${longNs}/buckets`);
+      expect(res.statusCode).toBe(400);
+      expect(mockedResolve).not.toHaveBeenCalled();
+    });
+
+    it('accepts valid K8s namespace names', async () => {
+      const res = await request(bffPort, '/api/my-project-123/buckets');
+      expect(res.statusCode).toBe(200);
+      expect(mockedResolve).toHaveBeenCalledWith('my-project-123');
+    });
+
+    it('rejects paths containing dot-dot traversal', async () => {
+      const res = await request(bffPort, '/api/my-project/../admin/config');
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('Invalid path.');
+      expect(mockedResolve).not.toHaveBeenCalled();
+    });
+  });
+
   describe('error handling', () => {
     it('returns 404 when service discovery reports not found', async () => {
       mockedResolve.mockRejectedValue(
@@ -231,11 +272,16 @@ describe('Storage Proxy', () => {
       );
     });
 
-    it('returns 502 for generic service discovery errors', async () => {
+    it('returns 502 with sanitized message for generic discovery errors', async () => {
       mockedResolve.mockRejectedValue(new Error('Network timeout'));
       const res = await request(bffPort, '/api/my-project/buckets');
       expect(res.statusCode).toBe(502);
-      expect(JSON.parse(res.body).error).toBe('Service discovery failed');
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('Service discovery failed');
+      expect(body.detail).not.toContain('Network timeout');
+      expect(body.detail).toBe(
+        'An internal error occurred during service discovery.',
+      );
     });
   });
 });
