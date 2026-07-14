@@ -2,12 +2,14 @@ import Fastify, { FastifyInstance } from 'fastify';
 import { mockClient } from 'aws-sdk-client-mock';
 import {
   S3Client,
+  DeleteObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
   CopyObjectCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import transferRoutes from '../../src/routes/api/transfer/index';
+import { transferQueue } from '../../src/utils/transferQueue';
 
 const s3Mock = mockClient(S3Client);
 
@@ -250,5 +252,99 @@ describe('POST /api/transfer/:jobId/cleanup', () => {
       url: '/api/transfer/nonexistent/cleanup',
     });
     expect(response.statusCode).toBe(404);
+  });
+
+  it('returns 400 for active job', async () => {
+    s3Mock.on(HeadObjectCommand).resolves({ ContentLength: 1024 });
+    s3Mock.on(CopyObjectCommand).callsFake(() => new Promise(() => {}));
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/transfer',
+      payload: {
+        source: 's3:source-bucket/',
+        destination: 's3:dest-bucket/out',
+        items: [{ path: 'file.txt', type: 'file' }],
+      },
+    });
+    const { jobId } = JSON.parse(createResponse.body);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/transfer/${jobId}/cleanup`,
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('cleans up S3 destination files for cancelled job', async () => {
+    s3Mock.on(HeadObjectCommand).resolves({ ContentLength: 100 });
+    // Use a slow copy so the job stays active long enough to cancel
+    s3Mock.on(CopyObjectCommand).callsFake(
+      () => new Promise((resolve) => setTimeout(resolve, 2000)),
+    );
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/transfer',
+      payload: {
+        source: 's3:source-bucket/',
+        destination: 's3:dest-bucket/output',
+        items: [{ path: 'data.txt', type: 'file' }],
+      },
+    });
+    const { jobId } = JSON.parse(createResponse.body);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const cancelResponse = await app.inject({
+      method: 'DELETE',
+      url: `/api/transfer/${jobId}`,
+    });
+    expect(cancelResponse.statusCode).toBe(200);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/transfer/${jobId}/cleanup`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.jobId).toBe(jobId);
+    expect(typeof body.cleaned).toBe('number');
+    expect(typeof body.errors).toBe('number');
+  });
+
+  it('deletes completed files during cleanup of failed job', async () => {
+    s3Mock.on(DeleteObjectCommand).resolves({});
+
+    jest.spyOn(transferQueue, 'getJob').mockReturnValueOnce({
+      id: 'failed-job-id',
+      type: 'cross-storage',
+      status: 'failed',
+      files: [
+        { sourcePath: 'src/report.txt', destinationPath: 'report.txt', size: 100, status: 'completed', loaded: 100 },
+        { sourcePath: 'src/pending.txt', destinationPath: 'pending.txt', size: 50, status: 'cancelled', loaded: 0 },
+      ],
+      abortController: new AbortController(),
+      createdAt: Date.now(),
+      completedAt: Date.now(),
+      destination: { type: 's3', locationId: 'dest-bucket', basePath: 'output' },
+    });
+
+    const deleteCallsBefore = s3Mock.commandCalls(DeleteObjectCommand).length;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/transfer/failed-job-id/cleanup',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.cleaned).toBe(1);
+    expect(body.errors).toBe(0);
+
+    const deleteCallsAfter = s3Mock.commandCalls(DeleteObjectCommand).length;
+    expect(deleteCallsAfter - deleteCallsBefore).toBe(1);
   });
 });
