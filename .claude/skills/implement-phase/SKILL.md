@@ -109,7 +109,7 @@ Check the current branch:
 git branch --show-current
 ```
 
-- If on a long-lived branch (`main`, `dev`, `develop`, `master`): create and checkout a new feature branch with a descriptive name (e.g., `feat/phase-1-foundation`, `feat/storage-backend-core`, `feat/container-lifecycle`). Use the phase content to pick a meaningful name.
+- If on a long-lived branch (`main`, `dev`, `develop`, `master`): create and checkout a new feature branch from the current HEAD with a descriptive name (e.g., `feat/phase-1-foundation`, `feat/storage-backend-core`, `feat/container-lifecycle`). Feature branches should derive from `dev` (the development branch); if on `main`, switch to `dev` first. Use the phase content to pick a meaningful name.
 - If on a feature/topic branch (anything else): proceed on the current branch (the user has already set up their branch).
 
 ## Step 2: Understand the Phase
