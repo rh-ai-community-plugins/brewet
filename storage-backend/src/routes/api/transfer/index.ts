@@ -25,6 +25,8 @@ import { validateBucketName } from '../../../utils/validation';
 
 const LARGE_FOLDER_FILE_THRESHOLD = 1000;
 const LARGE_FOLDER_SIZE_THRESHOLD = 10 * 1024 * 1024 * 1024; // 10 GB
+const MAX_EXPANDED_FILES = 100_000;
+const MAX_ITEMS_PER_REQUEST = 1000;
 
 interface TransferItem {
   path: string;
@@ -94,6 +96,10 @@ async function listS3DirectoryRecursive(
       }
     }
 
+    if (results.length > MAX_EXPANDED_FILES) {
+      throw new Error(`Directory listing exceeded ${MAX_EXPANDED_FILES} files`);
+    }
+
     token = response.NextContinuationToken;
   } while (token);
 
@@ -116,6 +122,9 @@ async function listLocalDirectoryRecursive(
       if (entry.isDirectory()) {
         await recurse(childRelative);
       } else if (entry.isFile()) {
+        if (results.length >= MAX_EXPANDED_FILES) {
+          throw new Error(`Directory listing exceeded ${MAX_EXPANDED_FILES} files`);
+        }
         const childAbsolute = await resolveLocalPath(locationId, childRelative);
         const stats = await fs.stat(childAbsolute);
         results.push({ relativePath: childRelative, size: stats.size });
@@ -134,6 +143,10 @@ async function expandItemsToFiles(
   items: TransferItem[],
   destType: string,
 ): Promise<TransferFileJob[]> {
+  if (items.length > MAX_ITEMS_PER_REQUEST) {
+    throw new Error(`Too many items: ${items.length} exceeds limit of ${MAX_ITEMS_PER_REQUEST}`);
+  }
+
   const files: TransferFileJob[] = [];
 
   for (const item of items) {
@@ -271,7 +284,7 @@ async function transferS3ToS3(
         new CopyObjectCommand({
           Bucket: destBucket,
           Key: destKey,
-          CopySource: encodeURIComponent(`${sourceBucket}/${file.sourcePath}`),
+          CopySource: `${sourceBucket}/${file.sourcePath}`,
         }),
       );
     }
@@ -536,7 +549,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       sourceType === 's3' && destType === 's3' ? 'cross-storage' as const :
       sourceType === 's3' && destType === 'local' ? 's3-download' as const :
       sourceType === 'local' && destType === 's3' ? 's3-upload' as const :
-      'cross-storage' as const;
+      'local-upload' as const;
 
     const jobId = transferQueue.queueJob(transferType, files, executor);
 
@@ -560,27 +573,23 @@ export default async (fastify: FastifyInstance): Promise<void> => {
     setupSSE(reply);
     const stopKeepAlive = setupKeepAlive(reply.raw);
 
-    const progress = transferQueue.getProgress(jobId);
-    if (progress) {
-      sendSSEEvent(reply.raw, 'progress', progress);
-    }
-
     const isTerminal = (status: string) =>
       status === 'completed' || status === 'failed' || status === 'cancelled';
 
-    if (isTerminal(job.status)) {
-      stopKeepAlive();
+    let ended = false;
+    const endResponse = () => {
+      if (ended) return;
+      ended = true;
+      cleanup();
       reply.raw.end();
-      return;
-    }
+    };
 
     const onProgress = (data: TransferProgress) => {
       if (data.jobId !== jobId) return;
       sendSSEEvent(reply.raw, 'progress', data);
 
       if (isTerminal(data.status)) {
-        cleanup();
-        reply.raw.end();
+        endResponse();
       }
     };
 
@@ -589,9 +598,21 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       stopKeepAlive();
     };
 
+    // Attach listener BEFORE checking status to avoid missing terminal events
     transferQueue.on('progress', onProgress);
+    req.raw.on('close', () => {
+      cleanup();
+      ended = true;
+    });
 
-    req.raw.on('close', cleanup);
+    const progress = transferQueue.getProgress(jobId);
+    if (progress) {
+      sendSSEEvent(reply.raw, 'progress', progress);
+      if (isTerminal(progress.status)) {
+        endResponse();
+        return;
+      }
+    }
 
     // Prevent Fastify from ending the response
     await new Promise<void>((resolve) => {
@@ -626,7 +647,8 @@ export default async (fastify: FastifyInstance): Promise<void> => {
     return { cancelled: true, jobId };
   });
 
-  // Cleanup destination files for a cancelled job
+  // Cleanup destination files for a cancelled job — not yet implemented;
+  // requires storing destination info in the TransferJob to know what to delete.
   fastify.post('/:jobId/cleanup', async (req: FastifyRequest, reply: FastifyReply) => {
     const { jobId } = req.params as { jobId: string };
     const job = transferQueue.getJob(jobId);
@@ -642,27 +664,10 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       });
     }
 
-    const completedFiles = job.files.filter((f) => f.status === 'completed');
-    const errors: { path: string; error: string }[] = [];
-
-    for (const file of completedFiles) {
-      try {
-        // Re-parse from the original request isn't stored, so cleanup is best-effort
-        // The caller should specify the destination
-        req.log.info({ file: file.destinationPath }, 'Cleanup would delete destination file');
-      } catch (err: unknown) {
-        errors.push({
-          path: file.destinationPath,
-          error: err instanceof Error ? err.message : 'Unknown error',
-        });
-      }
-    }
-
-    if (errors.length > 0) {
-      return reply.code(207).send({ cleaned: completedFiles.length - errors.length, errors });
-    }
-
-    return { cleaned: completedFiles.length };
+    return reply.code(501).send({
+      error: 'Not Implemented',
+      message: 'Automatic cleanup of destination files is not yet implemented',
+    });
   });
 
   // Check for conflicts before transfer

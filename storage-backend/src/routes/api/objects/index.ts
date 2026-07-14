@@ -598,6 +598,10 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       return reply.code(400).send({ error: 'Bad Request', message: 'modelId is required' });
     }
 
+    if (!/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(body.modelId) || body.modelId.length > 200) {
+      return reply.code(400).send({ error: 'Bad Request', message: 'modelId must be in owner/model format' });
+    }
+
     if (!body.destinationType || (body.destinationType !== 's3' && body.destinationType !== 'local')) {
       return reply.code(400).send({ error: 'Bad Request', message: 'destinationType must be s3 or local' });
     }
@@ -613,9 +617,38 @@ export default async (fastify: FastifyInstance): Promise<void> => {
     const token = body.hfToken || getHFConfig();
     const { httpProxy, httpsProxy } = getProxyConfig();
 
+    const BLOCKED_HOSTNAMES = [
+      'localhost', '127.0.0.1', '::1', '0.0.0.0',
+      'metadata.google.internal', '169.254.169.254',
+      'kubernetes.default.svc', 'kubernetes.default',
+    ];
+
+    const isBlockedRedirect = (url: string): boolean => {
+      try {
+        const parsed = new URL(url);
+        const hostname = parsed.hostname.toLowerCase();
+        if (BLOCKED_HOSTNAMES.includes(hostname)) return true;
+        if (hostname.endsWith('.internal') || hostname.endsWith('.local')) return true;
+        if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname)) return true;
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return true;
+        return false;
+      } catch {
+        return true;
+      }
+    };
+
+    const isHuggingFaceHost = (url: string): boolean => {
+      try {
+        return new URL(url).hostname.endsWith('huggingface.co');
+      } catch {
+        return false;
+      }
+    };
+
     const makeRequest = (
       url: string,
       callback: (res: http.IncomingMessage) => void,
+      includeAuth = true,
     ): http.ClientRequest => {
       const parsedUrl = new URL(url);
       const isHttps = parsedUrl.protocol === 'https:';
@@ -626,7 +659,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         method: 'GET',
         headers: {
           'User-Agent': 'brewet-storage-backend',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(includeAuth && token ? { Authorization: `Bearer ${token}` } : {}),
         },
       };
       if (isHttps && httpsProxy) {
@@ -639,11 +672,17 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         : http.request(options, callback);
     };
 
-    const fetchJSON = (url: string): Promise<any> =>
+    const fetchJSON = (url: string, includeAuth = true): Promise<any> =>
       new Promise((resolve, reject) => {
         const request = makeRequest(url, (res: http.IncomingMessage) => {
           if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            fetchJSON(res.headers.location).then(resolve).catch(reject);
+            const redirectUrl = res.headers.location;
+            if (isBlockedRedirect(redirectUrl)) {
+              reject(new Error('Redirect to blocked URL'));
+              return;
+            }
+            const sendAuth = isHuggingFaceHost(redirectUrl);
+            fetchJSON(redirectUrl, sendAuth).then(resolve).catch(reject);
             return;
           }
           if (res.statusCode && res.statusCode >= 400) {
@@ -655,7 +694,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
           res.on('end', () => {
             try { resolve(JSON.parse(data)); } catch { reject(new Error('Invalid JSON response')); }
           });
-        });
+        }, includeAuth);
         request.on('error', reject);
         request.end();
       });
@@ -663,6 +702,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
     const downloadFile = (
       url: string,
       redirectCount = 0,
+      includeAuth = true,
     ): Promise<{ stream: Readable; contentLength: number }> =>
       new Promise((resolve, reject) => {
         if (redirectCount > 10) {
@@ -671,7 +711,13 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         }
         const request = makeRequest(url, (res: http.IncomingMessage) => {
           if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            downloadFile(res.headers.location, redirectCount + 1).then(resolve).catch(reject);
+            const redirectUrl = res.headers.location;
+            if (isBlockedRedirect(redirectUrl)) {
+              reject(new Error('Redirect to blocked URL'));
+              return;
+            }
+            const sendAuth = isHuggingFaceHost(redirectUrl);
+            downloadFile(redirectUrl, redirectCount + 1, sendAuth).then(resolve).catch(reject);
             return;
           }
           if (res.statusCode && res.statusCode >= 400) {
@@ -680,7 +726,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
           }
           const contentLength = parseInt(res.headers['content-length'] || '0', 10);
           resolve({ stream: res as unknown as Readable, contentLength });
-        });
+        }, includeAuth);
         request.on('error', reject);
         request.end();
       });

@@ -95,4 +95,24 @@ describe('POST /api/objects/huggingface-import', () => {
     const body = JSON.parse(response.body);
     expect(body.message).toContain('localLocationId');
   });
+
+  it('returns 400 for invalid modelId format', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/objects/huggingface-import',
+      payload: { modelId: '../../../etc/passwd', destinationType: 's3', bucketName: 'my-bucket' },
+    });
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body);
+    expect(body.message).toContain('owner/model');
+  });
+
+  it('rejects modelId with path traversal characters', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/objects/huggingface-import',
+      payload: { modelId: 'owner/model/../../secrets', destinationType: 's3', bucketName: 'my-bucket' },
+    });
+    expect(response.statusCode).toBe(400);
+  });
 });

@@ -48,6 +48,8 @@ export type TransferExecutor = (
 
 let jobCounter = 0;
 
+const JOB_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 export class TransferQueue extends EventEmitter {
   private jobs = new Map<string, TransferJob>();
   private limiter: ReturnType<typeof pLimit>;
@@ -58,6 +60,16 @@ export class TransferQueue extends EventEmitter {
     super();
     this.limiter = pLimit(concurrency);
     this.metadataLimiter = pLimit(20);
+  }
+
+  private evictExpiredJobs(): void {
+    const now = Date.now();
+    for (const [id, job] of this.jobs) {
+      if (job.completedAt && now - job.completedAt > JOB_TTL_MS) {
+        this.jobs.delete(id);
+        this.lastEmitTime.delete(id);
+      }
+    }
   }
 
   getLimiter(): ReturnType<typeof pLimit> {
@@ -73,6 +85,7 @@ export class TransferQueue extends EventEmitter {
   }
 
   queueJob(type: TransferType, files: TransferFileJob[], executor: TransferExecutor): string {
+    this.evictExpiredJobs();
     const jobId = `transfer-${++jobCounter}-${Date.now()}`;
     const abortController = new AbortController();
 
