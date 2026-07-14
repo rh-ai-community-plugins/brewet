@@ -149,6 +149,25 @@ describe('BrewetToolbar', () => {
     });
   });
 
+  it('should clear the refresh timer on unmount', async () => {
+    jest.useFakeTimers();
+    const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime.bind(jest) });
+    const refreshContainerStatus = jest.fn();
+    global.fetch = jest.fn().mockResolvedValue({ ok: true });
+    mockContext({ selectedProject: 'test-ns', containerStatus: 'stopped', refreshContainerStatus });
+    const { unmount } = render(<BrewetToolbar />);
+
+    await user.click(screen.getByLabelText('Start container'));
+    // Flush the microtask so the .then() handler runs and schedules the timer
+    await Promise.resolve();
+
+    unmount();
+    jest.runAllTimers();
+
+    expect(refreshContainerStatus).not.toHaveBeenCalled();
+    jest.useRealTimers();
+  });
+
   it('should render edit button as disabled', () => {
     mockContext({ selectedProject: 'test-ns', containerStatus: 'running' });
     render(<BrewetToolbar />);

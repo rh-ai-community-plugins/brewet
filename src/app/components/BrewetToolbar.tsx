@@ -34,10 +34,17 @@ export const BrewetToolbar: React.FC = () => {
 
   const [isScaling, setIsScaling] = useState(false);
   const scaleControllerRef = useRef<AbortController | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     return () => {
       scaleControllerRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, []);
 
@@ -73,7 +80,7 @@ export const BrewetToolbar: React.FC = () => {
         if (!res.ok) {
           throw new Error(`Scale request failed: ${res.status}`);
         }
-        setTimeout(refreshContainerStatus, 1000);
+        timerRef.current = setTimeout(refreshContainerStatus, 1000);
       })
       .catch((err: unknown) => {
         if (err instanceof Error && err.name === 'AbortError') {
