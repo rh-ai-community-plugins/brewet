@@ -109,8 +109,8 @@ Check the current branch:
 git branch --show-current
 ```
 
-- If on `main`: create and checkout a new branch with a descriptive name (e.g., `feat/phase-1-foundation`, `feat/storage-backend-core`, `feat/container-lifecycle`). Use the phase content to pick a meaningful name.
-- If on any other branch: proceed on the current branch (the user has already set up their branch).
+- If on a long-lived branch (`main`, `dev`, `develop`, `master`): create and checkout a new feature branch with a descriptive name (e.g., `feat/phase-1-foundation`, `feat/storage-backend-core`, `feat/container-lifecycle`). Use the phase content to pick a meaningful name.
+- If on a feature/topic branch (anything else): proceed on the current branch (the user has already set up their branch).
 
 ## Step 2: Understand the Phase
 
