@@ -598,7 +598,12 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       return reply.code(400).send({ error: 'Bad Request', message: 'modelId is required' });
     }
 
-    if (!/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(body.modelId) || body.modelId.length > 200) {
+    if (!/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9._-]+$/.test(body.modelId) || body.modelId.length > 200) {
+      return reply.code(400).send({ error: 'Bad Request', message: 'modelId must be in owner/model format' });
+    }
+
+    const [, modelSegment] = body.modelId.split('/');
+    if (modelSegment === '.' || modelSegment === '..') {
       return reply.code(400).send({ error: 'Bad Request', message: 'modelId must be in owner/model format' });
     }
 
