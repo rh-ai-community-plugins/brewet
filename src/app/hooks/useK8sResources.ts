@@ -14,9 +14,15 @@ export type K8sResource = {
   status?: Record<string, unknown>;
 };
 
+type UseK8sResourcesOptions = {
+  pollIntervalMs?: number;
+};
+
 export function useK8sResources<T extends K8sResource = K8sResource>(
   apiPath: string | null,
+  options: UseK8sResourcesOptions = {},
 ) {
+  const { pollIntervalMs } = options;
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,8 +59,16 @@ export function useK8sResources<T extends K8sResource = K8sResource>(
 
   useEffect(() => {
     refresh();
-    return () => controllerRef.current?.abort();
-  }, [refresh]);
+
+    const intervalId = pollIntervalMs
+      ? window.setInterval(refresh, pollIntervalMs)
+      : undefined;
+
+    return () => {
+      if (intervalId) window.clearInterval(intervalId);
+      controllerRef.current?.abort();
+    };
+  }, [pollIntervalMs, refresh]);
 
   return { items, loading, error, refresh };
 }

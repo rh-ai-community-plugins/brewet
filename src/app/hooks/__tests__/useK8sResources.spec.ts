@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { useK8sResources, createK8sResource, deleteK8sResource } from '../useK8sResources';
 
 const mockDeployments = [
@@ -58,6 +58,32 @@ describe('useK8sResources', () => {
 
     expect(result.current.items).toEqual([]);
     expect(result.current.error).toBe('404 Not Found');
+  });
+
+  it('should poll resources when pollIntervalMs is provided', async () => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ items: mockDeployments }),
+    });
+
+    try {
+      renderHook(() =>
+        useK8sResources('/apis/apps/v1/namespaces/test-ns/deployments', {
+          pollIntervalMs: 1000,
+        }),
+      );
+
+      await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+
+      await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 

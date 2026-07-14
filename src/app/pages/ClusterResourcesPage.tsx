@@ -42,6 +42,8 @@ type ServiceResource = K8sResource & {
   spec: { ports?: { port: number; targetPort: number; protocol: string }[] };
 };
 
+const RESOURCE_POLL_INTERVAL_MS = 10_000;
+
 const ResourceTable: React.FC<{
   resources: K8sResource[];
   kind: string;
@@ -351,14 +353,18 @@ const ClusterResourcesPage: React.FC = () => {
     loading: deploymentsLoading,
     error: deploymentsError,
     refresh: refreshDeployments,
-  } = useK8sResources<DeploymentResource>(deploymentPath);
+  } = useK8sResources<DeploymentResource>(deploymentPath, {
+    pollIntervalMs: RESOURCE_POLL_INTERVAL_MS,
+  });
 
   const {
     items: services,
     loading: servicesLoading,
     error: servicesError,
     refresh: refreshServices,
-  } = useK8sResources<ServiceResource>(servicePath);
+  } = useK8sResources<ServiceResource>(servicePath, {
+    pollIntervalMs: RESOURCE_POLL_INTERVAL_MS,
+  });
 
   const [isCreateDeployOpen, setIsCreateDeployOpen] = useState(false);
   const [isCreateServiceOpen, setIsCreateServiceOpen] = useState(false);
