@@ -1,10 +1,14 @@
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
   CopyObjectCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
+  UploadPartCopyCommand,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -29,6 +33,11 @@ const LARGE_FOLDER_FILE_THRESHOLD = 1000;
 const LARGE_FOLDER_SIZE_THRESHOLD = 10 * 1024 * 1024 * 1024; // 10 GB
 const MAX_EXPANDED_FILES = 100_000;
 const MAX_ITEMS_PER_REQUEST = 1000;
+
+// AWS S3 single-part copy is limited to 5 GB per object
+const S3_COPY_SIZE_LIMIT = 5 * 1024 * 1024 * 1024; // 5 GB
+// Each part in a multipart copy must be at least 5 MB (except the last); 500 MB is a reasonable default
+const MULTIPART_COPY_PART_SIZE = 500 * 1024 * 1024; // 500 MB
 
 interface TransferItem {
   path: string;
@@ -281,7 +290,8 @@ async function transferS3ToS3(
           Body: Buffer.alloc(0),
         }),
       );
-    } else {
+      onProgress(file.size);
+    } else if (file.size <= S3_COPY_SIZE_LIMIT) {
       await s3Client.send(
         new CopyObjectCommand({
           Bucket: destBucket,
@@ -289,8 +299,65 @@ async function transferS3ToS3(
           CopySource: `${sourceBucket}/${file.sourcePath}`,
         }),
       );
+      onProgress(file.size);
+    } else {
+      // Multipart copy for objects > 5 GB (AWS single-part copy limit)
+      const createResponse = await s3Client.send(
+        new CreateMultipartUploadCommand({
+          Bucket: destBucket,
+          Key: destKey,
+        }),
+      );
+      const uploadId = createResponse.UploadId!;
+
+      const parts: { PartNumber: number; ETag: string }[] = [];
+      let offset = 0;
+      let partNumber = 1;
+
+      try {
+        while (offset < file.size) {
+          if (signal.aborted) throw new Error('Cancelled');
+
+          const end = Math.min(offset + MULTIPART_COPY_PART_SIZE - 1, file.size - 1);
+
+          const partResponse = await s3Client.send(
+            new UploadPartCopyCommand({
+              Bucket: destBucket,
+              Key: destKey,
+              CopySource: `${sourceBucket}/${file.sourcePath}`,
+              CopySourceRange: `bytes=${offset}-${end}`,
+              UploadId: uploadId,
+              PartNumber: partNumber,
+            }),
+          );
+
+          parts.push({
+            PartNumber: partNumber,
+            ETag: partResponse.CopyPartResult!.ETag!,
+          });
+
+          onProgress(end - offset + 1);
+
+          offset = end + 1;
+          partNumber++;
+        }
+
+        await s3Client.send(
+          new CompleteMultipartUploadCommand({
+            Bucket: destBucket,
+            Key: destKey,
+            UploadId: uploadId,
+            MultipartUpload: { Parts: parts },
+          }),
+        );
+      } catch (err: unknown) {
+        // Best-effort abort to clean up the incomplete multipart upload on S3
+        await s3Client
+          .send(new AbortMultipartUploadCommand({ Bucket: destBucket, Key: destKey, UploadId: uploadId }))
+          .catch(() => {});
+        throw err;
+      }
     }
-    onProgress(file.size);
   }, signal);
 }
 
