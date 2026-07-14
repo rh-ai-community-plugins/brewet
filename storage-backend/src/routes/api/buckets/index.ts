@@ -70,6 +70,11 @@ export default async (fastify: FastifyInstance): Promise<void> => {
     const { s3Client } = getS3Config();
     const { bucketName } = req.params as { bucketName: string };
 
+    const validationError = validateBucketName(bucketName);
+    if (validationError) {
+      return reply.code(400).send({ error: 'InvalidBucketName', message: validationError });
+    }
+
     try {
       await s3Client.send(new DeleteBucketCommand({ Bucket: bucketName }));
       reply.send({ message: 'Bucket deleted successfully' });

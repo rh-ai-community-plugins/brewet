@@ -17,10 +17,15 @@ const app = fastify({
     level: LOG_LEVEL,
     redact: [
       'err.response.request.headers.Authorization',
+      'err.response.request.headers.authorization',
       'response.request.headers.Authorization',
+      'response.request.headers.authorization',
       'request.headers.Authorization',
+      'request.headers.authorization',
       'headers.Authorization',
-      'Authorization',
+      'headers.authorization',
+      'req.headers.authorization',
+      'req.headers.Authorization',
     ],
     ...(APP_ENV === 'development' && {
       transport: {

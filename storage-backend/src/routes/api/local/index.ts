@@ -1,8 +1,12 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { promises as fs, createWriteStream } from 'fs';
+import { promises as fs, createWriteStream, ReadStream } from 'fs';
 import path from 'path';
 import { pipeline } from 'stream/promises';
 import { Transform } from 'stream';
+
+function sanitizeFilename(name: string): string {
+  return name.replace(/["\r\n\\]/g, '_');
+}
 import { base64Decode } from '../../../utils/encoding';
 import {
   validatePath,
@@ -112,6 +116,11 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         }
 
         await fs.mkdir(parentAbsolutePath, { recursive: true });
+
+        const realParent = await fs.realpath(parentAbsolutePath);
+        if (!realParent.startsWith(basePath + path.sep) && realParent !== basePath) {
+          throw new SecurityError('Resolved parent path escapes allowed directory');
+        }
       }
 
       const absolutePath = await validatePath(locationId, relativePath);
@@ -143,20 +152,25 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       let totalSize = 0;
       const maxSize = getMaxFileSizeBytes();
 
-      await pipeline(
-        data.file,
-        new Transform({
-          transform(chunk, _encoding, callback) {
-            totalSize += chunk.length;
-            if (totalSize > maxSize) {
-              callback(new StorageError('File too large'));
-            } else {
-              callback(null, chunk);
-            }
-          },
-        }),
-        createWriteStream(absolutePath),
-      );
+      try {
+        await pipeline(
+          data.file,
+          new Transform({
+            transform(chunk, _encoding, callback) {
+              totalSize += chunk.length;
+              if (totalSize > maxSize) {
+                callback(new StorageError('File too large'));
+              } else {
+                callback(null, chunk);
+              }
+            },
+          }),
+          createWriteStream(absolutePath),
+        );
+      } catch (pipelineError) {
+        try { await fs.unlink(absolutePath); } catch { /* ignore cleanup errors */ }
+        throw pipelineError;
+      }
 
       return { uploaded: true, path: relativePath };
     } catch (error: any) {
@@ -175,7 +189,8 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       const relativePath = encodedPath ? base64Decode(encodedPath) : '';
       const absolutePath = await validatePath(locationId, relativePath);
       await checkFileSize(absolutePath);
-      const stream = await streamFile(absolutePath);
+      const stream = await streamFile(absolutePath) as ReadStream;
+      reply.raw.on('close', () => { stream.destroy(); });
       return stream;
     } catch (error: any) {
       return handleError(error, reply);
@@ -195,11 +210,13 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       await checkFileSize(absolutePath);
 
       const metadata = await getFileMetadata(absolutePath);
-      const stream = await streamFile(absolutePath);
+      const stream = await streamFile(absolutePath) as ReadStream;
+
+      reply.raw.on('close', () => { stream.destroy(); });
 
       reply
         .type('application/octet-stream')
-        .header('Content-Disposition', `attachment; filename="${metadata.name}"`)
+        .header('Content-Disposition', `attachment; filename="${sanitizeFilename(metadata.name)}"`)
         .header('Content-Length', metadata.size || 0)
         .send(stream);
     } catch (error: any) {

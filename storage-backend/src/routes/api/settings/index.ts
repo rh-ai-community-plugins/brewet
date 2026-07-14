@@ -16,21 +16,61 @@ import {
   updateMaxFilesPerPage,
   getProxyConfig,
   updateProxyConfig,
-  initializeS3Client,
 } from '../../../utils/config';
 
+function maskSecret(value: string): string {
+  if (!value || value.length <= 4) return '****';
+  return value.slice(0, 4) + '****';
+}
+
+function isBlockedUrl(urlStr: string): boolean {
+  try {
+    const url = new URL(urlStr);
+    const hostname = url.hostname.toLowerCase();
+    // Block link-local metadata endpoints
+    if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') return true;
+    // Block localhost/loopback
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
+    // Block Kubernetes internal service DNS
+    if (hostname === 'kubernetes' || hostname === 'kubernetes.default' ||
+        hostname.endsWith('.svc.cluster.local')) return true;
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 export default async (fastify: FastifyInstance): Promise<void> => {
-  // Get S3 settings
+  // Get S3 settings (mask secret key)
   fastify.get('/s3', async (_req: FastifyRequest, reply: FastifyReply) => {
     const { accessKeyId, secretAccessKey, region, endpoint, defaultBucket } = getS3Config();
-    reply.send({ settings: { accessKeyId, secretAccessKey, region, endpoint, defaultBucket } });
+    reply.send({
+      settings: {
+        accessKeyId,
+        secretAccessKey: maskSecret(secretAccessKey),
+        region,
+        endpoint,
+        defaultBucket,
+      },
+    });
   });
 
   // Update S3 settings
   fastify.put('/s3', async (req: FastifyRequest, reply: FastifyReply) => {
-    const { accessKeyId, secretAccessKey, region, endpoint, defaultBucket } = req.body as any;
+    const body = req.body as Record<string, unknown> | null;
+    if (!body || typeof body !== 'object') {
+      return reply.code(400).send({ error: 'BadRequest', message: 'Request body is required' });
+    }
+    const { accessKeyId, secretAccessKey, region, endpoint, defaultBucket } = body as any;
+    if (typeof accessKeyId !== 'string' || typeof secretAccessKey !== 'string' ||
+        typeof region !== 'string' || typeof endpoint !== 'string') {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'accessKeyId, secretAccessKey, region, and endpoint must be strings',
+      });
+    }
     try {
-      updateS3Config(accessKeyId, secretAccessKey, region, endpoint, defaultBucket);
+      updateS3Config(accessKeyId, secretAccessKey, region, endpoint, (defaultBucket as string) || '');
       reply.send({ message: 'Settings updated successfully' });
     } catch (error) {
       const err = error as Error;
@@ -40,7 +80,26 @@ export default async (fastify: FastifyInstance): Promise<void> => {
 
   // Test S3 connection
   fastify.post('/test-s3', async (req: FastifyRequest, reply: FastifyReply) => {
-    const { accessKeyId, secretAccessKey, region, endpoint } = req.body as any;
+    const body = req.body as Record<string, unknown> | null;
+    if (!body || typeof body !== 'object') {
+      return reply.code(400).send({ error: 'BadRequest', message: 'Request body is required' });
+    }
+    const { accessKeyId, secretAccessKey, region, endpoint } = body as any;
+    if (typeof accessKeyId !== 'string' || typeof secretAccessKey !== 'string' ||
+        typeof region !== 'string' || typeof endpoint !== 'string') {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'accessKeyId, secretAccessKey, region, and endpoint must be strings',
+      });
+    }
+    if (isBlockedUrl(endpoint)) {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'Endpoint URL points to a blocked address',
+      });
+    }
+
+    let s3ClientTest: S3Client | undefined;
     try {
       const { httpProxy, httpsProxy } = getProxyConfig();
       const s3ClientOptions: any = {
@@ -64,7 +123,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         });
       }
 
-      const s3ClientTest = new S3Client(s3ClientOptions) as NodeJsClient<S3Client>;
+      s3ClientTest = new S3Client(s3ClientOptions) as NodeJsClient<S3Client>;
       await s3ClientTest.send(new ListBucketsCommand({}));
       reply.send({ message: 'Connection successful' });
     } catch (error) {
@@ -76,19 +135,24 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       }
       const err = error as Error;
       reply.code(500).send({ error: err.name || 'UnknownError', message: err.message });
+    } finally {
+      s3ClientTest?.destroy();
     }
   });
 
-  // Get HuggingFace settings
+  // Get HuggingFace settings (mask token)
   fastify.get('/huggingface', async (_req: FastifyRequest, reply: FastifyReply) => {
-    reply.send({ settings: { hfToken: getHFConfig() } });
+    reply.send({ settings: { hfToken: maskSecret(getHFConfig()) } });
   });
 
   // Update HuggingFace settings
   fastify.put('/huggingface', async (req: FastifyRequest, reply: FastifyReply) => {
-    const { hfToken } = req.body as any;
+    const body = req.body as Record<string, unknown> | null;
+    if (!body || typeof body !== 'object' || typeof (body as any).hfToken !== 'string') {
+      return reply.code(400).send({ error: 'BadRequest', message: 'hfToken must be a string' });
+    }
     try {
-      updateHFConfig(hfToken);
+      updateHFConfig((body as any).hfToken);
       reply.send({ message: 'Settings updated successfully' });
     } catch (error) {
       const err = error as Error;
@@ -98,7 +162,11 @@ export default async (fastify: FastifyInstance): Promise<void> => {
 
   // Test HuggingFace connection
   fastify.post('/test-huggingface', async (req: FastifyRequest, reply: FastifyReply) => {
-    const { hfToken } = req.body as any;
+    const body = req.body as Record<string, unknown> | null;
+    if (!body || typeof (body as any).hfToken !== 'string') {
+      return reply.code(400).send({ error: 'BadRequest', message: 'hfToken must be a string' });
+    }
+    const hfToken = (body as any).hfToken as string;
     try {
       const { httpsProxy } = getProxyConfig();
       const axiosOptions: AxiosRequestConfig = {
@@ -110,12 +178,10 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       }
 
       const response = await axios.get('https://huggingface.co/api/whoami-v2', axiosOptions);
-      if (response.status === 200) {
-        reply.send({
-          message: 'Connection successful',
-          accessTokenDisplayName: response.data.auth?.accessToken?.displayName,
-        });
-      }
+      reply.send({
+        message: 'Connection successful',
+        accessTokenDisplayName: response.data.auth?.accessToken?.displayName,
+      });
     } catch (error: any) {
       reply.code(500).send({
         error: error.response?.data?.error || 'Hugging Face API error',
@@ -131,14 +197,16 @@ export default async (fastify: FastifyInstance): Promise<void> => {
 
   // Update max concurrent transfers
   fastify.put('/max-concurrent-transfers', async (req: FastifyRequest, reply: FastifyReply) => {
-    const { maxConcurrentTransfers } = req.body as any;
-    try {
-      updateMaxConcurrentTransfers(maxConcurrentTransfers);
-      reply.send({ message: 'Settings updated successfully' });
-    } catch (error) {
-      const err = error as Error;
-      reply.code(500).send({ error: err.name, message: err.message });
+    const body = req.body as Record<string, unknown> | null;
+    const value = (body as any)?.maxConcurrentTransfers;
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 1 || value > 20) {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'maxConcurrentTransfers must be a number between 1 and 20',
+      });
     }
+    updateMaxConcurrentTransfers(value);
+    reply.send({ message: 'Settings updated successfully' });
   });
 
   // Get max files per page
@@ -148,14 +216,16 @@ export default async (fastify: FastifyInstance): Promise<void> => {
 
   // Update max files per page
   fastify.put('/max-files-per-page', async (req: FastifyRequest, reply: FastifyReply) => {
-    const { maxFilesPerPage } = req.body as any;
-    try {
-      updateMaxFilesPerPage(maxFilesPerPage);
-      reply.send({ message: 'Settings updated successfully' });
-    } catch (error) {
-      const err = error as Error;
-      reply.code(500).send({ error: err.name, message: err.message });
+    const body = req.body as Record<string, unknown> | null;
+    const value = (body as any)?.maxFilesPerPage;
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 10 || value > 1000) {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'maxFilesPerPage must be a number between 10 and 1000',
+      });
     }
+    updateMaxFilesPerPage(value);
+    reply.send({ message: 'Settings updated successfully' });
   });
 
   // Get proxy settings
@@ -166,10 +236,20 @@ export default async (fastify: FastifyInstance): Promise<void> => {
 
   // Update proxy settings
   fastify.put('/proxy', async (req: FastifyRequest, reply: FastifyReply) => {
-    const { httpProxy, httpsProxy } = req.body as any;
+    const body = req.body as Record<string, unknown> | null;
+    if (!body || typeof body !== 'object') {
+      return reply.code(400).send({ error: 'BadRequest', message: 'Request body is required' });
+    }
+    const { httpProxy, httpsProxy } = body as any;
+    if ((httpProxy !== undefined && typeof httpProxy !== 'string') ||
+        (httpsProxy !== undefined && typeof httpsProxy !== 'string')) {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'httpProxy and httpsProxy must be strings',
+      });
+    }
     try {
-      updateProxyConfig(httpProxy, httpsProxy);
-      initializeS3Client();
+      updateProxyConfig(httpProxy || '', httpsProxy || '');
       reply.send({ message: 'Settings updated successfully' });
     } catch (error) {
       const err = error as Error;
@@ -179,11 +259,22 @@ export default async (fastify: FastifyInstance): Promise<void> => {
 
   // Test proxy connection
   fastify.post('/test-proxy', async (req: FastifyRequest, reply: FastifyReply) => {
-    const { httpProxy, httpsProxy, testUrl } = req.body as any;
+    const body = req.body as Record<string, unknown> | null;
+    if (!body || typeof (body as any).testUrl !== 'string') {
+      return reply.code(400).send({ error: 'BadRequest', message: 'testUrl must be a string' });
+    }
+    const { httpProxy, httpsProxy, testUrl } = body as any;
+
+    if (isBlockedUrl(testUrl)) {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'testUrl points to a blocked address (internal/metadata endpoints are not allowed)',
+      });
+    }
 
     try {
       const url = new URL(testUrl);
-      const axiosOptions: AxiosRequestConfig = { proxy: false };
+      const axiosOptions: AxiosRequestConfig = { proxy: false, timeout: 10000 };
 
       if (url.protocol === 'https:' && httpsProxy) {
         axiosOptions.httpsAgent = new HttpsProxyAgent(httpsProxy);

@@ -17,6 +17,10 @@ import {
   validateAndDecodePrefix,
 } from '../../../utils/validation';
 
+function sanitizeFilename(name: string): string {
+  return name.replace(/["\r\n\\]/g, '_');
+}
+
 function handleS3Error(error: unknown, reply: FastifyReply) {
   if (error instanceof S3ServiceException) {
     return reply.code(error.$metadata?.httpStatusCode || 500).send({
@@ -377,6 +381,12 @@ export default async (fastify: FastifyInstance): Promise<void> => {
   fastify.get('/view/:bucketName/:encodedKey', async (req: FastifyRequest, reply: FastifyReply) => {
     const { s3Client } = getS3Config();
     const { bucketName, encodedKey } = req.params as { bucketName: string; encodedKey: string };
+
+    const bucketError = validateBucketName(bucketName);
+    if (bucketError) {
+      return reply.code(400).send({ error: 'InvalidBucketName', message: bucketError });
+    }
+
     const key = base64Decode(encodedKey);
 
     try {
@@ -393,8 +403,14 @@ export default async (fastify: FastifyInstance): Promise<void> => {
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { s3Client } = getS3Config();
       const { bucketName, encodedKey } = req.params as { bucketName: string; encodedKey: string };
+
+      const bucketError = validateBucketName(bucketName);
+      if (bucketError) {
+        return reply.code(400).send({ error: 'InvalidBucketName', message: bucketError });
+      }
+
       const key = base64Decode(encodedKey);
-      const fileName = key.split('/').pop();
+      const fileName = sanitizeFilename(key.split('/').pop() || 'download');
 
       try {
         const item = await s3Client.send(new GetObjectCommand({ Bucket: bucketName, Key: key }));
@@ -419,6 +435,12 @@ export default async (fastify: FastifyInstance): Promise<void> => {
   fastify.delete('/:bucketName/:encodedKey', async (req: FastifyRequest, reply: FastifyReply) => {
     const { s3Client } = getS3Config();
     const { bucketName, encodedKey } = req.params as { bucketName: string; encodedKey: string };
+
+    const bucketError = validateBucketName(bucketName);
+    if (bucketError) {
+      return reply.code(400).send({ error: 'InvalidBucketName', message: bucketError });
+    }
+
     const objectName = base64Decode(encodedKey);
 
     try {
@@ -476,11 +498,22 @@ export default async (fastify: FastifyInstance): Promise<void> => {
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { bucketName, encodedKey } = req.params as { bucketName: string; encodedKey: string };
       const { s3Client } = getS3Config();
+
+      const bucketError = validateBucketName(bucketName);
+      if (bucketError) {
+        return reply.code(400).send({ error: 'InvalidBucketName', message: bucketError });
+      }
+
       const key = base64Decode(encodedKey);
 
-      const data = await req.file({
-        limits: { fileSize: 10 * 1024 * 1024 * 1024 },
-      });
+      let data;
+      try {
+        data = await req.file({
+          limits: { fileSize: 10 * 1024 * 1024 * 1024 },
+        });
+      } catch {
+        return reply.status(400).send({ error: 'Bad Request', message: 'Invalid multipart request' });
+      }
 
       if (!data) {
         return reply.status(400).send({ error: 'File not found', message: 'File not found in request' });
@@ -521,6 +554,12 @@ export default async (fastify: FastifyInstance): Promise<void> => {
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { bucketName, encodedKey } = req.params as { bucketName: string; encodedKey: string };
       const { s3Client } = getS3Config();
+
+      const bucketError = validateBucketName(bucketName);
+      if (bucketError) {
+        return reply.code(400).send({ error: 'InvalidBucketName', message: bucketError });
+      }
+
       let key = base64Decode(encodedKey);
       if (!key.endsWith('/')) key += '/';
 

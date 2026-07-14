@@ -10,6 +10,6 @@ export function getCorsConfig(): FastifyCorsOptions {
     methods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     exposedHeaders: ['Content-Disposition'],
-    credentials: true,
+    credentials: !allowedOrigins.includes('*'),
   };
 }
