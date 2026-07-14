@@ -79,6 +79,32 @@ describe('BrewetToolbar', () => {
     });
   });
 
+  it('should call refreshContainerStatus on HTTP error response', async () => {
+    const refreshContainerStatus = jest.fn();
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 403 });
+    mockContext({ selectedProject: 'test-ns', containerStatus: 'stopped', refreshContainerStatus });
+    render(<BrewetToolbar />);
+
+    await userEvent.click(screen.getByLabelText('Start container'));
+
+    await waitFor(() => {
+      expect(refreshContainerStatus).toHaveBeenCalled();
+    });
+  });
+
+  it('should call refreshContainerStatus on network error', async () => {
+    const refreshContainerStatus = jest.fn();
+    global.fetch = jest.fn().mockRejectedValue(new Error('Network error'));
+    mockContext({ selectedProject: 'test-ns', containerStatus: 'stopped', refreshContainerStatus });
+    render(<BrewetToolbar />);
+
+    await userEvent.click(screen.getByLabelText('Start container'));
+
+    await waitFor(() => {
+      expect(refreshContainerStatus).toHaveBeenCalled();
+    });
+  });
+
   it('should render edit button as disabled', () => {
     mockContext({ selectedProject: 'test-ns', containerStatus: 'running' });
     render(<BrewetToolbar />);
