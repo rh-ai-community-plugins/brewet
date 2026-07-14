@@ -36,7 +36,7 @@ export const BrewetToolbar: React.FC = () => {
 
   const statusConfig = STATUS_CONFIG[containerStatus];
   const canStart = containerStatus === 'stopped';
-  const canStop = containerStatus === 'running';
+  const canStop = containerStatus === 'running' || containerStatus === 'starting';
   const hasContainer = containerStatus !== 'none';
 
   const handleStartStop = useCallback(() => {
