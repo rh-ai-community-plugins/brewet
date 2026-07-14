@@ -113,6 +113,12 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => abortControllerRef.current?.abort();
   }, [refreshContainerStatus]);
 
+  useEffect(() => {
+    if (containerStatus !== 'starting') return;
+    const intervalId = setInterval(refreshContainerStatus, 5000);
+    return () => clearInterval(intervalId);
+  }, [containerStatus, refreshContainerStatus]);
+
   return (
     <BrewetContext.Provider
       value={{
