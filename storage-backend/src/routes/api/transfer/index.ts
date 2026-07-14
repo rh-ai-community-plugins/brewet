@@ -333,6 +333,9 @@ async function transferS3ToLocal(
 
     try {
       await pipeline(s3Body, progressTransform, writeStream);
+    } catch (err: unknown) {
+      await fs.unlink(destAbsolute).catch(() => {});
+      throw err;
     } finally {
       signal.removeEventListener('abort', cleanup);
     }

@@ -1,3 +1,4 @@
+import { promises as fsPromises } from 'fs';
 import {
   TransferQueue,
   TransferFileJob,
@@ -108,6 +109,41 @@ describe('TransferQueue', () => {
 
     it('returns false for nonexistent job', () => {
       expect(queue.cancelJob('nonexistent')).toBe(false);
+    });
+
+    it('cleans up partial files when executor handles abort', async () => {
+      const tmpDir = '/tmp/test-storage';
+      await fsPromises.mkdir(tmpDir, { recursive: true });
+      const tmpFile = `${tmpDir}/abort-test-${Date.now()}.tmp`;
+
+      const writingExecutor: TransferExecutor = async (_file, signal, onProgress) => {
+        await fsPromises.writeFile(tmpFile, 'partial content');
+        onProgress(10);
+
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, 5000);
+          signal.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new Error('Cancelled'));
+          }, { once: true });
+        });
+      };
+
+      const files = makeFiles(1);
+      const jobId = queue.queueJob('s3-download', files, async (file, signal, onProgress) => {
+        try {
+          await writingExecutor(file, signal, onProgress);
+        } catch {
+          await fsPromises.unlink(tmpFile).catch(() => {});
+          throw new Error('Cancelled');
+        }
+      }, makeDestination());
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      queue.cancelJob(jobId);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      await expect(fsPromises.access(tmpFile)).rejects.toThrow();
     });
 
     it('returns false for already completed job', async () => {
