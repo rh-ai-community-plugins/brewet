@@ -414,9 +414,12 @@ async function transferLocalToLocal(
 
   await fs.mkdir(path.dirname(destAbsolute), { recursive: true });
 
+  // Write to a temp file then atomic rename to reduce TOCTOU window with conflict resolution
+  const tmpPath = `${destAbsolute}.${Date.now()}.tmp`;
+
   const readStream = createReadStream(sourceAbsolute);
   const progressTransform = createProgressTransform(onProgress);
-  const writeStream = createWriteStream(destAbsolute);
+  const writeStream = createWriteStream(tmpPath);
 
   const cleanup = () => {
     readStream.destroy();
@@ -428,11 +431,16 @@ async function transferLocalToLocal(
 
   try {
     await pipeline(readStream, progressTransform, writeStream);
+    await fs.rename(tmpPath, destAbsolute);
+  } catch (err) {
+    await fs.unlink(tmpPath).catch(() => {});
+    throw err;
   } finally {
     signal.removeEventListener('abort', cleanup);
   }
 }
 
+// Best-effort check — not atomic with the subsequent write (TOCTOU). See issue #30.
 async function checkDestinationExists(
   destType: string,
   destLocationId: string,
