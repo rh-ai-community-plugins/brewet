@@ -147,6 +147,92 @@ describe('POST /api/transfer', () => {
     expect(body.fileCount).toBe(2);
   });
 
+  it('creates .s3keep marker for empty local directory in local→S3 transfer', async () => {
+    const testDir = '/tmp/test-storage';
+    const emptyDirName = `empty-dir-${Date.now()}`;
+    const emptyDirPath = `${testDir}/${emptyDirName}`;
+
+    await fsPromises.mkdir(emptyDirPath, { recursive: true });
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/transfer',
+        payload: {
+          source: 'local:local-0',
+          destination: 's3:dest-bucket/output',
+          items: [{ path: emptyDirName, type: 'directory' }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      // The .s3keep marker is the only file in the empty directory
+      expect(body.fileCount).toBe(1);
+      expect(body.totalSize).toBe(0);
+    } finally {
+      await fsPromises.rm(emptyDirPath, { recursive: true, force: true });
+    }
+  });
+
+  it('does not create .s3keep marker for empty local directory when destination is local', async () => {
+    const testDir = '/tmp/test-storage';
+    const emptyDirName = `empty-dir-local-${Date.now()}`;
+    const emptyDirPath = `${testDir}/${emptyDirName}`;
+
+    await fsPromises.mkdir(emptyDirPath, { recursive: true });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/transfer',
+        payload: {
+          source: 'local:local-0',
+          destination: 'local:local-0/dest',
+          items: [{ path: emptyDirName, type: 'directory' }],
+        },
+      });
+
+      // No files means 400 Empty Transfer — .s3keep is not created for local→local
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error).toBe('Empty Transfer');
+    } finally {
+      await fsPromises.rm(emptyDirPath, { recursive: true, force: true });
+    }
+  });
+
+  it('does not create extra .s3keep for non-empty local directory in local→S3 transfer', async () => {
+    const testDir = '/tmp/test-storage';
+    const dirName = `non-empty-dir-${Date.now()}`;
+    const dirPath = `${testDir}/${dirName}`;
+
+    await fsPromises.mkdir(dirPath, { recursive: true });
+    await fsPromises.writeFile(`${dirPath}/file.txt`, 'hello');
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/transfer',
+        payload: {
+          source: 'local:local-0',
+          destination: 's3:dest-bucket/output',
+          items: [{ path: dirName, type: 'directory' }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      // Only the real file — no spurious .s3keep marker
+      expect(body.fileCount).toBe(1);
+      expect(body.totalSize).toBe(5); // 'hello' is 5 bytes
+    } finally {
+      await fsPromises.rm(dirPath, { recursive: true, force: true });
+    }
+  });
+
   it('uses CopyObjectCommand for S3→S3 files exactly at the 5 GB boundary', async () => {
     const fiveGB = 5 * 1024 * 1024 * 1024;
     s3Mock.on(HeadObjectCommand).resolves({ ContentLength: fiveGB });

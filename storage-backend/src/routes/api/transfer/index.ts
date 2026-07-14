@@ -178,7 +178,7 @@ async function expandItemsToFiles(
             loaded: 0,
           });
         }
-        // For local→S3 transfers, create .s3keep markers for empty directories
+        // For S3-source transfers, create .s3keep markers for empty S3 source prefixes
         if (destType === 's3' && s3Files.length === 0) {
           files.push({
             sourcePath: prefix,
@@ -196,6 +196,16 @@ async function expandItemsToFiles(
             sourcePath: f.relativePath,
             destinationPath: path.posix.join(item.path, relPath || f.relativePath),
             size: f.size,
+            status: 'pending',
+            loaded: 0,
+          });
+        }
+        // For local→S3 transfers, create .s3keep markers for empty local directories
+        if (destType === 's3' && localFiles.length === 0) {
+          files.push({
+            sourcePath: itemPath + '/',
+            destinationPath: path.posix.join(item.path, '.s3keep'),
+            size: 0,
             status: 'pending',
             loaded: 0,
           });
