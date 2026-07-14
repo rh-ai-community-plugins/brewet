@@ -22,7 +22,7 @@ import {
 import { getMaxFileSizeBytes } from '../../../utils/config';
 import { validateFileType } from '../../../utils/fileValidation';
 
-function handleError(error: any, reply: FastifyReply) {
+function handleError(error: any, reply: FastifyReply, request: FastifyRequest) {
   if (error instanceof SecurityError) {
     return reply.code(403).send({ error: 'Forbidden', message: error.message });
   }
@@ -41,12 +41,13 @@ function handleError(error: any, reply: FastifyReply) {
     }
   }
   if (error.code === 'ENOENT') {
-    return reply.code(404).send({ error: 'Not Found', message: error.message });
+    return reply.code(404).send({ error: 'Not Found', message: 'The requested file or directory was not found.' });
   }
   if (error.code === 'EACCES' || error.code === 'EPERM') {
-    return reply.code(403).send({ error: 'Permission Denied', message: error.message });
+    return reply.code(403).send({ error: 'Permission Denied', message: 'Access to the requested resource is not permitted.' });
   }
-  return reply.code(500).send({ error: 'Internal Server Error', message: error.message });
+  request.log.error(error, 'Unexpected error in local route');
+  return reply.code(500).send({ error: 'Internal Server Error', message: 'An unexpected error occurred while processing the request.' });
 }
 
 export default async (fastify: FastifyInstance): Promise<void> => {
@@ -85,7 +86,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
 
       return { files: filesWithFullPaths, currentPath: relativePath, parentPath, totalCount };
     } catch (error: any) {
-      return handleError(error, reply);
+      return handleError(error, reply, req);
     }
   });
 
@@ -171,7 +172,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
 
       return { uploaded: true, path: relativePath };
     } catch (error: any) {
-      return handleError(error, reply);
+      return handleError(error, reply, req);
     }
   });
 
@@ -190,7 +191,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       reply.raw.on('close', () => { stream.destroy(); });
       return stream;
     } catch (error: any) {
-      return handleError(error, reply);
+      return handleError(error, reply, req);
     }
   });
 
@@ -217,7 +218,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         .header('Content-Length', metadata.size || 0)
         .send(stream);
     } catch (error: any) {
-      return handleError(error, reply);
+      return handleError(error, reply, req);
     }
   });
 
@@ -234,7 +235,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       const itemCount = await deleteFileOrDirectory(absolutePath);
       return { deleted: true, itemCount };
     } catch (error: any) {
-      return handleError(error, reply);
+      return handleError(error, reply, req);
     }
   });
 
@@ -251,7 +252,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       await createDirectory(absolutePath);
       return { created: true, path: relativePath };
     } catch (error: any) {
-      return handleError(error, reply);
+      return handleError(error, reply, req);
     }
   });
 };
