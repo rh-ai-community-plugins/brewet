@@ -17,6 +17,7 @@ import {
   getProxyConfig,
   updateProxyConfig,
 } from '../../../utils/config';
+import { updateTransferQueueConcurrency } from '../../../utils/transferQueue';
 
 function maskSecret(value: string): string {
   if (!value || value.length <= 4) return '****';
@@ -238,6 +239,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       });
     }
     updateMaxConcurrentTransfers(value);
+    updateTransferQueueConcurrency(value);
     reply.send({ message: 'Settings updated successfully' });
   });
 
