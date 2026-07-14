@@ -53,6 +53,13 @@ All pages share a persistent **toolbar** with: Project Selector, Container Statu
 - **Settings**: Tabbed config for S3, HuggingFace, proxy, transfer concurrency, and pagination. Runtime overrides, ephemeral per container restart.
 - **Container Lifecycle**: Creation wizard (select Data Connection + PVCs), start/stop/edit/delete per-project storage backend.
 
+## Branching Strategy
+
+- **`main`** — Release branch. Always in a releasable state.
+- **`dev`** — Development branch. All feature branches are created from `dev` and merged back into `dev`.
+- **Feature branches** — Named `feat/<description>` (e.g., `feat/phase-1-foundation`). One per phase or logical unit of work.
+- **Release flow** — When `dev` accumulates enough features for a release, it is PRed to `main`.
+
 ## Build & Development Commands
 
 ```bash
