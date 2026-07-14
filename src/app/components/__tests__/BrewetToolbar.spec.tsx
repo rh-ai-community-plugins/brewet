@@ -86,9 +86,41 @@ describe('BrewetToolbar', () => {
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/namespaces/test-ns/deployments/brewet-storage-backend/scale'),
-        expect.objectContaining({ method: 'PUT' }),
+        expect.objectContaining({ method: 'PUT', signal: expect.any(AbortSignal) }),
       );
     });
+  });
+
+  it('should abort the inflight request on unmount', async () => {
+    const abortSpy = jest.spyOn(AbortController.prototype, 'abort');
+    let resolveFetch!: (v: { ok: boolean }) => void;
+    global.fetch = jest.fn().mockReturnValue(new Promise((resolve) => { resolveFetch = resolve; }));
+
+    mockContext({ selectedProject: 'test-ns', containerStatus: 'stopped' });
+    const { unmount } = render(<BrewetToolbar />);
+
+    await userEvent.click(screen.getByLabelText('Start container'));
+    unmount();
+
+    expect(abortSpy).toHaveBeenCalled();
+    resolveFetch({ ok: true });
+    abortSpy.mockRestore();
+  });
+
+  it('should not call refreshContainerStatus on AbortError', async () => {
+    const refreshContainerStatus = jest.fn();
+    const abortError = new Error('aborted');
+    abortError.name = 'AbortError';
+    global.fetch = jest.fn().mockRejectedValue(abortError);
+    mockContext({ selectedProject: 'test-ns', containerStatus: 'stopped', refreshContainerStatus });
+    render(<BrewetToolbar />);
+
+    await userEvent.click(screen.getByLabelText('Start container'));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalled();
+    });
+    expect(refreshContainerStatus).not.toHaveBeenCalled();
   });
 
   it('should call refreshContainerStatus on HTTP error response', async () => {

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Toolbar,
   ToolbarContent,
@@ -33,6 +33,13 @@ export const BrewetToolbar: React.FC = () => {
   } = useBrewetContext();
 
   const [isScaling, setIsScaling] = useState(false);
+  const scaleControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      scaleControllerRef.current?.abort();
+    };
+  }, []);
 
   const statusConfig = STATUS_CONFIG[containerStatus];
   const canStart = containerStatus === 'stopped';
@@ -45,6 +52,9 @@ export const BrewetToolbar: React.FC = () => {
     const replicas = canStart ? 1 : 0;
     setIsScaling(true);
 
+    const controller = new AbortController();
+    scaleControllerRef.current = controller;
+
     fetch(
       `/api/k8s/apis/apps/v1/namespaces/${encodeURIComponent(selectedProject)}/deployments/brewet-storage-backend/scale`,
       {
@@ -56,6 +66,7 @@ export const BrewetToolbar: React.FC = () => {
           metadata: { name: 'brewet-storage-backend', namespace: selectedProject },
           spec: { replicas },
         }),
+        signal: controller.signal,
       },
     )
       .then((res) => {
@@ -65,6 +76,9 @@ export const BrewetToolbar: React.FC = () => {
         setTimeout(refreshContainerStatus, 1000);
       })
       .catch((err: unknown) => {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
         console.error('Scale operation failed:', err);
         refreshContainerStatus();
       })
