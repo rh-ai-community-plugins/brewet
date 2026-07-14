@@ -121,7 +121,7 @@ Example: `fetch('/api/k8s/apis/project.openshift.io/v1/projects')` lists the use
 | `/api/prometheus` | Prometheus metrics |
 | `/api/cluster-settings` | Cluster config |
 | `/api/connection-types` | Connection type definitions |
-| `/api/health` | Backend health check |
+| `/healthz` | Backend health check |
 | `/api/dsc` | DataScienceCluster CR |
 | `/api/dsci` | DSCInitialization CR |
 | `/api/integrations` | Integration configurations |
