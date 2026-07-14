@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 
 export type ContainerStatus = 'none' | 'stopped' | 'running' | 'starting' | 'error';
 
@@ -119,19 +119,18 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => clearInterval(intervalId);
   }, [containerStatus, refreshContainerStatus]);
 
-  return (
-    <BrewetContext.Provider
-      value={{
-        selectedProject,
-        setSelectedProject,
-        containerStatus,
-        containerInfo,
-        refreshContainerStatus,
-      }}
-    >
-      {children}
-    </BrewetContext.Provider>
+  const contextValue = useMemo(
+    () => ({
+      selectedProject,
+      setSelectedProject,
+      containerStatus,
+      containerInfo,
+      refreshContainerStatus,
+    }),
+    [selectedProject, setSelectedProject, containerStatus, containerInfo, refreshContainerStatus],
   );
+
+  return <BrewetContext.Provider value={contextValue}>{children}</BrewetContext.Provider>;
 };
 
 export function useBrewetContext(): BrewetContextValue {
