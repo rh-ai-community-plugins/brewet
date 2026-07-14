@@ -23,12 +23,14 @@ function maskSecret(value: string): string {
   return value.slice(0, 4) + '****';
 }
 
-function isPrivateIp(hostname: string): boolean {
-  const parts = hostname.split('.').map(Number);
+function isPrivateIpv4(ip: string): boolean {
+  const parts = ip.split('.').map(Number);
   if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) return false;
   if (parts[0] === 10) return true;
   if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
   if (parts[0] === 192 && parts[1] === 168) return true;
+  if (parts[0] === 169 && parts[1] === 254) return true;
+  if (parts[0] === 127) return true;
   if (parts[0] === 0) return true;
   return false;
 }
@@ -36,12 +38,34 @@ function isPrivateIp(hostname: string): boolean {
 function isBlockedUrl(urlStr: string): boolean {
   try {
     const url = new URL(urlStr);
-    const hostname = url.hostname.toLowerCase();
-    if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') return true;
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '0.0.0.0') return true;
+    let hostname = url.hostname.toLowerCase();
+
+    // Strip brackets from IPv6 addresses (URL parser wraps them: [::1])
+    if (hostname.startsWith('[') && hostname.endsWith(']')) {
+      hostname = hostname.slice(1, -1);
+    }
+
+    // IPv6 loopback
+    if (hostname === '::1' || hostname === '0:0:0:0:0:0:0:1') return true;
+    // IPv6 unspecified
+    if (hostname === '::' || hostname === '0:0:0:0:0:0:0:0') return true;
+    // IPv6 ULA (fd00::/8)
+    if (hostname.startsWith('fd')) return true;
+    // IPv4-mapped IPv6 (::ffff:x.x.x.x or normalized hex form)
+    const v4mapped = hostname.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (v4mapped && isPrivateIpv4(v4mapped[1])) return true;
+    // Normalized hex form of IPv4-mapped (e.g. ::ffff:7f00:1 for 127.0.0.1)
+    if (hostname.startsWith('::ffff:') && !v4mapped) return true;
+
+    // Standard hostname checks
+    if (hostname === 'localhost' || hostname === '0.0.0.0') return true;
+    if (hostname === 'metadata.google.internal') return true;
     if (hostname === 'kubernetes' || hostname === 'kubernetes.default' ||
         hostname.endsWith('.svc.cluster.local')) return true;
-    if (isPrivateIp(hostname)) return true;
+
+    // IPv4 private ranges
+    if (isPrivateIpv4(hostname)) return true;
+
     return false;
   } catch {
     return true;
@@ -277,6 +301,19 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       return reply.code(400).send({
         error: 'BadRequest',
         message: 'testUrl points to a blocked address (internal/metadata endpoints are not allowed)',
+      });
+    }
+
+    if (httpProxy && typeof httpProxy === 'string' && isBlockedUrl(httpProxy)) {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'httpProxy points to a blocked address',
+      });
+    }
+    if (httpsProxy && typeof httpsProxy === 'string' && isBlockedUrl(httpsProxy)) {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'httpsProxy points to a blocked address',
       });
     }
 

@@ -101,7 +101,9 @@ export const updateS3Config = (
   region = newRegion;
   endpoint = newEndpoint;
   defaultBucket = newDefaultBucket;
+  const oldClient = s3Client;
   s3Client = initializeS3Client();
+  oldClient.destroy();
 };
 
 export const getS3Config = (): {
@@ -134,7 +136,9 @@ export const getProxyConfig = (): { httpProxy: string; httpsProxy: string } => (
 export const updateProxyConfig = (newHttpProxy: string, newHttpsProxy: string): void => {
   httpProxy = newHttpProxy;
   httpsProxy = newHttpsProxy;
+  const oldClient = s3Client;
   s3Client = initializeS3Client();
+  oldClient.destroy();
 };
 
 export const getMaxConcurrentTransfers = (): number => maxConcurrentTransfers;
