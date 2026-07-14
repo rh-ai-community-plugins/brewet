@@ -206,6 +206,63 @@ describe('POST /api/transfer', () => {
     expect(s3Mock.commandCalls(CompleteMultipartUploadCommand).length).toBeGreaterThan(0);
   });
 
+  it('URL-encodes spaces and special characters in CopySource for single-part S3→S3 copy', async () => {
+    s3Mock.on(HeadObjectCommand).resolves({ ContentLength: 1024 });
+    s3Mock.on(CopyObjectCommand).resolves({});
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/transfer',
+      payload: {
+        source: 's3:source-bucket/',
+        destination: 's3:dest-bucket/output',
+        items: [{ path: 'models/my model.bin', type: 'file' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Wait for the transfer job to run
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const copyCalls = s3Mock.commandCalls(CopyObjectCommand);
+    expect(copyCalls.length).toBeGreaterThan(0);
+    const copySource = copyCalls[0].args[0].input.CopySource as string;
+    // Spaces must be percent-encoded; slashes must remain unencoded
+    expect(copySource).toBe('source-bucket/models/my%20model.bin');
+  });
+
+  it('URL-encodes special characters in CopySource for multipart S3→S3 copy', async () => {
+    const sixGB = 6 * 1024 * 1024 * 1024;
+    s3Mock.on(HeadObjectCommand).resolves({ ContentLength: sixGB });
+    s3Mock.on(CreateMultipartUploadCommand).resolves({ UploadId: 'encode-upload-id' });
+    s3Mock.on(UploadPartCopyCommand).resolves({
+      CopyPartResult: { ETag: '"abc123"' },
+    });
+    s3Mock.on(CompleteMultipartUploadCommand).resolves({});
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/transfer',
+      payload: {
+        source: 's3:source-bucket/',
+        destination: 's3:dest-bucket/output',
+        items: [{ path: 'path/to/my model (v2).safetensors', type: 'file' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Wait for the transfer job to run
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    const partCopyCalls = s3Mock.commandCalls(UploadPartCopyCommand);
+    expect(partCopyCalls.length).toBeGreaterThan(0);
+    const copySource = partCopyCalls[0].args[0].input.CopySource as string;
+    // Spaces and parentheses must be percent-encoded; slashes must remain unencoded
+    expect(copySource).toBe('source-bucket/path/to/my%20model%20(v2).safetensors');
+  });
+
   it('aborts multipart upload when S3→S3 transfer of large file fails mid-copy', async () => {
     const sixGB = 6 * 1024 * 1024 * 1024;
     s3Mock.on(HeadObjectCommand).resolves({ ContentLength: sixGB });

@@ -296,7 +296,7 @@ async function transferS3ToS3(
         new CopyObjectCommand({
           Bucket: destBucket,
           Key: destKey,
-          CopySource: `${sourceBucket}/${file.sourcePath}`,
+          CopySource: `${sourceBucket}/${encodeURIComponent(file.sourcePath).replace(/%2F/g, '/')}`,
         }),
       );
       onProgress(file.size);
@@ -324,7 +324,7 @@ async function transferS3ToS3(
             new UploadPartCopyCommand({
               Bucket: destBucket,
               Key: destKey,
-              CopySource: `${sourceBucket}/${file.sourcePath}`,
+              CopySource: `${sourceBucket}/${encodeURIComponent(file.sourcePath).replace(/%2F/g, '/')}`,
               CopySourceRange: `bytes=${offset}-${end}`,
               UploadId: uploadId,
               PartNumber: partNumber,
