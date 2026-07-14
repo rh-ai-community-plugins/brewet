@@ -231,15 +231,17 @@ When no Brewet container exists in the selected project, all pages show a **crea
 
 2. **Transfer routes** (`src/routes/api/transfer/index.ts`)
    - `POST /api/transfer` — initiate transfer, returns `{ jobId, sseUrl }`
-   - `GET /api/transfer/:jobId/progress` — SSE endpoint for real-time progress
+   - `GET /api/transfer/progress/:jobId` — SSE endpoint for real-time progress
+   - `GET /api/transfer/:jobId` — get job details
    - `DELETE /api/transfer/:jobId` — cancel transfer
+   - `POST /api/transfer/:jobId/cleanup` — delete destination files for cancelled/failed jobs
    - `POST /api/transfer/check-conflicts` — check for file conflicts at destination
    - Support all transfer types: S3→S3, S3→local, local→S3, local→local
    - Recursive directory listing for folder transfers
    - Conflict resolution: overwrite, skip, rename
 
 3. **HuggingFace import** (addition to objects routes)
-   - `POST /api/objects/import-hf` — import model from HuggingFace Hub
+   - `POST /api/objects/huggingface-import` — import model from HuggingFace Hub
    - SSE progress reporting during download
    - Streaming download to S3 (no full file in memory)
 
@@ -477,7 +479,7 @@ When no Brewet container exists in the selected project, all pages show a **crea
    - Modal: enter HuggingFace model ID (e.g., `meta-llama/Llama-2-7b`)
    - Optional: select specific files from the model repo
    - Progress tracking via SSE
-   - Import via `POST /api/objects/import-hf` through BFF
+   - Import via `POST /api/objects/huggingface-import` through BFF
 
 4. **Unit tests**
    - DocumentRenderer tests
