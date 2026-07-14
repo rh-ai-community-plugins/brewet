@@ -602,6 +602,11 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       return reply.code(400).send({ error: 'Bad Request', message: 'modelId must be in owner/model format' });
     }
 
+    const [, modelSegment] = body.modelId.split('/');
+    if (modelSegment === '.' || modelSegment === '..') {
+      return reply.code(400).send({ error: 'Bad Request', message: 'modelId must be in owner/model format' });
+    }
+
     if (!body.destinationType || (body.destinationType !== 's3' && body.destinationType !== 'local')) {
       return reply.code(400).send({ error: 'Bad Request', message: 'destinationType must be s3 or local' });
     }
