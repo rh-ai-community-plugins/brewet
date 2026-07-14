@@ -115,6 +115,8 @@ export default async (fastify: FastifyInstance): Promise<void> => {
 
         await fs.mkdir(parentAbsolutePath, { recursive: true });
 
+        // Known TOCTOU: a symlink could be swapped between this realpath check and the later createWriteStream.
+        // Exploitation requires write access to the parent directory on the same PVC; O_NOFOLLOW/openat is unavailable in Node.js fs.
         const realParent = await fs.realpath(parentAbsolutePath);
         if (!realParent.startsWith(basePath + path.sep) && realParent !== basePath) {
           throw new SecurityError('Resolved parent path escapes allowed directory');
