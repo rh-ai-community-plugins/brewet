@@ -432,7 +432,7 @@ async function transferLocalToLocal(
   try {
     await pipeline(readStream, progressTransform, writeStream);
     await fs.rename(tmpPath, destAbsolute);
-  } catch (err) {
+  } catch (err: unknown) {
     await fs.unlink(tmpPath).catch(() => {});
     throw err;
   } finally {
