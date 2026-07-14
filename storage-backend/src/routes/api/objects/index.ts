@@ -3,12 +3,22 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   ListObjectsV2Command,
+  S3ServiceException,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { Readable } from 'stream';
+import http from 'http';
+import https from 'https';
+import { createWriteStream } from 'fs';
+import { promises as fsPromises } from 'fs';
+import path from 'path';
+import { pipeline } from 'stream/promises';
+import { PassThrough, Readable } from 'stream';
+import { HttpProxyAgent } from 'http-proxy-agent';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import { base64Decode } from '../../../utils/encoding';
-import { getS3Config, getMaxFileSizeBytes } from '../../../utils/config';
+import { getS3Config, getMaxFileSizeBytes, getHFConfig, getProxyConfig } from '../../../utils/config';
+import { validatePath } from '../../../utils/localStorage';
 import {
   validateBucketName,
   validateContinuationToken,
@@ -18,6 +28,8 @@ import {
 import { validateFileType } from '../../../utils/fileValidation';
 import { sanitizeFilename } from '../../../utils/sanitize';
 import { handleS3Error } from '../../../utils/s3-errors';
+import { createProgressTransform, uploadWithCleanup } from '../../../utils/streamHelpers';
+import { transferQueue, TransferFileJob } from '../../../utils/transferQueue';
 
 const DEFAULT_MAX_KEYS = 500;
 const MAX_ALLOWED_KEYS = 2000;
@@ -567,4 +579,239 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       }
     },
   );
+
+  // HuggingFace model import
+  fastify.post('/huggingface-import', async (req: FastifyRequest, reply: FastifyReply) => {
+    interface HuggingFaceImportRequest {
+      modelId: string;
+      destinationType: 's3' | 'local';
+      bucketName?: string;
+      localLocationId?: string;
+      localPath?: string;
+      hfToken?: string;
+      prefix?: string;
+    }
+
+    const body = req.body as HuggingFaceImportRequest;
+
+    if (!body?.modelId) {
+      return reply.code(400).send({ error: 'Bad Request', message: 'modelId is required' });
+    }
+
+    if (!body.destinationType || (body.destinationType !== 's3' && body.destinationType !== 'local')) {
+      return reply.code(400).send({ error: 'Bad Request', message: 'destinationType must be s3 or local' });
+    }
+
+    if (body.destinationType === 's3' && !body.bucketName) {
+      return reply.code(400).send({ error: 'Bad Request', message: 'bucketName is required for S3 destination' });
+    }
+
+    if (body.destinationType === 'local' && !body.localLocationId) {
+      return reply.code(400).send({ error: 'Bad Request', message: 'localLocationId is required for local destination' });
+    }
+
+    const token = body.hfToken || getHFConfig();
+    const { httpProxy, httpsProxy } = getProxyConfig();
+
+    const makeRequest = (
+      url: string,
+      callback: (res: http.IncomingMessage) => void,
+    ): http.ClientRequest => {
+      const parsedUrl = new URL(url);
+      const isHttps = parsedUrl.protocol === 'https:';
+      const options: http.RequestOptions = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port,
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: 'GET',
+        headers: {
+          'User-Agent': 'brewet-storage-backend',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      };
+      if (isHttps && httpsProxy) {
+        try { options.agent = new HttpsProxyAgent(httpsProxy); } catch { /* no proxy */ }
+      } else if (!isHttps && httpProxy) {
+        try { options.agent = new HttpProxyAgent(httpProxy); } catch { /* no proxy */ }
+      }
+      return isHttps
+        ? https.request(options, callback)
+        : http.request(options, callback);
+    };
+
+    const fetchJSON = (url: string): Promise<any> =>
+      new Promise((resolve, reject) => {
+        const request = makeRequest(url, (res: http.IncomingMessage) => {
+          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            fetchJSON(res.headers.location).then(resolve).catch(reject);
+            return;
+          }
+          if (res.statusCode && res.statusCode >= 400) {
+            reject(new Error(`HuggingFace API returned ${res.statusCode}`));
+            return;
+          }
+          let data = '';
+          res.on('data', (chunk: Buffer) => { data += chunk; });
+          res.on('end', () => {
+            try { resolve(JSON.parse(data)); } catch { reject(new Error('Invalid JSON response')); }
+          });
+        });
+        request.on('error', reject);
+        request.end();
+      });
+
+    const downloadFile = (
+      url: string,
+      redirectCount = 0,
+    ): Promise<{ stream: Readable; contentLength: number }> =>
+      new Promise((resolve, reject) => {
+        if (redirectCount > 10) {
+          reject(new Error('Too many redirects'));
+          return;
+        }
+        const request = makeRequest(url, (res: http.IncomingMessage) => {
+          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            downloadFile(res.headers.location, redirectCount + 1).then(resolve).catch(reject);
+            return;
+          }
+          if (res.statusCode && res.statusCode >= 400) {
+            reject(new Error(`Download failed with status ${res.statusCode}`));
+            return;
+          }
+          const contentLength = parseInt(res.headers['content-length'] || '0', 10);
+          resolve({ stream: res as unknown as Readable, contentLength });
+        });
+        request.on('error', reject);
+        request.end();
+      });
+
+    try {
+      const modelInfo = await fetchJSON(`https://huggingface.co/api/models/${body.modelId}`);
+
+      if (modelInfo.gated) {
+        if (!token) {
+          return reply.code(401).send({
+            error: 'Authentication Required',
+            message: 'This model is gated. Provide an HF token.',
+          });
+        }
+        try {
+          await fetchJSON('https://huggingface.co/api/whoami-v2');
+        } catch {
+          return reply.code(401).send({
+            error: 'Authentication Failed',
+            message: 'HF token is invalid or does not have access to this gated model.',
+          });
+        }
+      }
+
+      if (!modelInfo.siblings || !Array.isArray(modelInfo.siblings)) {
+        return reply.code(404).send({
+          error: 'Not Found',
+          message: 'No files found in the model repository',
+        });
+      }
+
+      const modelFiles = modelInfo.siblings as Array<{ rfilename: string }>;
+      const prefix = body.prefix || body.modelId.replace('/', '_');
+
+      const files: TransferFileJob[] = modelFiles.map((f) => ({
+        sourcePath: f.rfilename,
+        destinationPath: path.posix.join(prefix, f.rfilename),
+        size: 0,
+        status: 'pending' as const,
+        loaded: 0,
+      }));
+
+      const executor = async (
+        file: TransferFileJob,
+        signal: AbortSignal,
+        onProgress: (loaded: number) => void,
+      ): Promise<void> => {
+        if (signal.aborted) throw new Error('Cancelled');
+
+        const url = `https://huggingface.co/${body.modelId}/resolve/main/${file.sourcePath}`;
+        const { stream, contentLength } = await downloadFile(url);
+        file.size = contentLength;
+
+        if (signal.aborted) {
+          stream.destroy();
+          throw new Error('Cancelled');
+        }
+
+        if (body.destinationType === 's3') {
+          const { s3Client } = getS3Config();
+          const progressTransform = createProgressTransform(onProgress);
+          const passThrough = new PassThrough();
+
+          const cleanup = () => {
+            stream.destroy();
+            progressTransform.destroy();
+            passThrough.destroy();
+          };
+
+          signal.addEventListener('abort', cleanup, { once: true });
+
+          const pipelinePromise = pipeline(stream, progressTransform, passThrough);
+          const upload = new Upload({
+            client: s3Client,
+            queueSize: 4,
+            leavePartsOnError: false,
+            params: {
+              Bucket: body.bucketName!,
+              Key: file.destinationPath,
+              Body: passThrough,
+            },
+          });
+
+          try {
+            await Promise.all([pipelinePromise, uploadWithCleanup(upload)]);
+          } finally {
+            signal.removeEventListener('abort', cleanup);
+          }
+        } else {
+          const destRelative = body.localPath
+            ? path.join(body.localPath, file.destinationPath)
+            : file.destinationPath;
+          const destAbsolute = await validatePath(body.localLocationId!, destRelative);
+          await fsPromises.mkdir(path.dirname(destAbsolute), { recursive: true });
+
+          const progressTransform = createProgressTransform(onProgress);
+          const writeStream = createWriteStream(destAbsolute);
+
+          const cleanup = () => {
+            stream.destroy();
+            progressTransform.destroy();
+            writeStream.destroy();
+          };
+
+          signal.addEventListener('abort', cleanup, { once: true });
+
+          try {
+            await pipeline(stream, progressTransform, writeStream);
+          } finally {
+            signal.removeEventListener('abort', cleanup);
+          }
+        }
+      };
+
+      const jobId = transferQueue.queueJob('huggingface', files, executor);
+
+      return reply.send({
+        jobId,
+        sseUrl: `/api/transfer/progress/${jobId}`,
+        fileCount: files.length,
+        modelId: body.modelId,
+      });
+    } catch (err: unknown) {
+      if (err instanceof S3ServiceException) {
+        return handleS3Error(err, reply);
+      }
+      req.log.error(err, 'HuggingFace import failed');
+      return reply.code(500).send({
+        error: 'Import Error',
+        message: err instanceof Error ? err.message : 'Failed to initiate HuggingFace import',
+      });
+    }
+  });
 };
