@@ -3,11 +3,8 @@ import { promises as fs, createWriteStream, ReadStream } from 'fs';
 import path from 'path';
 import { pipeline } from 'stream/promises';
 import { Transform } from 'stream';
-
-function sanitizeFilename(name: string): string {
-  return name.replace(/["\r\n\\]/g, '_');
-}
 import { base64Decode } from '../../../utils/encoding';
+import { sanitizeFilename } from '../../../utils/sanitize';
 import {
   validatePath,
   getStorageLocations,
