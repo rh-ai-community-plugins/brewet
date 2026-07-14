@@ -30,6 +30,12 @@ export interface TransferProgress {
   files: TransferFileJob[];
 }
 
+export interface TransferJobDestination {
+  type: 's3' | 'local';
+  locationId: string;
+  basePath: string;
+}
+
 export interface TransferJob {
   id: string;
   type: TransferType;
@@ -38,6 +44,7 @@ export interface TransferJob {
   abortController: AbortController;
   createdAt: number;
   completedAt?: number;
+  destination?: TransferJobDestination;
 }
 
 export type TransferExecutor = (
@@ -84,7 +91,7 @@ export class TransferQueue extends EventEmitter {
     this.limiter = pLimit(concurrency);
   }
 
-  queueJob(type: TransferType, files: TransferFileJob[], executor: TransferExecutor): string {
+  queueJob(type: TransferType, files: TransferFileJob[], executor: TransferExecutor, destination?: TransferJobDestination): string {
     this.evictExpiredJobs();
     const jobId = `transfer-${++jobCounter}-${Date.now()}`;
     const abortController = new AbortController();
@@ -96,6 +103,7 @@ export class TransferQueue extends EventEmitter {
       files,
       abortController,
       createdAt: Date.now(),
+      destination,
     };
 
     this.jobs.set(jobId, job);

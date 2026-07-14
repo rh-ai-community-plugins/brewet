@@ -1,5 +1,6 @@
 import {
   CopyObjectCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
@@ -19,6 +20,7 @@ import { createProgressTransform, uploadWithCleanup } from '../../../utils/strea
 import {
   transferQueue,
   TransferFileJob,
+  TransferJobDestination,
   TransferProgress,
 } from '../../../utils/transferQueue';
 import { validateBucketName } from '../../../utils/validation';
@@ -551,7 +553,13 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       sourceType === 'local' && destType === 's3' ? 's3-upload' as const :
       'local-upload' as const;
 
-    const jobId = transferQueue.queueJob(transferType, files, executor);
+    const destination: TransferJobDestination = {
+      type: destType as 's3' | 'local',
+      locationId: destLocationId,
+      basePath: destPath,
+    };
+
+    const jobId = transferQueue.queueJob(transferType, files, executor, destination);
 
     return reply.send({
       jobId,
@@ -647,8 +655,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
     return { cancelled: true, jobId };
   });
 
-  // Cleanup destination files for a cancelled job — not yet implemented;
-  // requires storing destination info in the TransferJob to know what to delete.
+  // Cleanup destination files for a cancelled or failed job.
   fastify.post('/:jobId/cleanup', async (req: FastifyRequest, reply: FastifyReply) => {
     const { jobId } = req.params as { jobId: string };
     const job = transferQueue.getJob(jobId);
@@ -664,10 +671,50 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       });
     }
 
-    return reply.code(501).send({
-      error: 'Not Implemented',
-      message: 'Automatic cleanup of destination files is not yet implemented',
-    });
+    if (!job.destination) {
+      return reply.code(501).send({
+        error: 'Not Implemented',
+        message: 'This job was created without destination tracking; cleanup is unavailable',
+      });
+    }
+
+    const { type: destType, locationId: destLocationId, basePath: destPath } = job.destination;
+
+    const filesToClean = job.files.filter(
+      (f) => f.status === 'completed' || (f.loaded > 0 && (f.status === 'cancelled' || f.status === 'failed')),
+    );
+
+    let deleted = 0;
+    let errors = 0;
+
+    for (const file of filesToClean) {
+      if (destType === 's3') {
+        const destKey = destPath ? path.posix.join(destPath, file.destinationPath) : file.destinationPath;
+        try {
+          const { s3Client } = getS3Config();
+          await s3Client.send(new DeleteObjectCommand({ Bucket: destLocationId, Key: destKey }));
+          deleted++;
+        } catch (err: unknown) {
+          fastify.log.warn({ err, key: destKey }, 'Failed to delete S3 object during cleanup');
+          errors++;
+        }
+      } else {
+        const destRelative = destPath ? path.join(destPath, file.destinationPath) : file.destinationPath;
+        try {
+          const absPath = await resolveLocalPath(destLocationId, destRelative);
+          await fs.unlink(absPath);
+          deleted++;
+        } catch (err: unknown) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code !== 'ENOENT') {
+            fastify.log.warn({ err, path: destRelative }, 'Failed to delete local file during cleanup');
+            errors++;
+          }
+        }
+      }
+    }
+
+    return { cleaned: deleted, errors, jobId };
   });
 
   // Check for conflicts before transfer

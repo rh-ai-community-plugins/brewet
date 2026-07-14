@@ -1,6 +1,7 @@
 import {
   TransferQueue,
   TransferFileJob,
+  TransferJobDestination,
   TransferProgress,
   TransferExecutor,
 } from '../../src/utils/transferQueue';
@@ -17,6 +18,10 @@ function makeFiles(count: number, size = 100): TransferFileJob[] {
     status: 'pending' as const,
     loaded: 0,
   }));
+}
+
+function makeDestination(overrides?: Partial<TransferJobDestination>): TransferJobDestination {
+  return { type: 's3', locationId: 'test-bucket', basePath: '', ...overrides };
 }
 
 function immediateExecutor(): TransferExecutor {
@@ -56,13 +61,13 @@ describe('TransferQueue', () => {
   describe('queueJob', () => {
     it('returns a job ID', () => {
       const files = makeFiles(1);
-      const jobId = queue.queueJob('cross-storage', files, immediateExecutor());
+      const jobId = queue.queueJob('cross-storage', files, immediateExecutor(), makeDestination());
       expect(jobId).toMatch(/^transfer-\d+-\d+$/);
     });
 
     it('completes all files', async () => {
       const files = makeFiles(3);
-      const jobId = queue.queueJob('cross-storage', files, immediateExecutor());
+      const jobId = queue.queueJob('cross-storage', files, immediateExecutor(), makeDestination());
 
       await new Promise<void>((resolve) => {
         queue.on('progress', (progress: TransferProgress) => {
@@ -77,12 +82,20 @@ describe('TransferQueue', () => {
       expect(progress?.completedFiles).toBe(3);
       expect(progress?.failedFiles).toBe(0);
     });
+
+    it('stores destination info on the job', () => {
+      const files = makeFiles(1);
+      const destination = makeDestination({ type: 'local', locationId: 'local-0', basePath: 'uploads' });
+      const jobId = queue.queueJob('local-upload', files, immediateExecutor(), destination);
+      const job = queue.getJob(jobId);
+      expect(job?.destination).toEqual(destination);
+    });
   });
 
   describe('cancelJob', () => {
     it('cancels a running job', async () => {
       const files = makeFiles(5);
-      const jobId = queue.queueJob('cross-storage', files, delayedExecutor(5000));
+      const jobId = queue.queueJob('cross-storage', files, delayedExecutor(5000), makeDestination());
 
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -99,7 +112,7 @@ describe('TransferQueue', () => {
 
     it('returns false for already completed job', async () => {
       const files = makeFiles(1);
-      const jobId = queue.queueJob('cross-storage', files, immediateExecutor());
+      const jobId = queue.queueJob('cross-storage', files, immediateExecutor(), makeDestination());
 
       await new Promise<void>((resolve) => {
         queue.on('progress', (progress: TransferProgress) => {
@@ -118,7 +131,7 @@ describe('TransferQueue', () => {
 
     it('tracks bytes loaded', async () => {
       const files = makeFiles(2, 500);
-      const jobId = queue.queueJob('s3-upload', files, immediateExecutor());
+      const jobId = queue.queueJob('s3-upload', files, immediateExecutor(), makeDestination());
 
       await new Promise<void>((resolve) => {
         queue.on('progress', (progress: TransferProgress) => {
@@ -135,7 +148,7 @@ describe('TransferQueue', () => {
   describe('failed transfers', () => {
     it('marks job as failed when files fail', async () => {
       const files = makeFiles(2);
-      const jobId = queue.queueJob('cross-storage', files, failingExecutor('disk full'));
+      const jobId = queue.queueJob('cross-storage', files, failingExecutor('disk full'), makeDestination());
 
       await new Promise<void>((resolve) => {
         queue.on('progress', (progress: TransferProgress) => {
@@ -160,7 +173,7 @@ describe('TransferQueue', () => {
         for (let i = 0; i < 10; i++) {
           onProgress(i * 100);
         }
-      });
+      }, makeDestination());
 
       queue.on('progress', (p: TransferProgress) => {
         if (p.jobId === jobId) progressEvents.push(p);
@@ -186,11 +199,19 @@ describe('TransferQueue', () => {
   describe('getJob', () => {
     it('returns the job object', () => {
       const files = makeFiles(1);
-      const jobId = queue.queueJob('cross-storage', files, immediateExecutor());
+      const jobId = queue.queueJob('cross-storage', files, immediateExecutor(), makeDestination());
       const job = queue.getJob(jobId);
       expect(job).toBeDefined();
       expect(job?.id).toBe(jobId);
       expect(job?.type).toBe('cross-storage');
+    });
+
+    it('works without destination info', () => {
+      const files = makeFiles(1);
+      const jobId = queue.queueJob('cross-storage', files, immediateExecutor());
+      const job = queue.getJob(jobId);
+      expect(job).toBeDefined();
+      expect(job?.destination).toBeUndefined();
     });
 
     it('returns undefined for nonexistent job', () => {
