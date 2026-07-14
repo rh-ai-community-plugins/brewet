@@ -6,7 +6,7 @@ function createMockReply(): any {
     write: jest.fn(),
     destroyed: false,
   };
-  return { raw };
+  return { raw, hijack: jest.fn() };
 }
 
 function createMockResponse(): any {
@@ -17,10 +17,22 @@ function createMockResponse(): any {
 }
 
 describe('setupSSE', () => {
+  it('calls reply.hijack() before writing headers', () => {
+    const reply = createMockReply();
+    const callOrder: string[] = [];
+    reply.hijack.mockImplementation(() => callOrder.push('hijack'));
+    reply.raw.writeHead.mockImplementation(() => callOrder.push('writeHead'));
+
+    setupSSE(reply);
+
+    expect(callOrder).toEqual(['hijack', 'writeHead']);
+  });
+
   it('sets correct SSE headers', () => {
     const reply = createMockReply();
     setupSSE(reply);
 
+    expect(reply.hijack).toHaveBeenCalledTimes(1);
     expect(reply.raw.writeHead).toHaveBeenCalledWith(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',

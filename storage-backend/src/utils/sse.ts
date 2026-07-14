@@ -2,6 +2,7 @@ import { FastifyReply } from 'fastify';
 import http from 'http';
 
 export function setupSSE(reply: FastifyReply): void {
+  reply.hijack();
   reply.raw.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
