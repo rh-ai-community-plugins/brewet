@@ -3,7 +3,6 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   ListObjectsV2Command,
-  S3ServiceException,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -17,24 +16,8 @@ import {
   validateAndDecodePrefix,
 } from '../../../utils/validation';
 import { validateFileType } from '../../../utils/fileValidation';
-
-function sanitizeFilename(name: string): string {
-  return name.replace(/["\r\n\\]/g, '_');
-}
-
-function handleS3Error(error: unknown, reply: FastifyReply) {
-  if (error instanceof S3ServiceException) {
-    return reply.code(error.$metadata?.httpStatusCode || 500).send({
-      error: error.name || 'S3ServiceException',
-      message: error.message || 'An S3 service exception occurred.',
-    });
-  }
-  const err = error as Error;
-  return reply.code(500).send({
-    error: err.name || 'Unknown error',
-    message: err.message || 'An unexpected error occurred.',
-  });
-}
+import { sanitizeFilename } from '../../../utils/sanitize';
+import { handleS3Error } from '../../../utils/s3-errors';
 
 const DEFAULT_MAX_KEYS = 500;
 const MAX_ALLOWED_KEYS = 2000;
