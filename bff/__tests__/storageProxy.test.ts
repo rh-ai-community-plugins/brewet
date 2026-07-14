@@ -86,7 +86,7 @@ describe('Storage Proxy', () => {
       targetPort = (targetServer.address() as { port: number }).port;
 
       const bff = express();
-      bff.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
+      bff.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
       bff.use('/api', createStorageProxyRouter());
 
       bffServer = bff.listen(0, () => {
@@ -108,7 +108,7 @@ describe('Storage Proxy', () => {
 
   describe('health endpoint', () => {
     it('responds independently of proxy', async () => {
-      const res = await request(bffPort, '/api/health');
+      const res = await request(bffPort, '/healthz');
       expect(res.statusCode).toBe(200);
       expect(JSON.parse(res.body)).toEqual({ status: 'ok' });
       expect(mockedResolve).not.toHaveBeenCalled();

@@ -5,7 +5,7 @@ import { createStorageProxyRouter } from './routes/storageProxy';
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
+app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
 
 app.use('/api', createStorageProxyRouter());
 
