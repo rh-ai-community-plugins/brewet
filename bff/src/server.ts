@@ -1,6 +1,7 @@
 import express from 'express';
 import { getK8sBaseUrl } from './utils/k8sClient';
 import { createStorageProxyRouter } from './routes/storageProxy';
+import { setupGracefulShutdown } from './shutdown';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -9,7 +10,7 @@ app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
 
 app.use('/api', createStorageProxyRouter());
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   const hasBackendOverride = !!process.env.STORAGE_BACKEND_URL;
 
   try {
@@ -40,5 +41,7 @@ app.listen(PORT, () => {
     }
   }
 });
+
+setupGracefulShutdown(server);
 
 export default app;
