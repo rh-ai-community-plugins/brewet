@@ -115,4 +115,42 @@ describe('POST /api/objects/huggingface-import', () => {
     });
     expect(response.statusCode).toBe(400);
   });
+
+  it('rejects modelId where owner segment contains dots that allow traversal (e.g. ../gated-model)', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/objects/huggingface-import',
+      payload: { modelId: '../gated-model', destinationType: 's3', bucketName: 'my-bucket' },
+    });
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body);
+    expect(body.message).toContain('owner/model');
+  });
+
+  it('rejects modelId where owner segment is a dot-only segment (e.g. ../owner/model)', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/objects/huggingface-import',
+      payload: { modelId: '..owner/model', destinationType: 's3', bucketName: 'my-bucket' },
+    });
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body);
+    expect(body.message).toContain('owner/model');
+  });
+
+  it('accepts valid modelId where owner has no dots but model segment may contain dots', async () => {
+    // This tests that the regex does NOT block legitimate model names like "owner/model-v1.0"
+    // We only check the validation path here; the HF network call will fail in test, so we
+    // accept any non-400-from-validation status (the request proceeds past validation).
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/objects/huggingface-import',
+      payload: { modelId: 'valid-owner/model-v1.0', destinationType: 's3', bucketName: 'my-bucket' },
+    });
+    // 400 with the format error would mean our new regex incorrectly rejects a valid modelId
+    if (response.statusCode === 400) {
+      const body = JSON.parse(response.body);
+      expect(body.message).not.toContain('owner/model');
+    }
+  });
 });
