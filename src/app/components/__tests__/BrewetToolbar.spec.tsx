@@ -58,6 +58,18 @@ describe('BrewetToolbar', () => {
     expect(screen.getByLabelText('Start container')).toBeInTheDocument();
   });
 
+  it('should show stop button when container is starting', () => {
+    mockContext({ selectedProject: 'test-ns', containerStatus: 'starting' });
+    render(<BrewetToolbar />);
+    expect(screen.getByLabelText('Stop container')).toBeInTheDocument();
+  });
+
+  it('should show stop button when container is in error state', () => {
+    mockContext({ selectedProject: 'test-ns', containerStatus: 'error' });
+    render(<BrewetToolbar />);
+    expect(screen.getByLabelText('Stop container')).toBeInTheDocument();
+  });
+
   it('should show no container status when container does not exist', () => {
     mockContext({ selectedProject: 'test-ns', containerStatus: 'none' });
     render(<BrewetToolbar />);
