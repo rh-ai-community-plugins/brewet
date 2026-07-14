@@ -29,7 +29,7 @@ import { validateFileType } from '../../../utils/fileValidation';
 import { sanitizeFilename } from '../../../utils/sanitize';
 import { handleS3Error } from '../../../utils/s3-errors';
 import { createProgressTransform, uploadWithCleanup } from '../../../utils/streamHelpers';
-import { transferQueue, TransferFileJob } from '../../../utils/transferQueue';
+import { transferQueue, TransferFileJob, TransferJobDestination } from '../../../utils/transferQueue';
 
 const DEFAULT_MAX_KEYS = 500;
 const MAX_ALLOWED_KEYS = 2000;
@@ -848,13 +848,20 @@ export default async (fastify: FastifyInstance): Promise<void> => {
 
           try {
             await pipeline(stream, progressTransform, writeStream);
+          } catch (err: unknown) {
+            await fsPromises.unlink(destAbsolute).catch(() => {});
+            throw err;
           } finally {
             signal.removeEventListener('abort', cleanup);
           }
         }
       };
 
-      const jobId = transferQueue.queueJob('huggingface', files, executor);
+      const destination: TransferJobDestination = body.destinationType === 's3'
+        ? { type: 's3', locationId: body.bucketName!, basePath: '' }
+        : { type: 'local', locationId: body.localLocationId!, basePath: body.localPath || '' };
+
+      const jobId = transferQueue.queueJob('huggingface', files, executor, destination);
 
       return reply.send({
         jobId,
