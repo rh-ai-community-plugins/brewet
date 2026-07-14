@@ -4,7 +4,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { initializeApp } from './app';
 import { getCorsConfig } from './config/cors';
-import { getLocalStoragePaths } from './utils/config';
+import { getLocalStoragePaths, hasEphemeralDefaultPath, DEFAULT_EPHEMERAL_PATH } from './utils/config';
 import { getStorageLocations } from './utils/localStorage';
 
 const PORT = parseInt(process.env.PORT || '8888', 10);
@@ -85,6 +85,14 @@ app.listen({ port: PORT, host: HOST }, (err) => {
     { rawEnvVar: process.env.LOCAL_STORAGE_PATHS, parsedPaths: localPaths, pathCount: localPaths.length },
     'Local storage paths configuration',
   );
+
+  if (hasEphemeralDefaultPath()) {
+    app.log.warn(
+      `LOCAL_STORAGE_PATHS contains the default ephemeral path '${DEFAULT_EPHEMERAL_PATH}'. ` +
+        'Data stored here will be lost on container restart. ' +
+        'Mount a PVC and set LOCAL_STORAGE_PATHS accordingly for persistent storage.',
+    );
+  }
 
   getStorageLocations(app.log)
     .then((locations) => {

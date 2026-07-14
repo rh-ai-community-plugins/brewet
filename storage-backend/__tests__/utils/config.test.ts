@@ -16,6 +16,8 @@ import {
   getMaxFileSizeBytes,
   isFileSizeValid,
   formatFileSize,
+  hasEphemeralDefaultPath,
+  DEFAULT_EPHEMERAL_PATH,
 } from '../../src/utils/config';
 
 describe('config', () => {
@@ -79,6 +81,28 @@ describe('config', () => {
       updateLocalStoragePaths(['/data/a', '', '/data/b', '  ']);
       const paths = getLocalStoragePaths();
       expect(paths).toEqual(['/data/a', '/data/b']);
+    });
+  });
+
+  describe('hasEphemeralDefaultPath', () => {
+    it('returns true when paths include the default ephemeral path', () => {
+      updateLocalStoragePaths([DEFAULT_EPHEMERAL_PATH]);
+      expect(hasEphemeralDefaultPath()).toBe(true);
+    });
+
+    it('returns true when default ephemeral path is mixed with other paths', () => {
+      updateLocalStoragePaths(['/mnt/pvc', DEFAULT_EPHEMERAL_PATH]);
+      expect(hasEphemeralDefaultPath()).toBe(true);
+    });
+
+    it('returns false when paths contain only PVC mounts', () => {
+      updateLocalStoragePaths(['/mnt/pvc1', '/mnt/pvc2']);
+      expect(hasEphemeralDefaultPath()).toBe(false);
+    });
+
+    it('returns false when paths list is empty', () => {
+      updateLocalStoragePaths([]);
+      expect(hasEphemeralDefaultPath()).toBe(false);
     });
   });
 

@@ -18,11 +18,13 @@ let maxFilesPerPage = parseInt(process.env.MAX_FILES_PER_PAGE || '100', 10);
 let httpProxy = process.env.HTTP_PROXY || '';
 let httpsProxy = process.env.HTTPS_PROXY || '';
 
+export const DEFAULT_EPHEMERAL_PATH = '/opt/app-root/src/data';
+
 let localStoragePaths: string[] = process.env.LOCAL_STORAGE_PATHS
   ? process.env.LOCAL_STORAGE_PATHS.split(',')
       .map((p) => p.trim())
       .filter((p) => p.length > 0)
-  : ['/opt/app-root/src/data'];
+  : [DEFAULT_EPHEMERAL_PATH];
 
 let maxFileSizeGB: number = parseInt(process.env.MAX_FILE_SIZE_GB || '20', 10);
 if (isNaN(maxFileSizeGB) || maxFileSizeGB <= 0) {
@@ -172,6 +174,9 @@ export const updateMaxFileSizeGB = (newLimitGB: number): void => {
 };
 
 export const isFileSizeValid = (sizeBytes: number): boolean => sizeBytes <= getMaxFileSizeBytes();
+
+export const hasEphemeralDefaultPath = (): boolean =>
+  localStoragePaths.includes(DEFAULT_EPHEMERAL_PATH);
 
 export const formatFileSize = (sizeBytes: number): string => {
   const gb = sizeBytes / (1024 * 1024 * 1024);
