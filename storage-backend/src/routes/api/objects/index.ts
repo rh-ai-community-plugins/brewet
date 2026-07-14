@@ -686,6 +686,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         const request = makeRequest(url, (res: http.IncomingMessage) => {
           if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             const redirectUrl = res.headers.location;
+            res.resume(); // drain redirect body so the socket is released back to the pool
             if (isBlockedRedirect(redirectUrl)) {
               reject(new Error('Redirect to blocked URL'));
               return;
@@ -695,6 +696,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
             return;
           }
           if (res.statusCode && res.statusCode >= 400) {
+            res.resume(); // drain error body so the socket is released back to the pool
             reject(new Error(`HuggingFace API returned ${res.statusCode}`));
             return;
           }
@@ -721,6 +723,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         const request = makeRequest(url, (res: http.IncomingMessage) => {
           if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             const redirectUrl = res.headers.location;
+            res.resume(); // drain redirect body so the socket is released back to the pool
             if (isBlockedRedirect(redirectUrl)) {
               reject(new Error('Redirect to blocked URL'));
               return;
@@ -730,6 +733,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
             return;
           }
           if (res.statusCode && res.statusCode >= 400) {
+            res.resume(); // drain error body so the socket is released back to the pool
             reject(new Error(`Download failed with status ${res.statusCode}`));
             return;
           }

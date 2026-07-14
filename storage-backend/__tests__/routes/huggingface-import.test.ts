@@ -1,6 +1,8 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import { mockClient } from 'aws-sdk-client-mock';
 import { S3Client } from '@aws-sdk/client-s3';
+import https from 'https';
+import { EventEmitter } from 'events';
 import objectRoutes from '../../src/routes/api/objects/index';
 
 const s3Mock = mockClient(S3Client);
@@ -171,5 +173,128 @@ describe('POST /api/objects/huggingface-import', () => {
     });
     // A 400 here would mean our validation incorrectly rejects a valid modelId format.
     expect(response.statusCode).not.toBe(400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Helpers for socket-drain tests
+// ---------------------------------------------------------------------------
+
+/** Build a minimal IncomingMessage-like EventEmitter with a jest-spied resume(). */
+function makeMockResponse(statusCode: number, headers: Record<string, string> = {}) {
+  const res = new EventEmitter() as any;
+  res.statusCode = statusCode;
+  res.headers = headers;
+  res.resume = jest.fn();
+  return res;
+}
+
+/** Build a minimal ClientRequest-like EventEmitter whose end() triggers the response callback. */
+function makeMockRequest(responseCallback: (res: any) => void, mockRes: any) {
+  const req = new EventEmitter() as any;
+  req.end = jest.fn(() => {
+    // Invoke synchronously so Promise resolution stays predictable in tests
+    responseCallback(mockRes);
+  });
+  return req;
+}
+
+// ---------------------------------------------------------------------------
+// Socket-drain tests for redirect and error branches
+// ---------------------------------------------------------------------------
+
+describe('redirect and error response body draining', () => {
+  let httpsRequestSpy: jest.SpyInstance | undefined;
+
+  afterEach(() => {
+    httpsRequestSpy?.mockRestore();
+    httpsRequestSpy = undefined;
+  });
+
+  it('fetchJSON calls res.resume() on a redirect response before following it', async () => {
+    const redirectResumeSpy = jest.fn();
+    let callCount = 0;
+
+    const mockImpl = (_opts: any, responseCallback: any) => {
+      const callIndex = callCount++;
+      if (callIndex === 0) {
+        // First call: 302 redirect to a follow-up HF URL
+        const redirectRes = makeMockResponse(302, {
+          location: 'https://huggingface.co/api/models/test/model-v2',
+        });
+        redirectRes.resume = redirectResumeSpy;
+        return makeMockRequest(responseCallback, redirectRes);
+      }
+      // Second call (after redirect): 200 with model info (no files)
+      const finalRes = makeMockResponse(200);
+      const req = makeMockRequest(responseCallback, finalRes);
+      // Emit the JSON body on next tick so the data/end listeners are attached first
+      const originalEnd = req.end.getMockImplementation() ?? (() => {});
+      req.end = jest.fn(() => {
+        originalEnd();
+        process.nextTick(() => {
+          finalRes.emit('data', Buffer.from(JSON.stringify({ siblings: [], gated: false })));
+          finalRes.emit('end');
+        });
+      });
+      return req;
+    };
+    httpsRequestSpy = jest.spyOn(https, 'request').mockImplementation(mockImpl as any);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/objects/huggingface-import',
+      payload: { modelId: 'test/model', destinationType: 's3', bucketName: 'my-bucket' },
+    });
+
+    // resume() must have been called exactly once on the redirect response
+    expect(redirectResumeSpy).toHaveBeenCalledTimes(1);
+    // Empty siblings → route returns 200 with fileCount 0 (job queued, no files to transfer)
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).fileCount).toBe(0);
+  });
+
+  it('fetchJSON calls res.resume() on a redirect to a blocked host before rejecting', async () => {
+    const redirectResumeSpy = jest.fn();
+
+    const mockImpl = (_opts: any, responseCallback: any) => {
+      const redirectRes = makeMockResponse(302, {
+        location: 'http://169.254.169.254/metadata',
+      });
+      redirectRes.resume = redirectResumeSpy;
+      return makeMockRequest(responseCallback, redirectRes);
+    };
+    httpsRequestSpy = jest.spyOn(https, 'request').mockImplementation(mockImpl as any);
+
+    // The blocked redirect causes fetchJSON (the initial model-info fetch) to reject,
+    // so the route returns 500.
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/objects/huggingface-import',
+      payload: { modelId: 'test/model', destinationType: 's3', bucketName: 'my-bucket' },
+    });
+
+    expect(redirectResumeSpy).toHaveBeenCalledTimes(1);
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('fetchJSON calls res.resume() on a 4xx error response before rejecting', async () => {
+    const errorResumeSpy = jest.fn();
+
+    const mockImpl = (_opts: any, responseCallback: any) => {
+      const errorRes = makeMockResponse(403);
+      errorRes.resume = errorResumeSpy;
+      return makeMockRequest(responseCallback, errorRes);
+    };
+    httpsRequestSpy = jest.spyOn(https, 'request').mockImplementation(mockImpl as any);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/objects/huggingface-import',
+      payload: { modelId: 'test/model', destinationType: 's3', bucketName: 'my-bucket' },
+    });
+
+    expect(errorResumeSpy).toHaveBeenCalledTimes(1);
+    expect(response.statusCode).toBe(500);
   });
 });
