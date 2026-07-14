@@ -199,8 +199,8 @@ When no Brewet container exists in the selected project, all pages show a **crea
    - `GET/PUT /api/settings/max-concurrent-transfers` — transfer concurrency
    - `GET/PUT /api/settings/max-files-per-page` — pagination
 
-9. **Disclaimer route** (`src/routes/api/disclaimer/index.ts`)
-   - `GET /api/disclaimer` — app info/version endpoint
+9. **Info route** (`src/routes/api/info/index.ts`)
+   - `GET /api/info` — app info/version endpoint
 
 10. **Containerfile** (`storage-backend/Containerfile`)
     - Multi-stage build: UBI9 Node 22 builder → UBI9 Node 22 runtime
