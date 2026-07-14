@@ -143,4 +143,92 @@ describe('BrewetContext', () => {
       expect(result.current.containerStatus).toBe('stopped');
     });
   });
+
+  it('should poll every 5s while container status is starting', async () => {
+    jest.useFakeTimers();
+
+    const startingDeployment = {
+      metadata: { name: 'brewet-storage-backend', namespace: 'ns' },
+      spec: { replicas: 1 },
+      status: { readyReplicas: 0 },
+    };
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(startingDeployment),
+    });
+
+    const { result } = renderHook(() => useBrewetContext(), { wrapper });
+
+    await act(async () => {
+      result.current.setSelectedProject('ns');
+    });
+
+    await waitFor(() => {
+      expect(result.current.containerStatus).toBe('starting');
+    });
+
+    const callsBefore = (global.fetch as jest.Mock).mock.calls.length;
+
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+
+    expect((global.fetch as jest.Mock).mock.calls.length).toBeGreaterThan(callsBefore);
+
+    jest.useRealTimers();
+  });
+
+  it('should stop polling when status transitions from starting to running', async () => {
+    jest.useFakeTimers();
+
+    const startingDeployment = {
+      metadata: { name: 'brewet-storage-backend', namespace: 'ns' },
+      spec: { replicas: 1 },
+      status: { readyReplicas: 0 },
+    };
+    const runningDeployment = {
+      ...startingDeployment,
+      status: { readyReplicas: 1 },
+    };
+
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(startingDeployment) })
+      .mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve(runningDeployment) });
+
+    global.fetch = fetchMock;
+
+    const { result } = renderHook(() => useBrewetContext(), { wrapper });
+
+    await act(async () => {
+      result.current.setSelectedProject('ns');
+    });
+
+    await waitFor(() => {
+      expect(result.current.containerStatus).toBe('starting');
+    });
+
+    // First interval poll fires — returns running
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+
+    await waitFor(() => {
+      expect(result.current.containerStatus).toBe('running');
+    });
+
+    const callsAfterRunning = fetchMock.mock.calls.length;
+
+    // Advance another full interval — polling should be stopped, no new calls
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+
+    await act(async () => {});
+
+    expect(fetchMock.mock.calls.length).toBe(callsAfterRunning);
+
+    jest.useRealTimers();
+  });
 });
