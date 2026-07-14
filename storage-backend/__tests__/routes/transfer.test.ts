@@ -3,11 +3,15 @@ import { promises as fsPromises } from 'fs';
 import { mockClient } from 'aws-sdk-client-mock';
 import {
   S3Client,
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
   CopyObjectCommand,
   PutObjectCommand,
+  UploadPartCopyCommand,
 } from '@aws-sdk/client-s3';
 import transferRoutes from '../../src/routes/api/transfer/index';
 import { transferQueue } from '../../src/utils/transferQueue';
@@ -141,6 +145,98 @@ describe('POST /api/transfer', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.fileCount).toBe(2);
+  });
+
+  it('uses CopyObjectCommand for S3→S3 files exactly at the 5 GB boundary', async () => {
+    const fiveGB = 5 * 1024 * 1024 * 1024;
+    s3Mock.on(HeadObjectCommand).resolves({ ContentLength: fiveGB });
+    s3Mock.on(CopyObjectCommand).resolves({});
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/transfer',
+      payload: {
+        source: 's3:source-bucket/',
+        destination: 's3:dest-bucket/output',
+        items: [{ path: 'large-model.safetensors', type: 'file' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.jobId).toBeDefined();
+
+    // Wait for the transfer job to run
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(s3Mock.commandCalls(CopyObjectCommand).length).toBeGreaterThan(0);
+    expect(s3Mock.commandCalls(CreateMultipartUploadCommand).length).toBe(0);
+  });
+
+  it('uses multipart copy for S3→S3 files larger than 5 GB', async () => {
+    const sixGB = 6 * 1024 * 1024 * 1024;
+    s3Mock.on(HeadObjectCommand).resolves({ ContentLength: sixGB });
+    s3Mock.on(CreateMultipartUploadCommand).resolves({ UploadId: 'test-upload-id' });
+    s3Mock.on(UploadPartCopyCommand).resolves({
+      CopyPartResult: { ETag: '"abc123"' },
+    });
+    s3Mock.on(CompleteMultipartUploadCommand).resolves({});
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/transfer',
+      payload: {
+        source: 's3:source-bucket/',
+        destination: 's3:dest-bucket/output',
+        items: [{ path: 'huge-model.safetensors', type: 'file' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.jobId).toBeDefined();
+
+    // Wait for the transfer job to run
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(s3Mock.commandCalls(CopyObjectCommand).length).toBe(0);
+    expect(s3Mock.commandCalls(CreateMultipartUploadCommand).length).toBeGreaterThan(0);
+    // ceil(6 GB / 500 MB) = ceil(12.288) = 13 parts
+    expect(s3Mock.commandCalls(UploadPartCopyCommand).length).toBe(13);
+    expect(s3Mock.commandCalls(CompleteMultipartUploadCommand).length).toBeGreaterThan(0);
+  });
+
+  it('aborts multipart upload when S3→S3 transfer of large file fails mid-copy', async () => {
+    const sixGB = 6 * 1024 * 1024 * 1024;
+    s3Mock.on(HeadObjectCommand).resolves({ ContentLength: sixGB });
+    s3Mock.on(CreateMultipartUploadCommand).resolves({ UploadId: 'abort-upload-id' });
+    // Fail on the second part
+    let partCount = 0;
+    s3Mock.on(UploadPartCopyCommand).callsFake(() => {
+      partCount++;
+      if (partCount >= 2) throw new Error('S3 network error');
+      return Promise.resolve({ CopyPartResult: { ETag: '"part1"' } });
+    });
+    s3Mock.on(AbortMultipartUploadCommand).resolves({});
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/transfer',
+      payload: {
+        source: 's3:source-bucket/',
+        destination: 's3:dest-bucket/output',
+        items: [{ path: 'huge-model.safetensors', type: 'file' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    // Wait for the async job to execute and fail (error is non-retryable so it fails immediately)
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    expect(s3Mock.commandCalls(AbortMultipartUploadCommand).length).toBeGreaterThan(0);
+    const abortCall = s3Mock.commandCalls(AbortMultipartUploadCommand)[0];
+    expect(abortCall.args[0].input.UploadId).toBe('abort-upload-id');
   });
 });
 
