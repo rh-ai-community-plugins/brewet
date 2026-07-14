@@ -64,7 +64,8 @@ export const BrewetToolbar: React.FC = () => {
         }
         setTimeout(refreshContainerStatus, 1000);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        console.error('Scale operation failed:', err);
         refreshContainerStatus();
       })
       .finally(() => {

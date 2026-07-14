@@ -79,7 +79,7 @@ describe('BrewetToolbar', () => {
     });
   });
 
-  it('should call refreshContainerStatus immediately on HTTP error response', async () => {
+  it('should call refreshContainerStatus on HTTP error response', async () => {
     const refreshContainerStatus = jest.fn();
     global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 403 });
     mockContext({ selectedProject: 'test-ns', containerStatus: 'stopped', refreshContainerStatus });
@@ -92,7 +92,7 @@ describe('BrewetToolbar', () => {
     });
   });
 
-  it('should call refreshContainerStatus immediately on network error', async () => {
+  it('should call refreshContainerStatus on network error', async () => {
     const refreshContainerStatus = jest.fn();
     global.fetch = jest.fn().mockRejectedValue(new Error('Network error'));
     mockContext({ selectedProject: 'test-ns', containerStatus: 'stopped', refreshContainerStatus });
