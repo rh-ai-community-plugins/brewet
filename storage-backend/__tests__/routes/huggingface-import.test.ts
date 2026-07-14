@@ -370,4 +370,230 @@ describe('POST /api/objects/huggingface-import', () => {
       expect(downloadRedirectResumeSpy).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // queueJob destination tracking (Fix #42 — issue 1)
+  // ---------------------------------------------------------------------------
+
+  describe('queueJob destination tracking', () => {
+    let httpsRequestSpy2: jest.SpyInstance | undefined;
+    let queueJobSpy2: jest.SpyInstance | undefined;
+
+    afterEach(() => {
+      httpsRequestSpy2?.mockRestore();
+      queueJobSpy2?.mockRestore();
+      httpsRequestSpy2 = undefined;
+      queueJobSpy2 = undefined;
+    });
+
+    /** Builds a mock https request that responds with a model-info JSON containing one file. */
+    function makeModelInfoReq(responseCallback: (res: any) => void) {
+      const modelInfoRes = new EventEmitter() as any;
+      modelInfoRes.statusCode = 200;
+      modelInfoRes.headers = {};
+      modelInfoRes.resume = jest.fn();
+      const req = new EventEmitter() as any;
+      req.end = jest.fn(() => {
+        responseCallback(modelInfoRes);
+        process.nextTick(() => {
+          modelInfoRes.emit(
+            'data',
+            Buffer.from(JSON.stringify({ siblings: [{ rfilename: 'model.bin' }], gated: false })),
+          );
+          modelInfoRes.emit('end');
+        });
+      });
+      return req;
+    }
+
+    it('passes s3 destination with correct locationId and empty basePath to queueJob', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { transferQueue: mockedQueue } = require('../../src/utils/transferQueue');
+      let capturedDestination: any;
+      queueJobSpy2 = jest
+        .spyOn(mockedQueue, 'queueJob')
+        .mockImplementationOnce((_type: any, _files: any, _executor: any, destination: any): string => {
+          capturedDestination = destination;
+          return 'hf-s3-dest-job-id';
+        });
+
+      httpsRequestSpy2 = jest
+        .spyOn(https, 'request')
+        .mockImplementation((_opts: any, cb: any) => makeModelInfoReq(cb) as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/objects/huggingface-import',
+        payload: { modelId: 'owner/model', destinationType: 's3', bucketName: 'my-bucket' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedDestination).toEqual({ type: 's3', locationId: 'my-bucket', basePath: '' });
+    });
+
+    it('passes local destination with localPath as basePath to queueJob', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { transferQueue: mockedQueue } = require('../../src/utils/transferQueue');
+      let capturedDestination: any;
+      queueJobSpy2 = jest
+        .spyOn(mockedQueue, 'queueJob')
+        .mockImplementationOnce((_type: any, _files: any, _executor: any, destination: any): string => {
+          capturedDestination = destination;
+          return 'hf-local-dest-job-id';
+        });
+
+      httpsRequestSpy2 = jest
+        .spyOn(https, 'request')
+        .mockImplementation((_opts: any, cb: any) => makeModelInfoReq(cb) as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/objects/huggingface-import',
+        payload: {
+          modelId: 'owner/model',
+          destinationType: 'local',
+          localLocationId: 'local-0',
+          localPath: 'data/models',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedDestination).toEqual({ type: 'local', locationId: 'local-0', basePath: 'data/models' });
+    });
+
+    it('passes local destination with empty basePath when localPath is not set', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { transferQueue: mockedQueue } = require('../../src/utils/transferQueue');
+      let capturedDestination: any;
+      queueJobSpy2 = jest
+        .spyOn(mockedQueue, 'queueJob')
+        .mockImplementationOnce((_type: any, _files: any, _executor: any, destination: any): string => {
+          capturedDestination = destination;
+          return 'hf-local-no-path-job-id';
+        });
+
+      httpsRequestSpy2 = jest
+        .spyOn(https, 'request')
+        .mockImplementation((_opts: any, cb: any) => makeModelInfoReq(cb) as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/objects/huggingface-import',
+        payload: { modelId: 'owner/model', destinationType: 'local', localLocationId: 'local-0' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(capturedDestination).toEqual({ type: 'local', locationId: 'local-0', basePath: '' });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Partial file unlink on pipeline error (Fix #42 — issue 2)
+  // ---------------------------------------------------------------------------
+
+  describe('local destination partial file unlink on pipeline error', () => {
+    let httpsRequestSpy3: jest.SpyInstance | undefined;
+    let queueJobSpy3: jest.SpyInstance | undefined;
+    let validatePathSpy: jest.SpyInstance | undefined;
+    let mkdirSpy: jest.SpyInstance | undefined;
+    let unlinkSpy: jest.SpyInstance | undefined;
+
+    afterEach(() => {
+      httpsRequestSpy3?.mockRestore();
+      queueJobSpy3?.mockRestore();
+      validatePathSpy?.mockRestore();
+      mkdirSpy?.mockRestore();
+      unlinkSpy?.mockRestore();
+      httpsRequestSpy3 = undefined;
+      queueJobSpy3 = undefined;
+      validatePathSpy = undefined;
+      mkdirSpy = undefined;
+      unlinkSpy = undefined;
+    });
+
+    it('unlinks the partial local file when the download stream errors during pipeline', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { transferQueue: mockedQueue } = require('../../src/utils/transferQueue');
+      let capturedExecutor: ((...args: any[]) => Promise<void>) | null = null;
+      let capturedFiles: any[] = [];
+      queueJobSpy3 = jest
+        .spyOn(mockedQueue, 'queueJob')
+        .mockImplementationOnce((_type: any, files: any, executor: any): string => {
+          capturedExecutor = executor;
+          capturedFiles = files;
+          return 'hf-unlink-test-job';
+        });
+
+      // requestCallIndex tracks which call we are on across both phases
+      let requestCallIndex = 0;
+      httpsRequestSpy3 = jest.spyOn(https, 'request').mockImplementation((_opts: any, cb: any) => {
+        const callIdx = requestCallIndex++;
+
+        if (callIdx === 0) {
+          // Phase 1 (app.inject): model info fetch — return one file
+          const modelInfoRes = new EventEmitter() as any;
+          modelInfoRes.statusCode = 200;
+          modelInfoRes.headers = {};
+          modelInfoRes.resume = jest.fn();
+          const req = new EventEmitter() as any;
+          req.end = jest.fn(() => {
+            cb(modelInfoRes);
+            process.nextTick(() => {
+              modelInfoRes.emit(
+                'data',
+                Buffer.from(JSON.stringify({ siblings: [{ rfilename: 'model.bin' }], gated: false })),
+              );
+              modelInfoRes.emit('end');
+            });
+          });
+          return req;
+        }
+
+        // Phase 2 (executor invocation): download fetch — return a readable that errors
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { Readable } = require('stream');
+        const errorStream = Object.assign(new Readable({ read() {} }), {
+          statusCode: 200,
+          headers: { 'content-length': '1000' },
+          resume: jest.fn(),
+        });
+        const req = new EventEmitter() as any;
+        req.end = jest.fn(() => {
+          cb(errorStream);
+          process.nextTick(() => {
+            errorStream.destroy(new Error('Simulated network error'));
+          });
+        });
+        return req;
+      });
+
+      // Queue the job and capture the executor
+      const injectResponse = await app.inject({
+        method: 'POST',
+        url: '/api/objects/huggingface-import',
+        payload: { modelId: 'owner/model', destinationType: 'local', localLocationId: 'local-0' },
+      });
+      expect(injectResponse.statusCode).toBe(200);
+      expect(capturedExecutor).not.toBeNull();
+      expect(capturedFiles).toHaveLength(1);
+
+      // Set up fs mocks for the executor invocation
+      const mockDestPath = `/tmp/test-storage/hf-partial-${Date.now()}.bin`;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      validatePathSpy = jest.spyOn(require('../../src/utils/localStorage'), 'validatePath')
+        .mockResolvedValue(mockDestPath);
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      mkdirSpy = jest.spyOn(require('fs').promises, 'mkdir').mockResolvedValue(undefined as any);
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      unlinkSpy = jest.spyOn(require('fs').promises, 'unlink').mockResolvedValue(undefined as any);
+
+      // Invoke the executor — expect it to reject due to stream error
+      await expect(
+        capturedExecutor!(capturedFiles[0], new AbortController().signal, jest.fn()),
+      ).rejects.toThrow('Simulated network error');
+
+      // The catch block must have called unlink on the partial destination file
+      expect(unlinkSpy).toHaveBeenCalledWith(mockDestPath);
+    });
+  });
 });
