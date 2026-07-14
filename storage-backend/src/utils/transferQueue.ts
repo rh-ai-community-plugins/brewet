@@ -122,6 +122,7 @@ export class TransferQueue extends EventEmitter {
     }
 
     this.emitProgress(jobId, true);
+    this.lastEmitTime.delete(jobId);
     return true;
   }
 

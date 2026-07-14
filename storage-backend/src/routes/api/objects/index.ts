@@ -672,8 +672,12 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         : http.request(options, callback);
     };
 
-    const fetchJSON = (url: string, includeAuth = true): Promise<any> =>
+    const fetchJSON = (url: string, includeAuth = true, redirectCount = 0): Promise<any> =>
       new Promise((resolve, reject) => {
+        if (redirectCount > 10) {
+          reject(new Error('Too many redirects'));
+          return;
+        }
         const request = makeRequest(url, (res: http.IncomingMessage) => {
           if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             const redirectUrl = res.headers.location;
@@ -682,7 +686,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
               return;
             }
             const sendAuth = isHuggingFaceHost(redirectUrl);
-            fetchJSON(redirectUrl, sendAuth).then(resolve).catch(reject);
+            fetchJSON(redirectUrl, sendAuth, redirectCount + 1).then(resolve).catch(reject);
             return;
           }
           if (res.statusCode && res.statusCode >= 400) {
