@@ -23,17 +23,25 @@ function maskSecret(value: string): string {
   return value.slice(0, 4) + '****';
 }
 
+function isPrivateIp(hostname: string): boolean {
+  const parts = hostname.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) return false;
+  if (parts[0] === 10) return true;
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  if (parts[0] === 0) return true;
+  return false;
+}
+
 function isBlockedUrl(urlStr: string): boolean {
   try {
     const url = new URL(urlStr);
     const hostname = url.hostname.toLowerCase();
-    // Block link-local metadata endpoints
     if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') return true;
-    // Block localhost/loopback
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
-    // Block Kubernetes internal service DNS
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '0.0.0.0') return true;
     if (hostname === 'kubernetes' || hostname === 'kubernetes.default' ||
         hostname.endsWith('.svc.cluster.local')) return true;
+    if (isPrivateIp(hostname)) return true;
     return false;
   } catch {
     return true;

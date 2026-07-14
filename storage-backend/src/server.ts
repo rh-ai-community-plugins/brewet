@@ -36,7 +36,7 @@ const app = fastify({
   },
   disableRequestLogging: true,
   pluginTimeout: 10000,
-  maxParamLength: 1000,
+  maxParamLength: 2048,
 });
 
 app.addHook('onRequest', (request, _reply, done) => {

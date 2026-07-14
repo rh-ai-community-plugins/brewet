@@ -9,7 +9,7 @@ import { Upload } from '@aws-sdk/lib-storage';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Readable } from 'stream';
 import { base64Decode } from '../../../utils/encoding';
-import { getS3Config } from '../../../utils/config';
+import { getS3Config, getMaxFileSizeBytes } from '../../../utils/config';
 import {
   validateBucketName,
   validateContinuationToken,
@@ -392,7 +392,9 @@ export default async (fastify: FastifyInstance): Promise<void> => {
 
     try {
       const item = await s3Client.send(new GetObjectCommand({ Bucket: bucketName, Key: key }));
-      return item.Body;
+      const s3Stream = item.Body as Readable;
+      reply.raw.on('close', () => { s3Stream.destroy(); });
+      return reply.send(s3Stream);
     } catch (err) {
       return handleS3Error(err, reply);
     }
@@ -515,7 +517,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       let data;
       try {
         data = await req.file({
-          limits: { fileSize: 10 * 1024 * 1024 * 1024 },
+          limits: { fileSize: getMaxFileSizeBytes() },
         });
       } catch {
         return reply.status(400).send({ error: 'Bad Request', message: 'Invalid multipart request' });

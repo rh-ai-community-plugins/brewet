@@ -23,7 +23,8 @@ export function validateQuery(q: string | undefined): string | null {
   if (q === undefined) return null;
   if (typeof q !== 'string') return 'Query must be a string.';
   if (q.length === 0 || q.length > 256) return 'Query length must be between 1 and 256 characters.';
-  if (!/^[a-zA-Z0-9._\-\s]{1,256}$/.test(q)) return 'Query contains invalid characters.';
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f]/.test(q)) return 'Query contains invalid control characters.';
   return null;
 }
 

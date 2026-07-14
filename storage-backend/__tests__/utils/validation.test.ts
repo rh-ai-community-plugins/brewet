@@ -59,14 +59,16 @@ describe('validateQuery', () => {
     expect(validateQuery('a'.repeat(257))).toBeTruthy();
   });
 
-  it('rejects special characters', () => {
-    expect(validateQuery('test<script>')).toBeTruthy();
-    expect(validateQuery("'; DROP TABLE")).toBeTruthy();
+  it('rejects control characters', () => {
+    expect(validateQuery('test\x00file')).toBeTruthy();
+    expect(validateQuery('test\nfile')).toBeTruthy();
   });
 
-  it('accepts valid queries', () => {
+  it('accepts valid queries including Unicode', () => {
     expect(validateQuery('model-v2')).toBeNull();
     expect(validateQuery('test file.txt')).toBeNull();
+    expect(validateQuery('日本語ファイル')).toBeNull();
+    expect(validateQuery("Capture d'écran.png")).toBeNull();
   });
 });
 
