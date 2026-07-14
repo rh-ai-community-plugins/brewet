@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 
 export type ContainerStatus = 'none' | 'stopped' | 'running' | 'starting' | 'error';
 
@@ -33,6 +33,7 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [containerStatus, setContainerStatus] = useState<ContainerStatus>('none');
   const [containerInfo, setContainerInfo] = useState<ContainerInfo | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const setSelectedProject = useCallback((project: string | null) => {
     setSelectedProjectState(project);
@@ -48,14 +49,20 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const refreshContainerStatus = useCallback(() => {
+    abortControllerRef.current?.abort();
+
     if (!selectedProject) {
       setContainerStatus('none');
       setContainerInfo(null);
       return;
     }
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     fetch(
       `/api/k8s/apis/apps/v1/namespaces/${encodeURIComponent(selectedProject)}/deployments/brewet-storage-backend`,
+      { signal: controller.signal },
     )
       .then((res) => {
         if (res.status === 404) {
@@ -68,17 +75,23 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       })
       .then((deployment) => {
         if (!deployment) return;
+
+        const name = deployment.metadata?.name;
+        const namespace = deployment.metadata?.namespace;
+        if (!name || !namespace) {
+          throw new Error('Unexpected deployment response shape');
+        }
+
         const replicas = deployment.spec?.replicas ?? 0;
         const readyReplicas = deployment.status?.readyReplicas ?? 0;
 
-        const info: ContainerInfo = {
-          name: deployment.metadata.name,
-          namespace: deployment.metadata.namespace,
+        setContainerInfo({
+          name,
+          namespace,
           replicas,
           readyReplicas,
-          creationTimestamp: deployment.metadata.creationTimestamp,
-        };
-        setContainerInfo(info);
+          creationTimestamp: deployment.metadata?.creationTimestamp,
+        });
 
         if (replicas === 0) {
           setContainerStatus('stopped');
@@ -88,7 +101,8 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setContainerStatus('starting');
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         setContainerStatus('error');
         setContainerInfo(null);
       });
@@ -96,6 +110,7 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     refreshContainerStatus();
+    return () => abortControllerRef.current?.abort();
   }, [refreshContainerStatus]);
 
   return (

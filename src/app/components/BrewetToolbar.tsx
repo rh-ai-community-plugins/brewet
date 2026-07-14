@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Toolbar,
   ToolbarContent,
@@ -29,17 +29,22 @@ export const BrewetToolbar: React.FC = () => {
     selectedProject,
     setSelectedProject,
     containerStatus,
+    refreshContainerStatus,
   } = useBrewetContext();
+
+  const [isScaling, setIsScaling] = useState(false);
 
   const statusConfig = STATUS_CONFIG[containerStatus];
   const canStart = containerStatus === 'stopped';
   const canStop = containerStatus === 'running';
   const hasContainer = containerStatus !== 'none';
 
-  const handleStartStop = () => {
-    if (!selectedProject) return;
+  const handleStartStop = useCallback(() => {
+    if (!selectedProject || isScaling) return;
 
     const replicas = canStart ? 1 : 0;
+    setIsScaling(true);
+
     fetch(
       `/api/k8s/apis/apps/v1/namespaces/${encodeURIComponent(selectedProject)}/deployments/brewet-storage-backend/scale`,
       {
@@ -52,8 +57,17 @@ export const BrewetToolbar: React.FC = () => {
           spec: { replicas },
         }),
       },
-    );
-  };
+    )
+      .then(() => {
+        setTimeout(refreshContainerStatus, 1000);
+      })
+      .catch(() => {
+        refreshContainerStatus();
+      })
+      .finally(() => {
+        setIsScaling(false);
+      });
+  }, [selectedProject, isScaling, canStart, refreshContainerStatus]);
 
   return (
     <Toolbar>
@@ -68,10 +82,10 @@ export const BrewetToolbar: React.FC = () => {
         {selectedProject && (
           <ToolbarGroup align={{ default: 'alignEnd' }}>
             <ToolbarItem>
-              <Label color={statusConfig.color}>
-                {containerStatus === 'starting' && (
-                  <Spinner size="sm" />
-                )}{' '}
+              <Label
+                color={statusConfig.color}
+                icon={containerStatus === 'starting' ? <Spinner size="sm" /> : undefined}
+              >
                 {statusConfig.text}
               </Label>
             </ToolbarItem>
@@ -82,6 +96,7 @@ export const BrewetToolbar: React.FC = () => {
                   variant="plain"
                   aria-label={canStart ? 'Start container' : 'Stop container'}
                   onClick={handleStartStop}
+                  isDisabled={isScaling}
                   icon={canStart ? <PlayIcon /> : <StopIcon />}
                 />
               </ToolbarItem>
@@ -92,6 +107,7 @@ export const BrewetToolbar: React.FC = () => {
                 <Button
                   variant="plain"
                   aria-label="Edit container configuration"
+                  isDisabled
                   icon={<PencilAltIcon />}
                 />
               </ToolbarItem>

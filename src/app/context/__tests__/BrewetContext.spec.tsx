@@ -90,6 +90,7 @@ describe('BrewetContext', () => {
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/namespaces/test-ns/deployments/brewet-storage-backend'),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
 

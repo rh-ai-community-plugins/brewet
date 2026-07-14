@@ -1,8 +1,13 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { BrewetToolbar } from '../BrewetToolbar';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 
 jest.mock('~/app/context/BrewetContext');
+
+beforeEach(() => {
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+});
 jest.mock('~/app/components/ProjectSelector', () => ({
   ProjectSelector: ({ selectedProject }: { selectedProject: string | null }) => (
     <div data-testid="project-selector">{selectedProject ?? 'none'}</div>
@@ -58,5 +63,25 @@ describe('BrewetToolbar', () => {
     render(<BrewetToolbar />);
     expect(screen.getByText('No Container')).toBeInTheDocument();
     expect(screen.queryByLabelText('Start container')).not.toBeInTheDocument();
+  });
+
+  it('should call fetch with scale endpoint on start click', async () => {
+    mockContext({ selectedProject: 'test-ns', containerStatus: 'stopped' });
+    render(<BrewetToolbar />);
+
+    await userEvent.click(screen.getByLabelText('Start container'));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/namespaces/test-ns/deployments/brewet-storage-backend/scale'),
+        expect.objectContaining({ method: 'PUT' }),
+      );
+    });
+  });
+
+  it('should render edit button as disabled', () => {
+    mockContext({ selectedProject: 'test-ns', containerStatus: 'running' });
+    render(<BrewetToolbar />);
+    expect(screen.getByLabelText('Edit container configuration')).toBeDisabled();
   });
 });
