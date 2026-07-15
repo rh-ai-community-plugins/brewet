@@ -299,6 +299,28 @@ describe('SettingsPage', () => {
       expect(mockStorageService.testProxyConnection).not.toHaveBeenCalled();
     });
 
+    it('should reject invalid URL format for proxy test', async () => {
+      const user = userEvent.setup();
+      render(<SettingsPage />);
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: /^Proxy/i })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: /^Proxy/i }));
+      await waitFor(() => {
+        expect(screen.getByLabelText('Test URL')).toBeInTheDocument();
+      });
+
+      const testUrlInput = screen.getByLabelText('Test URL');
+      await user.type(testUrlInput, 'not-a-url');
+
+      const testButton = screen.getByRole('button', { name: /Test Connection/i });
+      await user.click(testButton);
+
+      expect(screen.getByText('Invalid URL format')).toBeInTheDocument();
+      expect(mockStorageService.testProxyConnection).not.toHaveBeenCalled();
+    });
+
     it('should save proxy settings', async () => {
       const user = userEvent.setup();
       render(<SettingsPage />);

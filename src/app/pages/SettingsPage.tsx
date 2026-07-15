@@ -328,6 +328,12 @@ const ProxyTab: React.FC<{ namespace: string }> = ({ namespace }) => {
       setAlert({ variant: 'danger', title: 'Test URL is required' });
       return;
     }
+    try {
+      new URL(testUrl);
+    } catch {
+      setAlert({ variant: 'danger', title: 'Invalid URL format', message: 'Please enter a valid URL (e.g., https://example.com)' });
+      return;
+    }
     setTesting(true);
     setAlert(null);
     try {
