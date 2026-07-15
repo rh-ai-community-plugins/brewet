@@ -414,4 +414,63 @@ describe('StorageBrowser', () => {
       });
     });
   });
+  describe('Contains search warning', () => {
+    it('should show warning alert in contains mode for S3 when more pages are available', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      mockStorageService.listFiles.mockResolvedValue({
+        files: mockFileResponse.files,
+        isTruncated: true,
+        continuationToken: 'next-token',
+      });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+
+      // Switch to contains mode and enter a search term
+      await userEvent.click(screen.getByText('Contains'));
+      const searchInput = screen.getByPlaceholderText('Search files...');
+      await userEvent.type(searchInput, 're');
+
+      await waitFor(() => {
+        expect(screen.getByText('Search covers loaded files only')).toBeInTheDocument();
+      });
+    });
+
+    it('should not show warning alert when in startsWith (Prefix) mode', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      mockStorageService.listFiles.mockResolvedValue({
+        files: mockFileResponse.files,
+        isTruncated: true,
+        continuationToken: 'next-token',
+      });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+
+      // startsWith (Prefix) is the default mode — just type a search term
+      const searchInput = screen.getByPlaceholderText('Search files...');
+      await userEvent.type(searchInput, 're');
+
+      expect(screen.queryByText('Search covers loaded files only')).not.toBeInTheDocument();
+    });
+
+    it('should not show warning alert in contains mode when all pages are loaded', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      // Default mockFileResponse has isTruncated: false and no continuationToken
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+
+      // Switch to contains mode and enter a search term
+      await userEvent.click(screen.getByText('Contains'));
+      const searchInput = screen.getByPlaceholderText('Search files...');
+      await userEvent.type(searchInput, 're');
+
+      expect(screen.queryByText('Search covers loaded files only')).not.toBeInTheDocument();
+    });
+  });
+
 });

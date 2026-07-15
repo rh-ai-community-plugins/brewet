@@ -750,7 +750,7 @@ const StorageBrowser: React.FC = () => {
           isInline
           className="pf-v6-u-mt-md"
         >
-          &ldquo;Contains&rdquo; search filters only the files loaded so far. There are more pages
+          "Contains" search filters only the files loaded so far. There are more pages
           in this bucket that have not been searched. Load more files or switch to{' '}
           <strong>Prefix</strong> search for complete server-side results.
         </Alert>
