@@ -356,5 +356,19 @@ describe('StorageBrowser', () => {
         expect(mockStorageService.refreshLocations).toHaveBeenCalledWith('test-ns');
       });
     });
+
+    it('should show danger Alert when refreshLocations rejects', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+
+      mockStorageService.refreshLocations.mockRejectedValue(new Error('Refresh failed'));
+      await userEvent.click(screen.getByLabelText('Refresh'));
+      await waitFor(() => {
+        expect(screen.getByText('Refresh failed')).toBeInTheDocument();
+      });
+    });
   });
 });
