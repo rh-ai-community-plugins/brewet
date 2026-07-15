@@ -7,6 +7,15 @@ import type { StorageLocation, FileListResponse } from '~/app/types/storage';
 
 jest.mock('~/app/context/BrewetContext');
 jest.mock('~/app/services/storageService');
+jest.mock('~/app/services/apiClient', () => ({
+  apiClient: {
+    getDownloadUrl: (ns: string, path: string) => `/brewet/api/${ns}${path}`,
+  },
+}));
+jest.mock('~/app/utils/encoding', () => ({
+  base64Encode: (s: string) => Buffer.from(s).toString('base64'),
+  base64Decode: (s: string) => Buffer.from(s, 'base64').toString(),
+}));
 
 const mockNavigate = jest.fn();
 const mockParams: Record<string, string | undefined> = {};
@@ -471,6 +480,165 @@ describe('StorageBrowser', () => {
       await userEvent.type(searchInput, 're');
 
       expect(screen.queryByText('Search covers loaded files only')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('File preview', () => {
+    it('should show preview button for previewable files', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+      expect(screen.getByLabelText('Preview readme.txt')).toBeInTheDocument();
+    });
+
+    it('should not show preview button for unsupported file types', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      mockStorageService.listFiles.mockResolvedValue({
+        files: [{ name: 'model.bin', isDirectory: false, size: 1000 }],
+      });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('model.bin')).toBeInTheDocument();
+      });
+      expect(screen.queryByLabelText('Preview model.bin')).not.toBeInTheDocument();
+    });
+
+    it('should not show preview button for folders', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('subfolder')).toBeInTheDocument();
+      });
+      expect(screen.queryByLabelText('Preview subfolder')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Multi-select', () => {
+    it('should show checkboxes in file listing', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+      // There should be checkboxes (select all + one per row)
+      const checkboxes = screen.getAllByRole('checkbox');
+      // 1 header checkbox + 3 row checkboxes
+      expect(checkboxes.length).toBe(4);
+    });
+
+    it('should show bulk action toolbar when items are selected', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+
+      // Click the first row checkbox (skip header)
+      const checkboxes = screen.getAllByRole('checkbox');
+      await userEvent.click(checkboxes[1]);
+
+      await waitFor(() => {
+        expect(screen.getByText(/1 item selected/)).toBeInTheDocument();
+      });
+      expect(screen.getByText('Delete Selected')).toBeInTheDocument();
+      expect(screen.getByText('Clear Selection')).toBeInTheDocument();
+    });
+
+    it('should select all when header checkbox is clicked', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+
+      const checkboxes = screen.getAllByRole('checkbox');
+      await userEvent.click(checkboxes[0]);
+
+      await waitFor(() => {
+        expect(screen.getByText(/3 items selected/)).toBeInTheDocument();
+      });
+    });
+
+    it('should clear selection when Clear Selection is clicked', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+
+      const checkboxes = screen.getAllByRole('checkbox');
+      await userEvent.click(checkboxes[0]); // select all
+
+      await waitFor(() => {
+        expect(screen.getByText(/3 items selected/)).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByText('Clear Selection'));
+
+      await waitFor(() => {
+        expect(screen.queryByText(/items selected/)).not.toBeInTheDocument();
+      });
+    });
+
+    it('should show bulk delete confirmation modal', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+
+      const checkboxes = screen.getAllByRole('checkbox');
+      await userEvent.click(checkboxes[1]); // select first file
+
+      await waitFor(() => {
+        expect(screen.getByText('Delete Selected')).toBeInTheDocument();
+      });
+      await userEvent.click(screen.getByText('Delete Selected'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Delete Selected Items')).toBeInTheDocument();
+      });
+    });
+
+    it('should call deleteFile for each selected item on bulk delete confirm', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+
+      // Select all via header checkbox
+      const checkboxes = screen.getAllByRole('checkbox');
+      await userEvent.click(checkboxes[0]); // select all
+
+      await waitFor(() => {
+        expect(screen.getByText(/3 items selected/)).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByText('Delete Selected'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Delete Selected Items')).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByRole('button', { name: /Delete 3 Items/ }));
+
+      await waitFor(() => {
+        expect(mockStorageService.deleteFile).toHaveBeenCalledTimes(3);
+      });
+    });
+  });
+
+  describe('HuggingFace import', () => {
+    it('should show Import from HuggingFace button when a location is selected', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+      expect(screen.getByText('Import from HuggingFace')).toBeInTheDocument();
     });
   });
 

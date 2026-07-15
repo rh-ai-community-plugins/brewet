@@ -50,12 +50,16 @@ import {
   UploadIcon,
   SyncIcon,
   PlusCircleIcon,
+  EyeIcon,
+  ExternalLinkAltIcon,
 } from '@patternfly/react-icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { storageService } from '~/app/services/storageService';
 import { base64Encode, base64Decode } from '~/app/utils/encoding';
 import { formatBytes } from '~/app/utils/format';
+import DocumentRenderer, { isPreviewable, getFileType } from './DocumentRenderer';
+import HuggingFaceImportModal from './HuggingFaceImportModal';
 import type { StorageLocation, FileInfo, FileListResponse } from '~/app/types/storage';
 import './StorageBrowser.css';
 
@@ -137,6 +141,18 @@ const StorageBrowser: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<FileInfo | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Preview
+  const [previewFile, setPreviewFile] = useState<FileInfo | null>(null);
+
+  // Multi-select
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
+
+  // HuggingFace import
+  const [isHfImportOpen, setIsHfImportOpen] = useState(false);
 
   // Create folder
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
@@ -273,7 +289,9 @@ const StorageBrowser: React.FC = () => {
     setIsTruncated(false);
     setTotalCount(undefined);
     setDownloadError(null);
-  }, [locationId, encodedPath]);
+    setSelectedFiles(new Set());
+    setPreviewFile(null);
+  }, [locationId, encodedPath, selectedProject]);
 
   useEffect(() => {
     loadFilesRef.current?.();
@@ -403,6 +421,38 @@ const StorageBrowser: React.FC = () => {
       setIsDeleting(false);
     }
   }, [selectedProject, selectedLocation, deleteTarget, currentPath]);
+
+  // Bulk delete
+  const handleBulkDelete = useCallback(async () => {
+    if (!selectedProject || !selectedLocation || selectedFiles.size === 0) return;
+
+    setIsBulkDeleting(true);
+    setBulkDeleteError(null);
+    const errors: string[] = [];
+
+    const fileMap = new Map(files.map((f) => [f.name, f]));
+    for (const fileName of selectedFiles) {
+      const file = fileMap.get(fileName);
+      if (!file) continue;
+      try {
+        const filePath = currentPath
+          ? `${currentPath}${file.name}${file.isDirectory ? '/' : ''}`
+          : `${file.name}${file.isDirectory ? '/' : ''}`;
+        await storageService.deleteFile(selectedProject, selectedLocation, filePath);
+      } catch (err) {
+        errors.push(`${file.name}: ${err instanceof Error ? err.message : 'Failed'}`);
+      }
+    }
+
+    if (errors.length > 0) {
+      setBulkDeleteError(`Failed to delete ${errors.length} item(s): ${errors.join('; ')}`);
+    } else {
+      setIsBulkDeleteOpen(false);
+      setSelectedFiles(new Set());
+    }
+    setIsBulkDeleting(false);
+    loadFilesRef.current?.();
+  }, [selectedProject, selectedLocation, selectedFiles, files, currentPath]);
 
   // Create folder
   const handleCreateFolder = useCallback(async () => {
@@ -731,6 +781,15 @@ const StorageBrowser: React.FC = () => {
               </ToolbarItem>
               <ToolbarItem>
                 <Button
+                  variant="secondary"
+                  icon={<ExternalLinkAltIcon />}
+                  onClick={() => setIsHfImportOpen(true)}
+                >
+                  Import from HuggingFace
+                </Button>
+              </ToolbarItem>
+              <ToolbarItem>
+                <Button
                   variant="plain"
                   icon={<SyncIcon />}
                   onClick={handleRefresh}
@@ -738,6 +797,40 @@ const StorageBrowser: React.FC = () => {
                 />
               </ToolbarItem>
             </ToolbarGroup>
+          </ToolbarContent>
+        </Toolbar>
+      )}
+
+      {/* Bulk action toolbar */}
+      {selectedFiles.size > 0 && (
+        <Toolbar>
+          <ToolbarContent>
+            <ToolbarItem>
+              <Content component="small">
+                {selectedFiles.size} item{selectedFiles.size !== 1 ? 's' : ''} selected
+              </Content>
+            </ToolbarItem>
+            <ToolbarItem>
+              <Button
+                variant="secondary"
+                isDanger
+                icon={<TrashIcon />}
+                onClick={() => {
+                  setBulkDeleteError(null);
+                  setIsBulkDeleteOpen(true);
+                }}
+              >
+                Delete Selected
+              </Button>
+            </ToolbarItem>
+            <ToolbarItem>
+              <Button
+                variant="link"
+                onClick={() => setSelectedFiles(new Set())}
+              >
+                Clear Selection
+              </Button>
+            </ToolbarItem>
           </ToolbarContent>
         </Toolbar>
       )}
@@ -797,16 +890,28 @@ const StorageBrowser: React.FC = () => {
           <Table aria-label="File listing" variant="compact">
             <Thead>
               <Tr>
-                <Th width={40}>Name</Th>
+                <Th
+                  select={{
+                    onSelect: (_event, isSelected) => {
+                      if (isSelected) {
+                        setSelectedFiles(new Set(sortedFiles.map((f) => f.name)));
+                      } else {
+                        setSelectedFiles(new Set());
+                      }
+                    },
+                    isSelected: sortedFiles.length > 0 && selectedFiles.size === sortedFiles.length,
+                  }}
+                />
+                <Th width={35}>Name</Th>
                 <Th width={20}>Last Modified</Th>
                 <Th width={15}>Size</Th>
-                <Th width={25}>Actions</Th>
+                <Th width={20}>Actions</Th>
               </Tr>
             </Thead>
             <Tbody>
               {sortedFiles.length === 0 ? (
                 <Tr>
-                  <Td colSpan={4}>
+                  <Td colSpan={5}>
                     <Bullseye>
                       {searchText
                         ? 'No files match your search.'
@@ -815,14 +920,39 @@ const StorageBrowser: React.FC = () => {
                   </Td>
                 </Tr>
               ) : (
-                sortedFiles.map((file) => (
+                sortedFiles.map((file, rowIndex) => {
+                  const fileType = file.isDirectory ? undefined : getFileType(file.name);
+                  const canPreview = fileType != null && isPreviewable(fileType);
+                  return (
                   <Tr
                     key={file.name}
-                    isClickable={file.isDirectory}
+                    isClickable={file.isDirectory || canPreview}
                     onRowClick={
-                      file.isDirectory ? () => handleFileClick(file) : undefined
+                      file.isDirectory
+                        ? () => handleFileClick(file)
+                        : canPreview
+                          ? () => setPreviewFile(file)
+                          : undefined
                     }
                   >
+                    <Td
+                      select={{
+                        rowIndex,
+                        onSelect: (_event, isSelected) => {
+                          _event.stopPropagation();
+                          setSelectedFiles((prev) => {
+                            const next = new Set(prev);
+                            if (isSelected) {
+                              next.add(file.name);
+                            } else {
+                              next.delete(file.name);
+                            }
+                            return next;
+                          });
+                        },
+                        isSelected: selectedFiles.has(file.name),
+                      }}
+                    />
                     <Td dataLabel="Name">
                       {file.isDirectory ? (
                         <FolderOpenIcon className="pf-v6-u-mr-sm" color="var(--pf-t--global--color--status--info--default, #0066cc)" />
@@ -840,6 +970,17 @@ const StorageBrowser: React.FC = () => {
                       {file.isDirectory ? '—' : formatBytes(file.size)}
                     </Td>
                     <Td dataLabel="Actions" isActionCell>
+                      {canPreview && (
+                        <Button
+                          variant="plain"
+                          icon={<EyeIcon />}
+                          aria-label={`Preview ${file.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewFile(file);
+                          }}
+                        />
+                      )}
                       {!file.isDirectory && (
                         <Button
                           variant="plain"
@@ -863,7 +1004,8 @@ const StorageBrowser: React.FC = () => {
                       />
                     </Td>
                   </Tr>
-                ))
+                  );
+                })
               )}
             </Tbody>
           </Table>
@@ -984,6 +1126,68 @@ const StorageBrowser: React.FC = () => {
         </ModalFooter>
       </Modal>
 
+      {/* Bulk delete confirmation modal */}
+      {isBulkDeleteOpen && (
+        <Modal
+          isOpen
+          onClose={() => setIsBulkDeleteOpen(false)}
+          aria-label="Bulk delete confirmation"
+          variant="small"
+        >
+          <ModalHeader title="Delete Selected Items" />
+          <ModalBody>
+            {sortedFiles.some((f) => f.isDirectory && selectedFiles.has(f.name)) && (
+              <Alert
+                variant="warning"
+                title="Recursive deletion"
+                isInline
+                isPlain
+                className="pf-v6-u-mb-md"
+              >
+                Selected folders and all their contents will be permanently deleted.
+              </Alert>
+            )}
+            <Content>
+              Are you sure you want to delete <strong>{selectedFiles.size}</strong> selected
+              item{selectedFiles.size !== 1 ? 's' : ''}? This action cannot be undone.
+            </Content>
+            {bulkDeleteError && (
+              <Alert variant="danger" title="Some deletions failed" isInline className="pf-v6-u-mt-md">
+                {bulkDeleteError}
+              </Alert>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="danger"
+              onClick={handleBulkDelete}
+              isLoading={isBulkDeleting}
+              isDisabled={isBulkDeleting}
+            >
+              Delete {selectedFiles.size} Item{selectedFiles.size !== 1 ? 's' : ''}
+            </Button>
+            <Button variant="link" onClick={() => setIsBulkDeleteOpen(false)}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {/* File preview modal */}
+      {previewFile && selectedLocation && selectedProject && (
+        <DocumentRenderer
+          file={previewFile}
+          namespace={selectedProject}
+          location={selectedLocation}
+          currentPath={currentPath}
+          onClose={() => setPreviewFile(null)}
+          onDownload={(file) => {
+            setPreviewFile(null);
+            handleDownload(file);
+          }}
+        />
+      )}
+
       {/* Upload progress modal */}
       <Modal
         isOpen={isUploadModalOpen}
@@ -1044,6 +1248,20 @@ const StorageBrowser: React.FC = () => {
           </Button>
         </ModalFooter>
       </Modal>
+
+      {/* HuggingFace import modal */}
+      {isHfImportOpen && selectedLocation && selectedProject && (
+        <HuggingFaceImportModal
+          namespace={selectedProject}
+          location={selectedLocation}
+          currentPath={currentPath}
+          onClose={() => setIsHfImportOpen(false)}
+          onComplete={() => {
+            setIsHfImportOpen(false);
+            loadFilesRef.current?.();
+          }}
+        />
+      )}
     </>
   );
 };
