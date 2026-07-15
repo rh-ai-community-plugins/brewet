@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Toolbar,
   ToolbarContent,
@@ -6,15 +6,23 @@ import {
   ToolbarGroup,
   Button,
   Label,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
   Spinner,
 } from '@patternfly/react-core';
 import {
   PlayIcon,
   StopIcon,
   PencilAltIcon,
+  TrashIcon,
+  PlusCircleIcon,
 } from '@patternfly/react-icons';
 import { ProjectSelector } from '~/app/components/ProjectSelector';
 import { useBrewetContext, ContainerStatus } from '~/app/context/BrewetContext';
+import { useBrewetContainer } from '~/app/hooks/useBrewetContainer';
+import { ContainerWizard } from '~/app/components/ContainerWizard';
 
 const STATUS_CONFIG: Record<ContainerStatus, { text: string; color: 'grey' | 'green' | 'blue' | 'red' }> = {
   none: { text: 'No Container', color: 'grey' },
@@ -29,24 +37,18 @@ export const BrewetToolbar: React.FC = () => {
     selectedProject,
     setSelectedProject,
     containerStatus,
-    refreshContainerStatus,
   } = useBrewetContext();
 
-  const [isScaling, setIsScaling] = useState(false);
-  const scaleControllerRef = useRef<AbortController | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const {
+    startContainer,
+    stopContainer,
+    deleteContainer,
+    isActioning,
+  } = useBrewetContainer();
 
-  useEffect(() => {
-    return () => {
-      scaleControllerRef.current?.abort();
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   const statusConfig = STATUS_CONFIG[containerStatus];
   const canStart = containerStatus === 'stopped';
@@ -54,92 +56,139 @@ export const BrewetToolbar: React.FC = () => {
   const hasContainer = containerStatus !== 'none';
 
   const handleStartStop = useCallback(() => {
-    if (!selectedProject || isScaling) return;
+    if (isActioning) return;
+    if (canStart) {
+      startContainer();
+    } else {
+      stopContainer();
+    }
+  }, [isActioning, canStart, startContainer, stopContainer]);
 
-    const replicas = canStart ? 1 : 0;
-    setIsScaling(true);
+  const handleDelete = useCallback(async () => {
+    await deleteContainer();
+    setIsDeleteModalOpen(false);
+  }, [deleteContainer]);
 
-    const controller = new AbortController();
-    scaleControllerRef.current = controller;
+  const openCreateWizard = useCallback(() => {
+    setIsEditMode(false);
+    setIsWizardOpen(true);
+  }, []);
 
-    fetch(
-      `/api/k8s/apis/apps/v1/namespaces/${encodeURIComponent(selectedProject)}/deployments/brewet-storage-backend/scale`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiVersion: 'autoscaling/v1',
-          kind: 'Scale',
-          metadata: { name: 'brewet-storage-backend', namespace: selectedProject },
-          spec: { replicas },
-        }),
-        signal: controller.signal,
-      },
-    )
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`Scale request failed: ${res.status}`);
-        }
-        timerRef.current = setTimeout(refreshContainerStatus, 1000);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-        console.error('Scale operation failed:', err);
-        refreshContainerStatus();
-      })
-      .finally(() => {
-        setIsScaling(false);
-      });
-  }, [selectedProject, isScaling, canStart, refreshContainerStatus]);
+  const openEditWizard = useCallback(() => {
+    setIsEditMode(true);
+    setIsWizardOpen(true);
+  }, []);
 
   return (
-    <Toolbar>
-      <ToolbarContent>
-        <ToolbarItem>
-          <ProjectSelector
-            selectedProject={selectedProject}
-            onSelect={setSelectedProject}
-          />
-        </ToolbarItem>
+    <>
+      <Toolbar>
+        <ToolbarContent>
+          <ToolbarItem>
+            <ProjectSelector
+              selectedProject={selectedProject}
+              onSelect={setSelectedProject}
+            />
+          </ToolbarItem>
 
-        {selectedProject && (
-          <ToolbarGroup align={{ default: 'alignEnd' }}>
-            <ToolbarItem>
-              <Label
-                color={statusConfig.color}
-                icon={containerStatus === 'starting' ? <Spinner size="sm" /> : undefined}
-              >
-                {statusConfig.text}
-              </Label>
-            </ToolbarItem>
-
-            {hasContainer && (canStart || canStop) && (
+          {selectedProject && (
+            <ToolbarGroup align={{ default: 'alignEnd' }}>
               <ToolbarItem>
-                <Button
-                  variant="plain"
-                  aria-label={canStart ? 'Start container' : 'Stop container'}
-                  onClick={handleStartStop}
-                  isDisabled={isScaling}
-                  icon={canStart ? <PlayIcon /> : <StopIcon />}
-                />
+                <Label
+                  color={statusConfig.color}
+                  icon={containerStatus === 'starting' ? <Spinner size="sm" /> : undefined}
+                >
+                  {statusConfig.text}
+                </Label>
               </ToolbarItem>
-            )}
 
-            {hasContainer && (
-              <ToolbarItem>
-                <Button
-                  variant="plain"
-                  aria-label="Edit container configuration"
-                  isDisabled
-                  icon={<PencilAltIcon />}
-                />
-              </ToolbarItem>
-            )}
-          </ToolbarGroup>
-        )}
-      </ToolbarContent>
-    </Toolbar>
+              {!hasContainer && (
+                <ToolbarItem>
+                  <Button
+                    variant="primary"
+                    icon={<PlusCircleIcon />}
+                    onClick={openCreateWizard}
+                    isDisabled={isActioning}
+                  >
+                    Create Container
+                  </Button>
+                </ToolbarItem>
+              )}
+
+              {hasContainer && (canStart || canStop) && (
+                <ToolbarItem>
+                  <Button
+                    variant="plain"
+                    aria-label={canStart ? 'Start container' : 'Stop container'}
+                    onClick={handleStartStop}
+                    isDisabled={isActioning}
+                    icon={canStart ? <PlayIcon /> : <StopIcon />}
+                  />
+                </ToolbarItem>
+              )}
+
+              {hasContainer && (
+                <ToolbarItem>
+                  <Button
+                    variant="plain"
+                    aria-label="Edit container configuration"
+                    onClick={openEditWizard}
+                    isDisabled={isActioning}
+                    icon={<PencilAltIcon />}
+                  />
+                </ToolbarItem>
+              )}
+
+              {hasContainer && (
+                <ToolbarItem>
+                  <Button
+                    variant="plain"
+                    aria-label="Delete container"
+                    onClick={() => setIsDeleteModalOpen(true)}
+                    isDisabled={isActioning}
+                    icon={<TrashIcon />}
+                  />
+                </ToolbarItem>
+              )}
+            </ToolbarGroup>
+          )}
+        </ToolbarContent>
+      </Toolbar>
+
+      <ContainerWizard
+        isOpen={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+        isEditMode={isEditMode}
+      />
+
+      <Modal
+        variant="small"
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        aria-label="Delete container confirmation"
+      >
+        <ModalHeader title="Delete storage container?" />
+        <ModalBody>
+          This will delete the storage backend Deployment, Service, and NetworkPolicy
+          in project <strong>{selectedProject}</strong>. This action cannot be undone.
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="danger"
+            onClick={handleDelete}
+            isLoading={isActioning}
+            isDisabled={isActioning}
+          >
+            Delete
+          </Button>
+          <Button
+            variant="link"
+            onClick={() => setIsDeleteModalOpen(false)}
+            isDisabled={isActioning}
+          >
+            Cancel
+          </Button>
+        </ModalFooter>
+      </Modal>
+    </>
   );
 };
