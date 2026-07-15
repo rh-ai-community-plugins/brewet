@@ -36,7 +36,7 @@ import { useNavigate } from 'react-router-dom';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { ContainerRequired } from '~/app/components/ContainerRequired';
 import { storageService } from '~/app/services/storageService';
-import type { StorageLocation, BucketsList } from '~/app/types/storage';
+import type { StorageLocation } from '~/app/types/storage';
 
 const BUCKET_NAME_REGEX = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
 const IP_ADDRESS_REGEX = /^(\d{1,3}\.){3}\d{1,3}$/;
@@ -59,7 +59,6 @@ const StorageManagementContent: React.FC = () => {
   const navigate = useNavigate();
 
   const [locations, setLocations] = useState<StorageLocation[]>([]);
-  const [bucketsList, setBucketsList] = useState<BucketsList | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -90,15 +89,11 @@ const StorageManagementContent: React.FC = () => {
         else setLoading(true);
         setError(null);
 
-        const [locs, buckets] = await Promise.all([
-          refresh
-            ? storageService.refreshLocations(project)
-            : storageService.getLocations(project),
-          storageService.getBucketsList(project),
-        ]);
+        const locs = refresh
+          ? await storageService.refreshLocations(project)
+          : await storageService.getLocations(project);
         if (activeProjectRef.current !== project) return;
         setLocations(locs);
-        setBucketsList(buckets);
       } catch (err) {
         if (activeProjectRef.current !== project) return;
         setError(err instanceof Error ? err.message : 'Failed to load storage locations.');
@@ -121,16 +116,6 @@ const StorageManagementContent: React.FC = () => {
     [locations],
   );
 
-  const bucketCreationDates = useMemo(() => {
-    const map = new Map<string, string>();
-    if (bucketsList) {
-      for (const b of bucketsList.buckets) {
-        if (b.CreationDate) map.set(b.Name, b.CreationDate);
-      }
-    }
-    return map;
-  }, [bucketsList]);
-
   const filteredLocations = useMemo(() => {
     let filtered = locations;
     if (searchText) {
@@ -145,8 +130,8 @@ const StorageManagementContent: React.FC = () => {
         case 'name':
           return dir * a.name.localeCompare(b.name);
         case 'created': {
-          const dateA = a.type === 's3' ? (bucketCreationDates.get(a.name) ?? '') : '';
-          const dateB = b.type === 's3' ? (bucketCreationDates.get(b.name) ?? '') : '';
+          const dateA = a.creationDate ?? '';
+          const dateB = b.creationDate ?? '';
           return dir * dateA.localeCompare(dateB);
         }
         case 'status':
@@ -155,7 +140,7 @@ const StorageManagementContent: React.FC = () => {
           return 0;
       }
     });
-  }, [locations, searchText, sortColumn, sortDirection, bucketCreationDates]);
+  }, [locations, searchText, sortColumn, sortDirection]);
 
   const getSortParams = (column: SortColumn): ThProps['sort'] => ({
     sortBy: {
@@ -298,8 +283,8 @@ const StorageManagementContent: React.FC = () => {
                 </Td>
                 <Td dataLabel="Name">{location.name}</Td>
                 <Td dataLabel="Created">
-                  {location.type === 's3' && bucketCreationDates.get(location.name)
-                    ? new Date(bucketCreationDates.get(location.name)!).toLocaleDateString()
+                  {location.creationDate
+                    ? new Date(location.creationDate).toLocaleDateString()
                     : '—'}
                 </Td>
                 <Td dataLabel="Status">
