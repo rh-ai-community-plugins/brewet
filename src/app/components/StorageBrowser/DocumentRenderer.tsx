@@ -121,7 +121,9 @@ const DocumentRenderer: React.FC<DocumentRendererProps> = ({
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setError(err instanceof Error ? err.message : 'Failed to load file.');
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
 
     return () => controller.abort();
   }, [namespace, location.id, location.type, filePath, fileType]);
