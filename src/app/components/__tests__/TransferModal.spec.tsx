@@ -2,6 +2,7 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import TransferModal from '../StorageBrowser/TransferModal';
 import { storageService } from '~/app/services/storageService';
+import { transferEmitter } from '~/app/utils/emitter';
 import type { StorageLocation, FileInfo, TransferProgress } from '~/app/types/storage';
 
 jest.mock('~/app/services/storageService');
@@ -9,6 +10,9 @@ jest.mock('~/app/services/apiClient', () => ({
   apiClient: {
     getDownloadUrl: (ns: string, path: string) => `/brewet/api/${ns}${path}`,
   },
+}));
+jest.mock('~/app/utils/emitter', () => ({
+  transferEmitter: { emit: jest.fn(), on: jest.fn(), off: jest.fn() },
 }));
 
 const mockService = storageService as jest.Mocked<typeof storageService>;
@@ -470,6 +474,9 @@ describe('TransferModal', () => {
         });
 
         expect(mockService.cleanupTransfer).toHaveBeenCalledWith('test-ns', 'job-cleanup-poll');
+        expect(jest.mocked(transferEmitter.emit)).toHaveBeenCalledWith('transfer:cancelled', {
+          jobId: 'job-cleanup-poll',
+        });
       } finally {
         jest.useRealTimers();
       }

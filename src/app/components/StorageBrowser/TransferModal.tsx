@@ -209,6 +209,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
                     onComplete();
                   } else if (status.status === 'cancelled') {
                     storageService.cleanupTransfer(namespace, result.jobId).catch(() => undefined);
+                    transferEmitter.emit('transfer:cancelled', { jobId: result.jobId });
                   }
                 } else {
                   schedulePoll();
