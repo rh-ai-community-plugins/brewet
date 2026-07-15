@@ -1298,7 +1298,7 @@ const StorageBrowser: React.FC = () => {
           namespace={selectedProject}
           sourceLocation={selectedLocation}
           currentPath={currentPath}
-          selectedFiles={sortedFiles.filter((f) => selectedFiles.has(f.name))}
+          selectedFiles={files.filter((f) => selectedFiles.has(f.name))}
           locations={locations}
           onClose={() => setIsTransferOpen(false)}
           onComplete={() => {
