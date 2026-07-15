@@ -21,6 +21,8 @@ function mockContext(overrides: Partial<ReturnType<typeof useBrewetContext>> = {
     containerStatus: 'running',
     containerInfo: null,
     refreshContainerStatus: jest.fn(),
+    isActioning: false,
+    setIsActioning: jest.fn(),
     ...overrides,
   });
 }

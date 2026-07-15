@@ -31,6 +31,8 @@ function setupMocks(contextOverrides = {}) {
     containerStatus: 'running',
     containerInfo: null,
     refreshContainerStatus: jest.fn(),
+    isActioning: false,
+    setIsActioning: jest.fn(),
     ...contextOverrides,
   });
 
@@ -38,12 +40,14 @@ function setupMocks(contextOverrides = {}) {
     dataConnections: [dcFixture],
     loading: false,
     error: null,
+    refresh: jest.fn(),
   });
 
   mockUsePVCs.mockReturnValue({
     pvcs: [pvcFixture],
     loading: false,
     error: null,
+    refresh: jest.fn(),
   });
 
   mockUseBrewetContainer.mockReturnValue({
@@ -68,7 +72,7 @@ describe('ContainerWizard', () => {
   describe('create mode', () => {
     it('should start with blank state — no DC selected, no PVC mounts', () => {
       setupMocks();
-      render(<ContainerWizard isOpen onClose={jest.fn()} />);
+      render(<ContainerWizard onClose={jest.fn()} />);
 
       const noneRadio = screen.getByRole('radio', { name: /None \(PVC storage only\)/i });
       expect(noneRadio).toBeChecked();
@@ -93,7 +97,7 @@ describe('ContainerWizard', () => {
       });
 
       await act(async () => {
-        render(<ContainerWizard isOpen isEditMode onClose={jest.fn()} />);
+        render(<ContainerWizard isEditMode onClose={jest.fn()} />);
       });
 
       await waitFor(() => {
@@ -116,7 +120,7 @@ describe('ContainerWizard', () => {
       });
 
       await act(async () => {
-        render(<ContainerWizard isOpen isEditMode onClose={jest.fn()} />);
+        render(<ContainerWizard isEditMode onClose={jest.fn()} />);
       });
 
       await waitFor(() => {
@@ -140,15 +144,18 @@ describe('ContainerWizard', () => {
           volumeMounts: [],
         },
         refreshContainerStatus: jest.fn(),
+        isActioning: false,
+        setIsActioning: jest.fn(),
       });
 
       mockUseDataConnections.mockReturnValue({
         dataConnections: [],
         loading: true,
         error: null,
+        refresh: jest.fn(),
       });
 
-      mockUsePVCs.mockReturnValue({ pvcs: [], loading: false, error: null });
+      mockUsePVCs.mockReturnValue({ pvcs: [], loading: false, error: null, refresh: jest.fn() });
 
       mockUseBrewetContainer.mockReturnValue({
         selectedProject: 'test-ns',
@@ -163,7 +170,7 @@ describe('ContainerWizard', () => {
         refreshContainerStatus: jest.fn(),
       });
 
-      const { rerender } = render(<ContainerWizard isOpen isEditMode onClose={jest.fn()} />);
+      const { rerender } = render(<ContainerWizard isEditMode onClose={jest.fn()} />);
 
       // While loading, DC is not initialized yet
       // Now data finishes loading
@@ -171,10 +178,11 @@ describe('ContainerWizard', () => {
         dataConnections: [dcFixture],
         loading: false,
         error: null,
+        refresh: jest.fn(),
       });
 
       await act(async () => {
-        rerender(<ContainerWizard isOpen isEditMode onClose={jest.fn()} />);
+        rerender(<ContainerWizard isEditMode onClose={jest.fn()} />);
       });
 
       await waitFor(() => {
@@ -197,18 +205,18 @@ describe('ContainerWizard', () => {
       });
 
       const onClose = jest.fn();
-      const { rerender } = render(<ContainerWizard isOpen isEditMode onClose={onClose} />);
+      const { unmount } = render(<ContainerWizard isEditMode onClose={onClose} />);
 
       await waitFor(() => {
         expect(screen.getByRole('radio', { name: 'my-dc-secret' })).toBeChecked();
       });
 
-      // Close the wizard
-      rerender(<ContainerWizard isOpen={false} isEditMode onClose={onClose} />);
+      // Unmount simulates the wizard being removed from the DOM (parent conditional rendering)
+      unmount();
 
-      // Reopen — should re-initialize from containerInfo
+      // Remount — should re-initialize from containerInfo
       await act(async () => {
-        rerender(<ContainerWizard isOpen isEditMode onClose={onClose} />);
+        render(<ContainerWizard isEditMode onClose={onClose} />);
       });
 
       await waitFor(() => {

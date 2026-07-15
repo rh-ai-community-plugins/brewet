@@ -182,7 +182,7 @@ export const BrewetToolbar: React.FC = () => {
         <ModalHeader title="Delete storage container?" />
         <ModalBody>
           {deleteError && (
-            <Alert variant="danger" isInline title={deleteError} style={{ marginBottom: '1rem' }} />
+            <Alert variant="danger" isInline title={deleteError} className="pf-v6-u-mb-md" />
           )}
           This will delete the storage backend Deployment, Service, and NetworkPolicy
           in project <strong>{selectedProject}</strong>. This action cannot be undone.

@@ -111,7 +111,7 @@ export function useBrewetContainer() {
     } finally {
       setIsActioning(false);
     }
-  }, [selectedProject, refreshContainerStatus, scheduleRefresh]);
+  }, [selectedProject, refreshContainerStatus, scheduleRefresh, setIsActioning]);
 
   const createContainer = useCallback(
     async (config: ContainerConfig): Promise<CreateResourceResult[]> => {
