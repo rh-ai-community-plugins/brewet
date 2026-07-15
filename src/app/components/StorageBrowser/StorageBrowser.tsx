@@ -26,8 +26,6 @@ import {
   Bullseye,
   Spinner,
   Alert,
-  Progress,
-  ProgressSize,
   Divider,
   Content,
   ToggleGroup,
@@ -81,7 +79,6 @@ function validateFolderName(name: string, storageType: 's3' | 'pvc'): string | n
 
 interface UploadState {
   file: File;
-  progress: number;
   status: 'pending' | 'uploading' | 'done' | 'error';
   error?: string;
 }
@@ -145,6 +142,7 @@ const StorageBrowser: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeProjectRef = useRef(selectedProject);
   activeProjectRef.current = selectedProject;
+  const loadFilesRef = useRef<(append?: boolean) => Promise<void>>();
 
   // Load locations
   useEffect(() => {
@@ -248,6 +246,8 @@ const StorageBrowser: React.FC = () => {
     [selectedProject, selectedLocation, currentPath, continuationToken, localOffset, searchText, searchMode],
   );
 
+  loadFilesRef.current = loadFiles;
+
   useEffect(() => {
     setSearchText('');
     setContinuationToken(undefined);
@@ -257,7 +257,7 @@ const StorageBrowser: React.FC = () => {
   }, [locationId, encodedPath]);
 
   useEffect(() => {
-    loadFiles();
+    loadFilesRef.current?.();
     return () => abortControllerRef.current?.abort();
   }, [selectedProject, selectedLocation, encodedPath]);
 
@@ -268,7 +268,7 @@ const StorageBrowser: React.FC = () => {
     searchTimeoutRef.current = setTimeout(() => {
       setContinuationToken(undefined);
       setLocalOffset(0);
-      loadFiles();
+      loadFilesRef.current?.();
     }, 300);
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
@@ -412,7 +412,6 @@ const StorageBrowser: React.FC = () => {
 
       const newUploads: UploadState[] = filesToUpload.map((f) => ({
         file: f,
-        progress: 0,
         status: 'pending' as const,
       }));
       setUploads(newUploads);
@@ -434,7 +433,7 @@ const StorageBrowser: React.FC = () => {
           );
           setUploads((prev) =>
             prev.map((u, idx) =>
-              idx === i ? { ...u, status: 'done', progress: 100 } : u,
+              idx === i ? { ...u, status: 'done' } : u,
             ),
           );
         } catch (err) {
@@ -945,11 +944,7 @@ const StorageBrowser: React.FC = () => {
                   </span>
                 </Content>
                 {upload.status === 'uploading' && (
-                  <Progress
-                    value={upload.progress}
-                    size={ProgressSize.sm}
-                    aria-label={`Uploading ${upload.file.name}`}
-                  />
+                  <Spinner size="sm" aria-label={`Uploading ${upload.file.name}`} />
                 )}
                 {upload.status === 'done' && (
                   <Label color="green" isCompact>
