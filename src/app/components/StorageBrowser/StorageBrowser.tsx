@@ -143,6 +143,12 @@ const StorageBrowser: React.FC = () => {
   // Preview
   const [previewFile, setPreviewFile] = useState<FileInfo | null>(null);
 
+  // Multi-select
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
+
   // Create folder
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -278,6 +284,7 @@ const StorageBrowser: React.FC = () => {
     setIsTruncated(false);
     setTotalCount(undefined);
     setDownloadError(null);
+    setSelectedFiles(new Set());
   }, [locationId, encodedPath]);
 
   useEffect(() => {
@@ -408,6 +415,37 @@ const StorageBrowser: React.FC = () => {
       setIsDeleting(false);
     }
   }, [selectedProject, selectedLocation, deleteTarget, currentPath]);
+
+  // Bulk delete
+  const handleBulkDelete = useCallback(async () => {
+    if (!selectedProject || !selectedLocation || selectedFiles.size === 0) return;
+
+    setIsBulkDeleting(true);
+    setBulkDeleteError(null);
+    const errors: string[] = [];
+
+    for (const fileName of selectedFiles) {
+      const file = sortedFiles.find((f) => f.name === fileName);
+      if (!file) continue;
+      try {
+        const filePath = currentPath
+          ? `${currentPath}${file.name}${file.isDirectory ? '/' : ''}`
+          : `${file.name}${file.isDirectory ? '/' : ''}`;
+        await storageService.deleteFile(selectedProject, selectedLocation, filePath);
+      } catch (err) {
+        errors.push(`${file.name}: ${err instanceof Error ? err.message : 'Failed'}`);
+      }
+    }
+
+    if (errors.length > 0) {
+      setBulkDeleteError(`Failed to delete ${errors.length} item(s): ${errors.join('; ')}`);
+    } else {
+      setIsBulkDeleteOpen(false);
+    }
+    setSelectedFiles(new Set());
+    setIsBulkDeleting(false);
+    loadFilesRef.current?.();
+  }, [selectedProject, selectedLocation, selectedFiles, sortedFiles, currentPath]);
 
   // Create folder
   const handleCreateFolder = useCallback(async () => {
@@ -747,6 +785,40 @@ const StorageBrowser: React.FC = () => {
         </Toolbar>
       )}
 
+      {/* Bulk action toolbar */}
+      {selectedFiles.size > 0 && (
+        <Toolbar>
+          <ToolbarContent>
+            <ToolbarItem>
+              <Content component="small">
+                {selectedFiles.size} item{selectedFiles.size !== 1 ? 's' : ''} selected
+              </Content>
+            </ToolbarItem>
+            <ToolbarItem>
+              <Button
+                variant="secondary"
+                isDanger
+                icon={<TrashIcon />}
+                onClick={() => {
+                  setBulkDeleteError(null);
+                  setIsBulkDeleteOpen(true);
+                }}
+              >
+                Delete Selected
+              </Button>
+            </ToolbarItem>
+            <ToolbarItem>
+              <Button
+                variant="link"
+                onClick={() => setSelectedFiles(new Set())}
+              >
+                Clear Selection
+              </Button>
+            </ToolbarItem>
+          </ToolbarContent>
+        </Toolbar>
+      )}
+
       {/* Download error */}
       {downloadError && (
         <Alert
@@ -802,16 +874,28 @@ const StorageBrowser: React.FC = () => {
           <Table aria-label="File listing" variant="compact">
             <Thead>
               <Tr>
-                <Th width={40}>Name</Th>
+                <Th
+                  select={{
+                    onSelect: (_event, isSelected) => {
+                      if (isSelected) {
+                        setSelectedFiles(new Set(sortedFiles.map((f) => f.name)));
+                      } else {
+                        setSelectedFiles(new Set());
+                      }
+                    },
+                    isSelected: sortedFiles.length > 0 && selectedFiles.size === sortedFiles.length,
+                  }}
+                />
+                <Th width={35}>Name</Th>
                 <Th width={20}>Last Modified</Th>
                 <Th width={15}>Size</Th>
-                <Th width={25}>Actions</Th>
+                <Th width={20}>Actions</Th>
               </Tr>
             </Thead>
             <Tbody>
               {sortedFiles.length === 0 ? (
                 <Tr>
-                  <Td colSpan={4}>
+                  <Td colSpan={5}>
                     <Bullseye>
                       {searchText
                         ? 'No files match your search.'
@@ -820,7 +904,7 @@ const StorageBrowser: React.FC = () => {
                   </Td>
                 </Tr>
               ) : (
-                sortedFiles.map((file) => (
+                sortedFiles.map((file, rowIndex) => (
                   <Tr
                     key={file.name}
                     isClickable={file.isDirectory || isPreviewable(getFileType(file.name))}
@@ -832,6 +916,23 @@ const StorageBrowser: React.FC = () => {
                           : undefined
                     }
                   >
+                    <Td
+                      select={{
+                        rowIndex,
+                        onSelect: (_event, isSelected) => {
+                          setSelectedFiles((prev) => {
+                            const next = new Set(prev);
+                            if (isSelected) {
+                              next.add(file.name);
+                            } else {
+                              next.delete(file.name);
+                            }
+                            return next;
+                          });
+                        },
+                        isSelected: selectedFiles.has(file.name),
+                      }}
+                    />
                     <Td dataLabel="Name">
                       {file.isDirectory ? (
                         <FolderOpenIcon className="pf-v6-u-mr-sm" color="var(--pf-t--global--color--status--info--default, #0066cc)" />
@@ -1003,6 +1104,42 @@ const StorageBrowser: React.FC = () => {
           </Button>
         </ModalFooter>
       </Modal>
+
+      {/* Bulk delete confirmation modal */}
+      {isBulkDeleteOpen && (
+        <Modal
+          isOpen
+          onClose={() => setIsBulkDeleteOpen(false)}
+          aria-label="Bulk delete confirmation"
+          variant="small"
+        >
+          <ModalHeader title="Delete Selected Items" />
+          <ModalBody>
+            <Content>
+              Are you sure you want to delete <strong>{selectedFiles.size}</strong> selected
+              item{selectedFiles.size !== 1 ? 's' : ''}? This action cannot be undone.
+            </Content>
+            {bulkDeleteError && (
+              <Alert variant="danger" title="Some deletions failed" isInline className="pf-v6-u-mt-md">
+                {bulkDeleteError}
+              </Alert>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="danger"
+              onClick={handleBulkDelete}
+              isLoading={isBulkDeleting}
+              isDisabled={isBulkDeleting}
+            >
+              Delete {selectedFiles.size} Item{selectedFiles.size !== 1 ? 's' : ''}
+            </Button>
+            <Button variant="link" onClick={() => setIsBulkDeleteOpen(false)}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
 
       {/* File preview modal */}
       {previewFile && selectedLocation && selectedProject && (
