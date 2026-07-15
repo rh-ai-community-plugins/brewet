@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   PageSection,
   Title,
@@ -46,22 +46,25 @@ const S3Tab: React.FC<{ namespace: string }> = ({ namespace }) => {
     return () => { mountedRef.current = false; };
   }, []);
 
-  const loadSettings = useCallback(async () => {
-    setLoading(true);
-    setAlert(null);
-    try {
-      const s = await storageService.getS3Settings(namespace);
-      if (!mountedRef.current) return;
-      setSettings(s);
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setAlert({ variant: 'danger', title: 'Failed to load S3 settings', message: (err as Error).message });
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
+  useEffect(() => {
+    const controller = new AbortController();
+    const load = async () => {
+      setLoading(true);
+      setAlert(null);
+      try {
+        const s = await storageService.getS3Settings(namespace, controller.signal);
+        if (!mountedRef.current) return;
+        setSettings(s);
+      } catch (err) {
+        if (!mountedRef.current || (err as Error).name === 'AbortError') return;
+        setAlert({ variant: 'danger', title: 'Failed to load S3 settings', message: (err as Error).message });
+      } finally {
+        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
+      }
+    };
+    load();
+    return () => { controller.abort(); };
   }, [namespace]);
-
-  useEffect(() => { loadSettings(); }, [loadSettings]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -172,22 +175,25 @@ const HuggingFaceTab: React.FC<{ namespace: string }> = ({ namespace }) => {
     return () => { mountedRef.current = false; };
   }, []);
 
-  const loadSettings = useCallback(async () => {
-    setLoading(true);
-    setAlert(null);
-    try {
-      const s = await storageService.getHuggingFaceSettings(namespace);
-      if (!mountedRef.current) return;
-      setSettings(s);
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setAlert({ variant: 'danger', title: 'Failed to load HuggingFace settings', message: (err as Error).message });
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
+  useEffect(() => {
+    const controller = new AbortController();
+    const load = async () => {
+      setLoading(true);
+      setAlert(null);
+      try {
+        const s = await storageService.getHuggingFaceSettings(namespace, controller.signal);
+        if (!mountedRef.current) return;
+        setSettings(s);
+      } catch (err) {
+        if (!mountedRef.current || (err as Error).name === 'AbortError') return;
+        setAlert({ variant: 'danger', title: 'Failed to load HuggingFace settings', message: (err as Error).message });
+      } finally {
+        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
+      }
+    };
+    load();
+    return () => { controller.abort(); };
   }, [namespace]);
-
-  useEffect(() => { loadSettings(); }, [loadSettings]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -282,22 +288,25 @@ const ProxyTab: React.FC<{ namespace: string }> = ({ namespace }) => {
     return () => { mountedRef.current = false; };
   }, []);
 
-  const loadSettings = useCallback(async () => {
-    setLoading(true);
-    setAlert(null);
-    try {
-      const s = await storageService.getProxySettings(namespace);
-      if (!mountedRef.current) return;
-      setSettings(s);
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setAlert({ variant: 'danger', title: 'Failed to load proxy settings', message: (err as Error).message });
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
+  useEffect(() => {
+    const controller = new AbortController();
+    const load = async () => {
+      setLoading(true);
+      setAlert(null);
+      try {
+        const s = await storageService.getProxySettings(namespace, controller.signal);
+        if (!mountedRef.current) return;
+        setSettings(s);
+      } catch (err) {
+        if (!mountedRef.current || (err as Error).name === 'AbortError') return;
+        setAlert({ variant: 'danger', title: 'Failed to load proxy settings', message: (err as Error).message });
+      } finally {
+        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
+      }
+    };
+    load();
+    return () => { controller.abort(); };
   }, [namespace]);
-
-  useEffect(() => { loadSettings(); }, [loadSettings]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -396,22 +405,25 @@ const TransferControlsTab: React.FC<{ namespace: string }> = ({ namespace }) => 
     return () => { mountedRef.current = false; };
   }, []);
 
-  const loadSettings = useCallback(async () => {
-    setLoading(true);
-    setAlert(null);
-    try {
-      const v = await storageService.getMaxConcurrentTransfers(namespace);
-      if (!mountedRef.current) return;
-      setValue(v);
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setAlert({ variant: 'danger', title: 'Failed to load transfer settings', message: (err as Error).message });
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
+  useEffect(() => {
+    const controller = new AbortController();
+    const load = async () => {
+      setLoading(true);
+      setAlert(null);
+      try {
+        const v = await storageService.getMaxConcurrentTransfers(namespace, controller.signal);
+        if (!mountedRef.current) return;
+        setValue(v);
+      } catch (err) {
+        if (!mountedRef.current || (err as Error).name === 'AbortError') return;
+        setAlert({ variant: 'danger', title: 'Failed to load transfer settings', message: (err as Error).message });
+      } finally {
+        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
+      }
+    };
+    load();
+    return () => { controller.abort(); };
   }, [namespace]);
-
-  useEffect(() => { loadSettings(); }, [loadSettings]);
 
   const handleSave = async (newValue: number) => {
     setSaving(true);
@@ -480,22 +492,25 @@ const PaginationTab: React.FC<{ namespace: string }> = ({ namespace }) => {
     return () => { mountedRef.current = false; };
   }, []);
 
-  const loadSettings = useCallback(async () => {
-    setLoading(true);
-    setAlert(null);
-    try {
-      const v = await storageService.getMaxFilesPerPage(namespace);
-      if (!mountedRef.current) return;
-      setValue(v);
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setAlert({ variant: 'danger', title: 'Failed to load pagination settings', message: (err as Error).message });
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
+  useEffect(() => {
+    const controller = new AbortController();
+    const load = async () => {
+      setLoading(true);
+      setAlert(null);
+      try {
+        const v = await storageService.getMaxFilesPerPage(namespace, controller.signal);
+        if (!mountedRef.current) return;
+        setValue(v);
+      } catch (err) {
+        if (!mountedRef.current || (err as Error).name === 'AbortError') return;
+        setAlert({ variant: 'danger', title: 'Failed to load pagination settings', message: (err as Error).message });
+      } finally {
+        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
+      }
+    };
+    load();
+    return () => { controller.abort(); };
   }, [namespace]);
-
-  useEffect(() => { loadSettings(); }, [loadSettings]);
 
   const handleSave = async () => {
     setSaving(true);

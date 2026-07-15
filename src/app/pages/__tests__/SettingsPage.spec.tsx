@@ -102,7 +102,7 @@ describe('SettingsPage', () => {
       expect(screen.getByDisplayValue('AKIA****')).toBeInTheDocument();
       expect(screen.getByDisplayValue('us-east-1')).toBeInTheDocument();
       expect(screen.getByDisplayValue('my-bucket')).toBeInTheDocument();
-      expect(mockStorageService.getS3Settings).toHaveBeenCalledWith('test-ns');
+      expect(mockStorageService.getS3Settings).toHaveBeenCalledWith('test-ns', expect.any(AbortSignal));
     });
 
     it('should save S3 settings', async () => {
@@ -186,7 +186,7 @@ describe('SettingsPage', () => {
       await waitFor(() => {
         expect(screen.getByDisplayValue('hf_t****')).toBeInTheDocument();
       });
-      expect(mockStorageService.getHuggingFaceSettings).toHaveBeenCalledWith('test-ns');
+      expect(mockStorageService.getHuggingFaceSettings).toHaveBeenCalledWith('test-ns', expect.any(AbortSignal));
     });
 
     it('should test HuggingFace connection and show token name', async () => {
@@ -336,7 +336,7 @@ describe('SettingsPage', () => {
 
       await user.click(screen.getByRole('tab', { name: /Transfer Controls/i }));
       await waitFor(() => {
-        expect(mockStorageService.getMaxConcurrentTransfers).toHaveBeenCalledWith('test-ns');
+        expect(mockStorageService.getMaxConcurrentTransfers).toHaveBeenCalledWith('test-ns', expect.any(AbortSignal));
       });
     });
 
@@ -374,7 +374,7 @@ describe('SettingsPage', () => {
 
       await user.click(screen.getByRole('tab', { name: /Pagination/i }));
       await waitFor(() => {
-        expect(mockStorageService.getMaxFilesPerPage).toHaveBeenCalledWith('test-ns');
+        expect(mockStorageService.getMaxFilesPerPage).toHaveBeenCalledWith('test-ns', expect.any(AbortSignal));
       });
     });
 
