@@ -8,7 +8,7 @@ argument-hint: "<phase label, e.g. 'phase-1'> [issue-number]"
 
 # Fix Issues — Autonomous Issue Resolution Pipeline
 
-You are an orchestrator that fetches open GitHub issues by phase label, then sequentially fixes each one through a full pipeline: branch creation, implementation, PR, review/fix loop, merge, close.
+You are an orchestrator that fetches open GitHub issues by phase label, then fixes each one through a full pipeline: branch creation, implementation, PR, review/fix loop, merge, close.
 
 **Context clearing is critical.** Spawn a **fresh subagent** for every implementation, review, and fix phase. This ensures unbiased reviews — the review agent must never share context with the implementation agent.
 
@@ -59,84 +59,118 @@ Then:
    - `tech-debt` → `chore/`
    - Default → `fix/`
 
-## Step 2: Issue Loop
+## Step 1b: Build Execution Plan
 
-Process each selected issue sequentially. For each issue:
+Before processing issues, analyze them to determine which can be parallelized safely using worktree isolation.
 
-### 2a: Create Branch
+For each issue, extract the **files and areas** it references from its body (issue bodies typically mention specific file paths). Group issues into **parallel batches**:
 
-```bash
-git checkout $BASE_BRANCH
-git pull origin $BASE_BRANCH
-git checkout -b <type>/<issue#>-<short-kebab-description>
+- Issues referencing **non-overlapping files** can run in the same batch (parallel via worktrees)
+- Issues referencing **overlapping files** must be in separate batches (sequential)
+- If file scope is unclear from the issue body, default to sequential (safer)
+
+**Output an execution plan** like:
+
+```
+Batch 1 (parallel): #72 (k8sResources, webpack, values.yaml), #73 (BrewetContext)
+Batch 2 (parallel): #76 (useBrewetContainer), #81 (ContainerWizard imports)
+Batch 3 (sequential): #79 (context + hook), #80 (ContainerWizard + parents)
 ```
 
-Branch name example: `fix/2-scale-put-unchecked-response`
+**Rules:**
+- Order batches so that foundational changes (types, context, shared utilities) come first
+- Within a batch, each issue gets its own worktree — no shared state
+- If only a single issue was requested, skip batching entirely
 
-Fetch full issue details for the implementation agent:
+## Step 2: Process Batches
 
-```bash
-gh issue view <number>
-```
+For each batch from the execution plan:
 
-### 2b: Implement (Sonnet Agent)
+### 2a: Implement Batch (parallel worktrees)
 
-Spawn an implementation **Agent** with `model: "sonnet"`:
+For each issue in the batch, simultaneously:
 
-> **Context:** You are fixing GitHub issue #`<number>` for the Brewet project.
->
-> **Issue details:**
-> `<full output from gh issue view>`
->
-> **Instructions:**
->
-> 1. Read the CLAUDE.md and AGENTS.md files for project conventions
-> 2. Read existing code in the areas that need modification
-> 3. Plan the fix — identify root cause (the issue body usually contains this), determine which files to change
-> 4. Implement the fix following project conventions (PatternFly 6, TypeScript strict, `~` path alias in source)
-> 5. Update or add tests as needed for the fix
-> 6. Run verification:
->    - Lint: `npm run lint`
->    - Tests: `npm test`
->    - If BFF files changed: `cd bff && npm test && npm run lint`
->    - If storage-backend files changed: `cd storage-backend && npm test && npm run lint`
-> 7. Commit with a conventional commit message: `fix(<scope>): <description>`
->
-> Do NOT push or create a PR — only implement and commit locally.
+1. Fetch full issue details:
 
-### 2c: Push & Create PR
+   ```bash
+   gh issue view <number>
+   ```
 
-After the implementation agent completes, the orchestrator handles PR creation directly:
+2. Spawn an implementation **Agent** with `model: "sonnet"` and `isolation: "worktree"`:
 
-```bash
-git push -u origin <branch-name>
+   > **Context:** You are fixing GitHub issue #`<number>` for the Brewet project.
+   >
+   > **Issue details:**
+   > `<full output from gh issue view>`
+   >
+   > **Instructions:**
+   >
+   > 1. Read the CLAUDE.md and AGENTS.md files for project conventions
+   > 2. Read existing code in the areas that need modification
+   > 3. Plan the fix — identify root cause (the issue body usually contains this), determine which files to change
+   > 4. Implement the fix following project conventions (PatternFly 6, TypeScript strict, `~` path alias in source)
+   > 5. Update or add tests as needed for the fix
+   > 6. Run verification:
+   >    - Lint: `npm run lint`
+   >    - Tests: `npm test`
+   >    - If BFF files changed: `cd bff && npm test && npm run lint`
+   >    - If storage-backend files changed: `cd storage-backend && npm test && npm run lint`
+   > 7. Commit with a conventional commit message: `fix(<scope>): <description>`
+   >    - Do NOT manually add `Signed-off-by` or `Co-Authored-By` lines — the commit hook handles this automatically
+   > 8. Push the branch: `git push -u origin HEAD`
+   >
+   > Do NOT create a PR — only implement, commit, and push.
 
-gh pr create --base $BASE_BRANCH \
-  --title "<type>(<scope>): <description>" \
-  --body "$(cat <<'PREOF'
-## Summary
-<1-3 bullet points describing the fix>
+Wait for all agents in the batch to complete.
 
-Closes #<issue>
+### 2b: Push & Create PR
 
-## Test Plan
-- [ ] Lint passes (`npm run lint`)
-- [ ] Frontend tests pass (`npm test`)
-- [ ] BFF tests pass (if applicable: `cd bff && npm test`)
-- [ ] Storage backend tests pass (if applicable: `cd storage-backend && npm test`)
-PREOF
-)"
-```
+For each completed issue in the batch, the orchestrator creates the PR:
 
-Save the PR number from the output for subsequent steps.
+1. Identify the branch name from the agent's worktree result.
 
-### 2d: Review/Fix Loop (up to 4 iterations)
+2. Clean up commit message trailers before creating the PR:
+
+   ```bash
+   # Strip duplicate Signed-off-by / Co-Authored-By trailers left by agent commits
+   # The commit hook will add the correct ones automatically
+   git checkout <branch-name>
+   CLEAN_MSG=$(git log -1 --format='%B' | sed '/^---$/,/^$/d; /^Signed-off-by:/d; /^Co-Authored-By:/d' | sed -e :a -e '/^\n*$/{$d;N;ba}')
+   git commit --amend -m "$CLEAN_MSG"
+   git push --force-with-lease
+   ```
+
+3. Create the PR:
+
+   ```bash
+   gh pr create --base $BASE_BRANCH \
+     --title "<type>(<scope>): <description>" \
+     --body "$(cat <<'PREOF'
+   ## Summary
+   <1-3 bullet points describing the fix>
+
+   Closes #<issue>
+
+   ## Test Plan
+   - [ ] Lint passes (`npm run lint`)
+   - [ ] Frontend tests pass (`npm test`)
+   - [ ] BFF tests pass (if applicable: `cd bff && npm test`)
+   - [ ] Storage backend tests pass (if applicable: `cd storage-backend && npm test`)
+   PREOF
+   )"
+   ```
+
+4. Save the PR number for subsequent steps.
+
+### 2c: Review/Fix Loop (up to 4 iterations per issue)
+
+For each issue's PR, sequentially:
 
 Repeat the following **up to 4 times**. Stop early if the review finds no high or medium severity issues.
 
 #### Review Phase
 
-Spawn a **fresh general-purpose Agent** (default model — Opus):
+Spawn a **fresh Agent** with `model: "opus"`:
 
 > **Task:** Review PR #`<pr-number>` for the Brewet project.
 >
@@ -153,6 +187,7 @@ Spawn a **fresh general-purpose Agent** (default model — Opus):
 >    - **Tests:** Are the tests adequate? Do they cover the failure scenario from the issue?
 >    - **Conventions:** PatternFly 6, TypeScript strict, `~` path alias, no unnecessary comments
 >    - **Regressions:** Does the fix break any existing functionality?
+>    - **TypeScript compilation:** Run `npx tsc --noEmit` and report any errors
 >
 > 4. Compile a structured summary:
 >    - **High severity:** Issues that must be fixed (bugs, broken functionality, missing error handling)
@@ -166,7 +201,7 @@ Spawn a **fresh general-purpose Agent** (default model — Opus):
 
 Evaluate the review summary:
 
-- **PASS** (no high/medium issues) → proceed to **Step 2e** (merge)
+- **PASS** (no high/medium issues) → proceed to **Step 2d** (merge)
 - **NEEDS_FIXES** → continue to Fix Phase
 - If this is **iteration 4** and still NEEDS_FIXES:
   - If only a few medium issues remain → proceed to merge anyway (pragmatic cutoff)
@@ -174,7 +209,7 @@ Evaluate the review summary:
 
 #### Fix Phase
 
-Spawn a **fresh Sonnet Agent** with `model: "sonnet"`:
+Spawn a **fresh Agent** with `model: "sonnet"` and `isolation: "worktree"`:
 
 > **Context:** You are fixing review findings for PR #`<pr-number>` (round `<N>` of 4) on the Brewet project.
 >
@@ -190,13 +225,14 @@ Spawn a **fresh Sonnet Agent** with `model: "sonnet"`:
 >    - Tests: `npm test`
 >    - If BFF files changed: `cd bff && npm test && npm run lint`
 > 4. Commit with message: `fix: address PR review findings (round <N>)`
+>    - Do NOT manually add `Signed-off-by` or `Co-Authored-By` lines — the commit hook handles this automatically
 > 5. Push the changes: `git push`
 >
 > Do NOT create a new PR — just fix, commit, and push to the existing branch.
 
-Then **repeat from Review Phase** with a fresh review agent.
+After the fix agent completes, clean up commit trailers (same as Step 2b), then **repeat from Review Phase** with a fresh review agent.
 
-### 2e: Merge & Close
+### 2d: Merge & Close
 
 Once the review passes:
 
@@ -209,7 +245,7 @@ git checkout $BASE_BRANCH
 git pull origin $BASE_BRANCH
 ```
 
-The `Closes #<issue>` in the PR body auto-closes the issue on merge. Verify:
+The `Closes #<issue>` in the PR body auto-closes the issue on merge to the default branch. Since feature branches are not the default branch, verify and close manually:
 
 ```bash
 gh issue view <number> --json state --jq '.state'
@@ -218,16 +254,46 @@ gh issue view <number> --json state --jq '.state'
 If still open:
 
 ```bash
-gh issue close <number>
+gh issue close <number> --comment "Fixed in #<pr-number>"
 ```
 
-### 2f: Continue
+### 2e: Cleanup Batch
 
-Proceed to the next open issue with the phase label. Repeat from **Step 2a**.
+After all issues in the batch are processed:
+
+1. Switch to `$BASE_BRANCH` and pull:
+
+   ```bash
+   git checkout $BASE_BRANCH
+   git pull origin $BASE_BRANCH
+   ```
+
+2. Verify clean working tree:
+
+   ```bash
+   git status
+   ```
+
+   If there are uncommitted changes (agent leftovers), restore files to HEAD:
+
+   ```bash
+   git restore --staged . 2>/dev/null
+   git checkout -- . 2>/dev/null
+   ```
+
+3. Drop any stash entries created during this batch:
+
+   ```bash
+   git stash list
+   ```
+
+   If stashes exist from this session, drop them.
+
+4. Continue to the next batch.
 
 ## Step 3: Summary
 
-After all issues have been processed, output a structured summary:
+After all batches have been processed, output a structured summary:
 
 ```markdown
 ## Fix Issues Summary
@@ -253,6 +319,52 @@ After all issues have been processed, output a structured summary:
 ### Open Items
 [List any issues left open with reasons]
 ```
+
+## Step 4: Final Cleanup
+
+Before finishing, ensure the repository is left in a clean state:
+
+1. Checkout `$BASE_BRANCH` and pull latest:
+
+   ```bash
+   git checkout $BASE_BRANCH
+   git pull origin $BASE_BRANCH
+   ```
+
+2. Verify clean working tree:
+
+   ```bash
+   git status
+   ```
+
+   If uncommitted changes exist, discard them:
+
+   ```bash
+   git restore --staged . 2>/dev/null
+   git checkout -- . 2>/dev/null
+   ```
+
+3. Delete leftover local branches from this session that weren't cleaned up by `--delete-branch`:
+
+   ```bash
+   git branch | grep -E "^  (fix|feat|chore)/" | xargs git branch -d 2>/dev/null
+   ```
+
+4. Drop all stash entries from this session:
+
+   ```bash
+   git stash clear
+   ```
+
+5. Final verification:
+
+   ```bash
+   git status
+   git stash list
+   git branch
+   ```
+
+   Report the final state to the user.
 
 ## Error Handling
 
