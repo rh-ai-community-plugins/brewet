@@ -47,7 +47,7 @@ export const ContainerRequired: React.FC<ContainerRequiredProps> = ({ children }
             </EmptyStateActions>
           </EmptyStateFooter>
         </EmptyState>
-        <ContainerWizard isOpen={isWizardOpen} onClose={() => setIsWizardOpen(false)} />
+        {isWizardOpen && <ContainerWizard onClose={() => setIsWizardOpen(false)} />}
       </>
     );
   }

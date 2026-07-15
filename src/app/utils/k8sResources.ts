@@ -2,7 +2,9 @@ import { ContainerConfig } from '~/app/types/k8s';
 
 export const DEPLOYMENT_NAME = 'brewet-storage-backend';
 const SERVICE_PORT = 8888;
-const CONTAINER_IMAGE_DEFAULT = 'quay.io/rhoai-community/brewet-storage-backend:latest';
+const CONTAINER_IMAGE_DEFAULT =
+  process.env.STORAGE_BACKEND_IMAGE ||
+  'quay.io/rhoai-community/brewet-storage-backend:0.4.0';
 const DEFAULT_MOUNT_PREFIX = '/opt/app-root/src';
 
 const DANGEROUS_PATHS = ['/', '/etc', '/proc', '/sys', '/dev', '/var', '/tmp', '/root', '/home'];

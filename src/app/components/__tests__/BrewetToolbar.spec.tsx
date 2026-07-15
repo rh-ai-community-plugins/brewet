@@ -14,8 +14,7 @@ jest.mock('~/app/components/ProjectSelector', () => ({
 }));
 
 jest.mock('~/app/components/ContainerWizard', () => ({
-  ContainerWizard: ({ isOpen }: { isOpen: boolean }) =>
-    isOpen ? <div data-testid="container-wizard">Wizard</div> : null,
+  ContainerWizard: () => <div data-testid="container-wizard">Wizard</div>,
 }));
 
 const mockUseBrewetContext = useBrewetContext as jest.MockedFunction<typeof useBrewetContext>;
@@ -28,6 +27,8 @@ function mockContext(overrides: Partial<ReturnType<typeof useBrewetContext>> = {
     containerStatus: 'none',
     containerInfo: null,
     refreshContainerStatus: jest.fn(),
+    isActioning: false,
+    setIsActioning: jest.fn(),
     ...overrides,
   });
 }
@@ -40,7 +41,7 @@ function mockContainer(overrides: Partial<ReturnType<typeof useBrewetContainer>>
     isActioning: false,
     startContainer: jest.fn(),
     stopContainer: jest.fn(),
-    deleteContainer: jest.fn().mockResolvedValue(undefined),
+    deleteContainer: jest.fn().mockResolvedValue(true),
     createContainer: jest.fn().mockResolvedValue([]),
     updateContainer: jest.fn().mockResolvedValue([]),
     refreshContainerStatus: jest.fn(),
@@ -142,7 +143,7 @@ describe('BrewetToolbar', () => {
   });
 
   it('should call deleteContainer on confirm delete', async () => {
-    const deleteContainer = jest.fn().mockResolvedValue(undefined);
+    const deleteContainer = jest.fn().mockResolvedValue(true);
     mockContext({ selectedProject: 'test-ns', containerStatus: 'running' });
     mockContainer({ deleteContainer });
     render(<BrewetToolbar />);
@@ -153,6 +154,56 @@ describe('BrewetToolbar', () => {
     await waitFor(() => {
       expect(deleteContainer).toHaveBeenCalled();
     });
+  });
+
+  it('should close modal when deleteContainer succeeds', async () => {
+    const deleteContainer = jest.fn().mockResolvedValue(true);
+    mockContext({ selectedProject: 'test-ns', containerStatus: 'running' });
+    mockContainer({ deleteContainer });
+    render(<BrewetToolbar />);
+
+    await userEvent.click(screen.getByLabelText('Delete container'));
+    expect(screen.getByText('Delete storage container?')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Delete storage container?')).not.toBeInTheDocument();
+    });
+  });
+
+  it('should keep modal open and show error when deleteContainer fails', async () => {
+    const deleteContainer = jest.fn().mockResolvedValue(false);
+    mockContext({ selectedProject: 'test-ns', containerStatus: 'running' });
+    mockContainer({ deleteContainer });
+    render(<BrewetToolbar />);
+
+    await userEvent.click(screen.getByLabelText('Delete container'));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Delete storage container?')).toBeInTheDocument();
+      expect(screen.getByText('Failed to delete the storage container. Check your permissions and try again.')).toBeInTheDocument();
+    });
+  });
+
+  it('should clear error when modal is closed after failure', async () => {
+    const deleteContainer = jest.fn().mockResolvedValue(false);
+    mockContext({ selectedProject: 'test-ns', containerStatus: 'running' });
+    mockContainer({ deleteContainer });
+    render(<BrewetToolbar />);
+
+    await userEvent.click(screen.getByLabelText('Delete container'));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to delete the storage container. Check your permissions and try again.')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await userEvent.click(screen.getByLabelText('Delete container'));
+    expect(screen.queryByText('Failed to delete the storage container. Check your permissions and try again.')).not.toBeInTheDocument();
   });
 
   it('should disable buttons when isActioning is true', () => {
