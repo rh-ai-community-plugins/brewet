@@ -51,6 +51,7 @@ function setupMocks(params?: Record<string, string | undefined>) {
   mockStorageService.getLocations.mockResolvedValue(mockLocations);
   mockStorageService.refreshLocations.mockResolvedValue(mockLocations);
   mockStorageService.listFiles.mockResolvedValue(mockFileResponse);
+  mockStorageService.getMaxFilesPerPage.mockResolvedValue(100);
   mockStorageService.downloadFile.mockResolvedValue('/brewet/api/test-ns/objects/download/my-bucket/cmVhZG1lLnR4dA');
   mockStorageService.deleteFile.mockResolvedValue(undefined);
   mockStorageService.createFolder.mockResolvedValue(undefined);
@@ -470,6 +471,40 @@ describe('StorageBrowser', () => {
       await userEvent.type(searchInput, 're');
 
       expect(screen.queryByText('Search covers loaded files only')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('PVC pagination', () => {
+    it('should pass fetched pageLimit to listFiles for PVC locations', async () => {
+      setupMocks({ locationId: 'local-0' });
+      mockStorageService.getMaxFilesPerPage.mockResolvedValue(50);
+      render(<StorageBrowser />);
+
+      await waitFor(() => {
+        expect(mockStorageService.listFiles).toHaveBeenCalledWith(
+          'test-ns',
+          expect.objectContaining({ id: 'local-0', type: 'pvc' }),
+          '',
+          expect.objectContaining({ limit: 50 }),
+          expect.any(AbortSignal),
+        );
+      });
+    });
+
+    it('should fall back to default pageLimit when getMaxFilesPerPage fails for PVC', async () => {
+      setupMocks({ locationId: 'local-0' });
+      mockStorageService.getMaxFilesPerPage.mockRejectedValue(new Error('Service unavailable'));
+      render(<StorageBrowser />);
+
+      await waitFor(() => {
+        expect(mockStorageService.listFiles).toHaveBeenCalledWith(
+          'test-ns',
+          expect.objectContaining({ id: 'local-0', type: 'pvc' }),
+          '',
+          expect.objectContaining({ limit: 100 }),
+          expect.any(AbortSignal),
+        );
+      });
     });
   });
 
