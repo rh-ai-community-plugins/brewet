@@ -24,8 +24,8 @@ class StorageService {
     }
 
     const [bucketsResult, localResult] = await Promise.allSettled([
-      apiClient.get<BucketsList>(namespace, '/api/buckets', signal),
-      apiClient.get<LocalStorageLocation[]>(namespace, '/api/local/locations', signal),
+      apiClient.get<BucketsList>(namespace, '/buckets', signal),
+      apiClient.get<{ locations: LocalStorageLocation[] }>(namespace, '/local/locations', signal),
     ]);
 
     const locations: StorageLocation[] = [];
@@ -34,17 +34,17 @@ class StorageService {
       const bucketsList = bucketsResult.value;
       for (const bucket of bucketsList.buckets) {
         locations.push({
-          id: bucket.name,
-          name: bucket.name,
+          id: bucket.Name,
+          name: bucket.Name,
           type: 's3',
           status: 'available',
-          creationDate: bucket.creationDate,
+          creationDate: bucket.CreationDate,
         });
       }
     }
 
     if (localResult.status === 'fulfilled') {
-      for (const loc of localResult.value) {
+      for (const loc of localResult.value.locations) {
         locations.push({
           id: loc.id,
           name: loc.name,
@@ -67,17 +67,17 @@ class StorageService {
   }
 
   async getBucketsList(namespace: string, signal?: AbortSignal): Promise<BucketsList> {
-    return apiClient.get<BucketsList>(namespace, '/api/buckets', signal);
+    return apiClient.get<BucketsList>(namespace, '/buckets', signal);
   }
 
   async createBucket(namespace: string, bucketName: string, signal?: AbortSignal): Promise<void> {
-    await apiClient.post(namespace, '/api/buckets', { bucketName }, signal);
+    await apiClient.post(namespace, '/buckets', { bucketName }, signal);
     this.locationsCache = null;
     this.cacheNamespace = null;
   }
 
   async deleteBucket(namespace: string, bucketName: string, signal?: AbortSignal): Promise<void> {
-    await apiClient.delete(namespace, `/api/buckets/${encodeURIComponent(bucketName)}`, signal);
+    await apiClient.delete(namespace, `/buckets/${encodeURIComponent(bucketName)}`, signal);
     this.locationsCache = null;
     this.cacheNamespace = null;
   }
@@ -99,8 +99,8 @@ class StorageService {
     if (location.type === 's3') {
       const encodedPath = path ? base64Encode(path) : '';
       const url = encodedPath
-        ? `/api/objects/${encodeURIComponent(location.id)}/${encodedPath}`
-        : `/api/objects/${encodeURIComponent(location.id)}`;
+        ? `/objects/${encodeURIComponent(location.id)}/${encodedPath}`
+        : `/objects/${encodeURIComponent(location.id)}`;
 
       const params = new URLSearchParams();
       if (options?.continuationToken) params.set('continuationToken', options.continuationToken);
@@ -112,7 +112,7 @@ class StorageService {
     }
 
     const encodedPath = base64Encode(path || '/');
-    const url = `/api/local/files/${encodeURIComponent(location.id)}/${encodedPath}`;
+    const url = `/local/files/${encodeURIComponent(location.id)}/${encodedPath}`;
 
     const params = new URLSearchParams();
     if (options?.limit) params.set('limit', String(options.limit));
@@ -133,14 +133,14 @@ class StorageService {
     if (location.type === 's3') {
       return apiClient.uploadFile(
         namespace,
-        `/api/objects/upload/${encodeURIComponent(location.id)}/${encodedPath}`,
+        `/objects/upload/${encodeURIComponent(location.id)}/${encodedPath}`,
         file,
         signal,
       );
     }
     return apiClient.uploadFile(
       namespace,
-      `/api/local/files/${encodeURIComponent(location.id)}/${encodedPath}`,
+      `/local/files/${encodeURIComponent(location.id)}/${encodedPath}`,
       file,
       signal,
     );
@@ -155,12 +155,12 @@ class StorageService {
     if (location.type === 's3') {
       return apiClient.getDownloadUrl(
         namespace,
-        `/api/objects/download/${encodeURIComponent(location.id)}/${encodedPath}`,
+        `/objects/download/${encodeURIComponent(location.id)}/${encodedPath}`,
       );
     }
     return apiClient.getDownloadUrl(
       namespace,
-      `/api/local/download/${encodeURIComponent(location.id)}/${encodedPath}`,
+      `/local/download/${encodeURIComponent(location.id)}/${encodedPath}`,
     );
   }
 
@@ -174,14 +174,14 @@ class StorageService {
     if (location.type === 's3') {
       await apiClient.delete(
         namespace,
-        `/api/objects/${encodeURIComponent(location.id)}/${encodedPath}`,
+        `/objects/${encodeURIComponent(location.id)}/${encodedPath}`,
         signal,
       );
       return;
     }
     await apiClient.delete(
       namespace,
-      `/api/local/files/${encodeURIComponent(location.id)}/${encodedPath}`,
+      `/local/files/${encodeURIComponent(location.id)}/${encodedPath}`,
       signal,
     );
   }
@@ -196,7 +196,7 @@ class StorageService {
     if (location.type === 's3') {
       await apiClient.post(
         namespace,
-        `/api/objects/folder/${encodeURIComponent(location.id)}/${encodedPath}`,
+        `/objects/folder/${encodeURIComponent(location.id)}/${encodedPath}`,
         undefined,
         signal,
       );
@@ -204,7 +204,7 @@ class StorageService {
     }
     await apiClient.post(
       namespace,
-      `/api/local/directories/${encodeURIComponent(location.id)}/${encodedPath}`,
+      `/local/directories/${encodeURIComponent(location.id)}/${encodedPath}`,
       undefined,
       signal,
     );
@@ -220,69 +220,69 @@ class StorageService {
     if (location.type === 's3') {
       return apiClient.get<string>(
         namespace,
-        `/api/objects/view/${encodeURIComponent(location.id)}/${encodedPath}`,
+        `/objects/view/${encodeURIComponent(location.id)}/${encodedPath}`,
         signal,
       );
     }
     return apiClient.get<string>(
       namespace,
-      `/api/local/view/${encodeURIComponent(location.id)}/${encodedPath}`,
+      `/local/view/${encodeURIComponent(location.id)}/${encodedPath}`,
       signal,
     );
   }
 
   async getS3Settings(namespace: string, signal?: AbortSignal): Promise<S3Settings> {
-    return apiClient.get<S3Settings>(namespace, '/api/settings/s3', signal);
+    return apiClient.get<S3Settings>(namespace, '/settings/s3', signal);
   }
 
   async updateS3Settings(namespace: string, settings: S3Settings, signal?: AbortSignal): Promise<void> {
-    await apiClient.put(namespace, '/api/settings/s3', settings, signal);
+    await apiClient.put(namespace, '/settings/s3', settings, signal);
   }
 
   async testS3Connection(namespace: string, signal?: AbortSignal): Promise<ConnectionTestResult> {
-    return apiClient.post<ConnectionTestResult>(namespace, '/api/settings/test-s3', undefined, signal);
+    return apiClient.post<ConnectionTestResult>(namespace, '/settings/test-s3', undefined, signal);
   }
 
   async getHuggingFaceSettings(namespace: string, signal?: AbortSignal): Promise<HuggingFaceSettings> {
-    return apiClient.get<HuggingFaceSettings>(namespace, '/api/settings/huggingface', signal);
+    return apiClient.get<HuggingFaceSettings>(namespace, '/settings/huggingface', signal);
   }
 
   async updateHuggingFaceSettings(namespace: string, settings: HuggingFaceSettings, signal?: AbortSignal): Promise<void> {
-    await apiClient.put(namespace, '/api/settings/huggingface', settings, signal);
+    await apiClient.put(namespace, '/settings/huggingface', settings, signal);
   }
 
   async testHuggingFaceConnection(namespace: string, signal?: AbortSignal): Promise<ConnectionTestResult> {
-    return apiClient.post<ConnectionTestResult>(namespace, '/api/settings/test-huggingface', undefined, signal);
+    return apiClient.post<ConnectionTestResult>(namespace, '/settings/test-huggingface', undefined, signal);
   }
 
   async getProxySettings(namespace: string, signal?: AbortSignal): Promise<ProxySettings> {
-    return apiClient.get<ProxySettings>(namespace, '/api/settings/proxy', signal);
+    return apiClient.get<ProxySettings>(namespace, '/settings/proxy', signal);
   }
 
   async updateProxySettings(namespace: string, settings: ProxySettings, signal?: AbortSignal): Promise<void> {
-    await apiClient.put(namespace, '/api/settings/proxy', settings, signal);
+    await apiClient.put(namespace, '/settings/proxy', settings, signal);
   }
 
   async testProxyConnection(namespace: string, signal?: AbortSignal): Promise<ConnectionTestResult> {
-    return apiClient.post<ConnectionTestResult>(namespace, '/api/settings/test-proxy', undefined, signal);
+    return apiClient.post<ConnectionTestResult>(namespace, '/settings/test-proxy', undefined, signal);
   }
 
   async getMaxConcurrentTransfers(namespace: string, signal?: AbortSignal): Promise<number> {
-    const result = await apiClient.get<{ value: number }>(namespace, '/api/settings/max-concurrent-transfers', signal);
+    const result = await apiClient.get<{ value: number }>(namespace, '/settings/max-concurrent-transfers', signal);
     return result.value;
   }
 
   async updateMaxConcurrentTransfers(namespace: string, value: number, signal?: AbortSignal): Promise<void> {
-    await apiClient.put(namespace, '/api/settings/max-concurrent-transfers', { value }, signal);
+    await apiClient.put(namespace, '/settings/max-concurrent-transfers', { value }, signal);
   }
 
   async getMaxFilesPerPage(namespace: string, signal?: AbortSignal): Promise<number> {
-    const result = await apiClient.get<{ value: number }>(namespace, '/api/settings/max-files-per-page', signal);
+    const result = await apiClient.get<{ value: number }>(namespace, '/settings/max-files-per-page', signal);
     return result.value;
   }
 
   async updateMaxFilesPerPage(namespace: string, value: number, signal?: AbortSignal): Promise<void> {
-    await apiClient.put(namespace, '/api/settings/max-files-per-page', { value }, signal);
+    await apiClient.put(namespace, '/settings/max-files-per-page', { value }, signal);
   }
 
   async initiateTransfer(
@@ -290,7 +290,7 @@ class StorageService {
     request: TransferRequest,
     signal?: AbortSignal,
   ): Promise<TransferJob> {
-    return apiClient.post<TransferJob>(namespace, '/api/transfer', request, signal);
+    return apiClient.post<TransferJob>(namespace, '/transfer', request, signal);
   }
 
   async checkConflicts(
@@ -298,7 +298,7 @@ class StorageService {
     request: Omit<TransferRequest, 'conflictResolution'>,
     signal?: AbortSignal,
   ): Promise<ConflictCheckResult> {
-    return apiClient.post<ConflictCheckResult>(namespace, '/api/transfer/check-conflicts', request, signal);
+    return apiClient.post<ConflictCheckResult>(namespace, '/transfer/check-conflicts', request, signal);
   }
 }
 

@@ -10,14 +10,14 @@ export interface StorageLocation {
 }
 
 export interface BucketInfo {
-  name: string;
-  creationDate?: string;
-  owner?: string;
+  Name: string;
+  CreationDate?: string;
 }
 
 export interface BucketsList {
   buckets: BucketInfo[];
-  owner?: string;
+  owner?: { DisplayName?: string; ID?: string };
+  defaultBucket?: string;
 }
 
 export interface LocalStorageLocation {

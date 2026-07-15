@@ -141,7 +141,7 @@ const StorageManagementContent: React.FC = () => {
     const map = new Map<string, string>();
     if (bucketsList) {
       for (const b of bucketsList.buckets) {
-        if (b.creationDate) map.set(b.name, b.creationDate);
+        if (b.CreationDate) map.set(b.Name, b.CreationDate);
       }
     }
     return map;

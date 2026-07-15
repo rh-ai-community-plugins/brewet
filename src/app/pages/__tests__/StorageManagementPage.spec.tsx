@@ -32,8 +32,8 @@ const mockLocations: StorageLocation[] = [
 
 const mockBucketsList: BucketsList = {
   buckets: [
-    { name: 'bucket-1', creationDate: '2024-01-15T00:00:00Z' },
-    { name: 'bucket-2', creationDate: '2024-03-01T00:00:00Z' },
+    { Name: 'bucket-1', CreationDate: '2024-01-15T00:00:00Z' },
+    { Name: 'bucket-2', CreationDate: '2024-03-01T00:00:00Z' },
   ],
 };
 

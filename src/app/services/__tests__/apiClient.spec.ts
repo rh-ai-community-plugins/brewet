@@ -13,9 +13,9 @@ describe('apiClient', () => {
         json: () => Promise.resolve({ data: 'test' }),
       });
 
-      const result = await apiClient.get('my-ns', '/api/buckets');
+      const result = await apiClient.get('my-ns', '/buckets');
       expect(result).toEqual({ data: 'test' });
-      expect(global.fetch).toHaveBeenCalledWith('/brewet/api/my-ns/api/buckets', { signal: undefined });
+      expect(global.fetch).toHaveBeenCalledWith('/brewet/api/my-ns/buckets', { signal: undefined });
     });
 
     it('should encode namespace in URL', async () => {
@@ -25,9 +25,9 @@ describe('apiClient', () => {
         json: () => Promise.resolve({}),
       });
 
-      await apiClient.get('ns with spaces', '/api/buckets');
+      await apiClient.get('ns with spaces', '/buckets');
       expect(global.fetch).toHaveBeenCalledWith(
-        '/brewet/api/ns%20with%20spaces/api/buckets',
+        '/brewet/api/ns%20with%20spaces/buckets',
         expect.any(Object),
       );
     });
@@ -40,7 +40,7 @@ describe('apiClient', () => {
         json: () => Promise.resolve({}),
       });
 
-      await apiClient.get('ns', '/api/test', controller.signal);
+      await apiClient.get('ns', '/test', controller.signal);
       expect(global.fetch).toHaveBeenCalledWith(
         expect.any(String),
         { signal: controller.signal },
@@ -56,10 +56,10 @@ describe('apiClient', () => {
         json: () => Promise.resolve({ created: true }),
       });
 
-      const result = await apiClient.post('ns', '/api/buckets', { bucketName: 'test' });
+      const result = await apiClient.post('ns', '/buckets', { bucketName: 'test' });
       expect(result).toEqual({ created: true });
       expect(global.fetch).toHaveBeenCalledWith(
-        '/brewet/api/ns/api/buckets',
+        '/brewet/api/ns/buckets',
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -77,9 +77,9 @@ describe('apiClient', () => {
         json: () => Promise.resolve({}),
       });
 
-      await apiClient.delete('ns', '/api/buckets/my-bucket');
+      await apiClient.delete('ns', '/buckets/my-bucket');
       expect(global.fetch).toHaveBeenCalledWith(
-        '/brewet/api/ns/api/buckets/my-bucket',
+        '/brewet/api/ns/buckets/my-bucket',
         expect.objectContaining({ method: 'DELETE' }),
       );
     });
@@ -94,8 +94,8 @@ describe('apiClient', () => {
         text: () => Promise.resolve(''),
       });
 
-      await expect(apiClient.get('ns', '/api/test')).rejects.toThrow(ApiError);
-      await expect(apiClient.get('ns', '/api/test')).rejects.toThrow('Authentication required');
+      await expect(apiClient.get('ns', '/test')).rejects.toThrow(ApiError);
+      await expect(apiClient.get('ns', '/test')).rejects.toThrow('Authentication required');
     });
 
     it('should throw ApiError with 503 message', async () => {
@@ -106,7 +106,7 @@ describe('apiClient', () => {
         text: () => Promise.resolve(''),
       });
 
-      await expect(apiClient.get('ns', '/api/test')).rejects.toThrow('Storage container is not running');
+      await expect(apiClient.get('ns', '/test')).rejects.toThrow('Storage container is not running');
     });
 
     it('should throw ApiError with response body for other errors', async () => {
@@ -117,7 +117,7 @@ describe('apiClient', () => {
         text: () => Promise.resolve('Something went wrong'),
       });
 
-      await expect(apiClient.get('ns', '/api/test')).rejects.toThrow('Something went wrong');
+      await expect(apiClient.get('ns', '/test')).rejects.toThrow('Something went wrong');
     });
   });
 

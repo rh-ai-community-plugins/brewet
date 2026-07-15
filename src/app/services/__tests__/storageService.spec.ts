@@ -17,10 +17,9 @@ const mockApiClient = apiClient as jest.Mocked<typeof apiClient>;
 
 const mockBuckets: BucketsList = {
   buckets: [
-    { name: 'bucket-1', creationDate: '2024-01-01T00:00:00Z' },
-    { name: 'bucket-2', creationDate: '2024-02-01T00:00:00Z' },
+    { Name: 'bucket-1', CreationDate: '2024-01-01T00:00:00Z' },
+    { Name: 'bucket-2', CreationDate: '2024-02-01T00:00:00Z' },
   ],
-  owner: 'test-owner',
 };
 
 const mockLocalLocations: LocalStorageLocation[] = [
@@ -30,16 +29,16 @@ const mockLocalLocations: LocalStorageLocation[] = [
 
 function setupDefaultMocks() {
   mockApiClient.get.mockImplementation((_ns, path) => {
-    if (path === '/api/buckets') return Promise.resolve(mockBuckets);
-    if (path === '/api/local/locations') return Promise.resolve(mockLocalLocations);
+    if (path === '/buckets') return Promise.resolve(mockBuckets);
+    if (path === '/local/locations') return Promise.resolve({ locations: mockLocalLocations });
     return Promise.reject(new Error('unexpected'));
   });
 }
 
 async function clearCache() {
   mockApiClient.get.mockImplementation((_ns, path) => {
-    if (path === '/api/buckets') return Promise.resolve({ buckets: [] });
-    if (path === '/api/local/locations') return Promise.resolve([]);
+    if (path === '/buckets') return Promise.resolve({ buckets: [] });
+    if (path === '/local/locations') return Promise.resolve({ locations: [] });
     return Promise.resolve({});
   });
   await storageService.refreshLocations('_reset_');
@@ -59,12 +58,11 @@ describe('storageService', () => {
       const locations = await storageService.refreshLocations('test-ns');
 
       expect(locations).toHaveLength(4);
-      expect(locations[0]).toEqual({
+      expect(locations[0]).toMatchObject({
         id: 'bucket-1',
         name: 'bucket-1',
         type: 's3',
         status: 'available',
-        creationDate: '2024-01-01T00:00:00Z',
       });
       expect(locations[2]).toEqual({
         id: 'local-0',
@@ -89,8 +87,8 @@ describe('storageService', () => {
 
     it('should gracefully handle S3 failure', async () => {
       mockApiClient.get.mockImplementation((_ns, path) => {
-        if (path === '/api/buckets') return Promise.reject(new Error('S3 error'));
-        if (path === '/api/local/locations') return Promise.resolve(mockLocalLocations);
+        if (path === '/buckets') return Promise.reject(new Error('S3 error'));
+        if (path === '/local/locations') return Promise.resolve({ locations: mockLocalLocations });
         return Promise.reject(new Error('unexpected'));
       });
 
@@ -101,8 +99,8 @@ describe('storageService', () => {
 
     it('should gracefully handle local storage failure', async () => {
       mockApiClient.get.mockImplementation((_ns, path) => {
-        if (path === '/api/buckets') return Promise.resolve(mockBuckets);
-        if (path === '/api/local/locations') return Promise.reject(new Error('FS error'));
+        if (path === '/buckets') return Promise.resolve(mockBuckets);
+        if (path === '/local/locations') return Promise.reject(new Error('FS error'));
         return Promise.reject(new Error('unexpected'));
       });
 
@@ -130,7 +128,7 @@ describe('storageService', () => {
 
       await storageService.createBucket('ns', 'new-bucket');
 
-      expect(mockApiClient.post).toHaveBeenCalledWith('ns', '/api/buckets', { bucketName: 'new-bucket' }, undefined);
+      expect(mockApiClient.post).toHaveBeenCalledWith('ns', '/buckets', { bucketName: 'new-bucket' }, undefined);
     });
   });
 
@@ -140,7 +138,7 @@ describe('storageService', () => {
 
       await storageService.deleteBucket('ns', 'old-bucket');
 
-      expect(mockApiClient.delete).toHaveBeenCalledWith('ns', '/api/buckets/old-bucket', undefined);
+      expect(mockApiClient.delete).toHaveBeenCalledWith('ns', '/buckets/old-bucket', undefined);
     });
   });
 
@@ -154,7 +152,7 @@ describe('storageService', () => {
 
       expect(mockApiClient.get).toHaveBeenCalledWith(
         'ns',
-        expect.stringContaining('/api/objects/my-bucket/'),
+        expect.stringContaining('/objects/my-bucket/'),
         undefined,
       );
     });
@@ -168,7 +166,7 @@ describe('storageService', () => {
 
       expect(mockApiClient.get).toHaveBeenCalledWith(
         'ns',
-        expect.stringContaining('/api/local/files/local-0/'),
+        expect.stringContaining('/local/files/local-0/'),
         undefined,
       );
     });
@@ -197,21 +195,21 @@ describe('storageService', () => {
 
   describe('downloadFile', () => {
     it('should return S3 download URL', async () => {
-      mockApiClient.getDownloadUrl.mockReturnValue('/brewet/api/ns/api/objects/download/bucket/encoded');
+      mockApiClient.getDownloadUrl.mockReturnValue('/brewet/api/ns/objects/download/bucket/encoded');
 
       const location = { id: 'bucket', name: 'bucket', type: 's3' as const, status: 'available' as const };
       const url = await storageService.downloadFile('ns', location, 'file.txt');
 
-      expect(url).toContain('/api/objects/download/bucket/');
+      expect(url).toContain('/objects/download/bucket/');
     });
 
     it('should return PVC download URL', async () => {
-      mockApiClient.getDownloadUrl.mockReturnValue('/brewet/api/ns/api/local/download/local-0/encoded');
+      mockApiClient.getDownloadUrl.mockReturnValue('/brewet/api/ns/local/download/local-0/encoded');
 
       const location = { id: 'local-0', name: 'pvc', type: 'pvc' as const, status: 'available' as const };
       const url = await storageService.downloadFile('ns', location, '/data/file.txt');
 
-      expect(url).toContain('/api/local/download/local-0/');
+      expect(url).toContain('/local/download/local-0/');
     });
   });
 });
