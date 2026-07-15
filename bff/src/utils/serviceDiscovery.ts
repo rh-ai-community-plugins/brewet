@@ -5,6 +5,7 @@ const SA_TOKEN_PATH = '/var/run/secrets/kubernetes.io/serviceaccount/token';
 const SERVICE_NAME = 'brewet-storage-backend';
 const SERVICE_PORT = 8888;
 const DEFAULT_CACHE_TTL_MS = 30_000;
+const K8S_NAMESPACE_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 interface CacheEntry {
   url: string;
@@ -46,6 +47,10 @@ async function doResolve(namespace: string): Promise<string> {
 export async function resolveStorageBackend(
   namespace: string,
 ): Promise<string> {
+  if (!K8S_NAMESPACE_RE.test(namespace)) {
+    throw new Error(`Invalid namespace: ${namespace}`);
+  }
+
   if (process.env.STORAGE_BACKEND_URL) {
     return process.env.STORAGE_BACKEND_URL;
   }
