@@ -288,7 +288,7 @@ const StorageBrowser: React.FC = () => {
 
   // Filtered files (client-side contains filter)
   const displayFiles = useMemo(() => {
-    if (!searchText || (searchMode === 'startsWith' && selectedLocation?.type === 's3')) {
+    if (!searchText || (searchText.length >= 3 && searchMode === 'startsWith' && selectedLocation?.type === 's3')) {
       return files;
     }
     const lower = searchText.toLowerCase();
