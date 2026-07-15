@@ -14,9 +14,9 @@ SEVERITY       ?= HIGH,CRITICAL
 # Install
 # ──────────────────────────────────────────────
 
-.PHONY: install install-frontend install-bff
+.PHONY: install install-frontend install-bff install-storage-backend
 
-install: install-frontend install-bff ## Install dependencies (frontend + BFF)
+install: install-frontend install-bff install-storage-backend ## Install dependencies (frontend + BFF + storage-backend)
 
 install-frontend:
 	npm ci
@@ -24,13 +24,16 @@ install-frontend:
 install-bff:
 	cd bff && npm ci
 
+install-storage-backend:
+	cd storage-backend && npm ci
+
 # ──────────────────────────────────────────────
 # Lint
 # ──────────────────────────────────────────────
 
-.PHONY: lint lint-frontend lint-bff
+.PHONY: lint lint-frontend lint-bff lint-storage-backend
 
-lint: lint-frontend lint-bff ## Lint source code (frontend + BFF)
+lint: lint-frontend lint-bff lint-storage-backend ## Lint source code (frontend + BFF + storage-backend)
 
 lint-frontend:
 	npm run lint
@@ -38,13 +41,16 @@ lint-frontend:
 lint-bff:
 	cd bff && npm run lint
 
+lint-storage-backend:
+	cd storage-backend && npm run lint
+
 # ──────────────────────────────────────────────
 # Typecheck
 # ──────────────────────────────────────────────
 
-.PHONY: typecheck typecheck-frontend typecheck-bff
+.PHONY: typecheck typecheck-frontend typecheck-bff typecheck-storage-backend
 
-typecheck: typecheck-frontend typecheck-bff ## TypeScript type checking (frontend + BFF)
+typecheck: typecheck-frontend typecheck-bff typecheck-storage-backend ## TypeScript type checking (frontend + BFF + storage-backend)
 
 typecheck-frontend:
 	npm run typecheck
@@ -52,19 +58,25 @@ typecheck-frontend:
 typecheck-bff:
 	cd bff && npm run typecheck
 
+typecheck-storage-backend:
+	cd storage-backend && npm run typecheck
+
 # ──────────────────────────────────────────────
 # Test
 # ──────────────────────────────────────────────
 
-.PHONY: test test-frontend test-bff test-coverage
+.PHONY: test test-frontend test-bff test-storage-backend test-coverage
 
-test: test-frontend test-bff ## Run tests (frontend + BFF)
+test: test-frontend test-bff test-storage-backend ## Run tests (frontend + BFF + storage-backend)
 
 test-frontend:
 	npm test
 
 test-bff:
 	cd bff && npm test
+
+test-storage-backend:
+	cd storage-backend && npm test
 
 test-coverage: ## Run frontend tests with coverage report
 	npm run test:coverage
@@ -73,21 +85,23 @@ test-coverage: ## Run frontend tests with coverage report
 # Validate (typecheck + lint + test)
 # ──────────────────────────────────────────────
 
-.PHONY: validate validate-frontend validate-bff
+.PHONY: validate validate-frontend validate-bff validate-storage-backend
 
-validate: validate-frontend validate-bff ## Full validation: typecheck + lint + test (frontend + BFF)
+validate: validate-frontend validate-bff validate-storage-backend ## Full validation: typecheck + lint + test (frontend + BFF + storage-backend)
 
 validate-frontend: typecheck-frontend lint-frontend test-frontend
 
 validate-bff: typecheck-bff lint-bff test-bff
 
+validate-storage-backend: typecheck-storage-backend lint-storage-backend test-storage-backend
+
 # ──────────────────────────────────────────────
 # Build
 # ──────────────────────────────────────────────
 
-.PHONY: build build-frontend build-bff
+.PHONY: build build-frontend build-bff build-storage-backend
 
-build: build-frontend build-bff ## Production build (frontend + BFF)
+build: build-frontend build-bff build-storage-backend ## Production build (frontend + BFF + storage-backend)
 
 build-frontend:
 	npm run build
@@ -95,17 +109,23 @@ build-frontend:
 build-bff:
 	cd bff && npm run build
 
+build-storage-backend:
+	cd storage-backend && npm run build
+
 # ──────────────────────────────────────────────
 # Dev servers
 # ──────────────────────────────────────────────
 
-.PHONY: dev dev-bff
+.PHONY: dev dev-bff dev-storage-backend
 
 dev: ## Start frontend dev server (port 9500)
 	npm run start:dev
 
 dev-bff: ## Start BFF dev server (port 3000, requires K8S_API_BASE)
 	cd bff && npm run start:dev
+
+dev-storage-backend: ## Start storage backend dev server (port 8888)
+	cd storage-backend && npm run start:dev
 
 # ──────────────────────────────────────────────
 # Container images
@@ -155,7 +175,7 @@ chart-push: ## Package and push Helm chart to OCI registry (requires Helm 3.8+)
 .PHONY: clean
 
 clean: ## Remove build artifacts
-	rm -rf dist/ bff/dist/
+	rm -rf dist/ bff/dist/ storage-backend/dist/
 
 # ──────────────────────────────────────────────
 # Help
