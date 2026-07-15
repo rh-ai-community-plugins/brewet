@@ -30,7 +30,7 @@ The BFF (Backend For Frontend) pattern gives a plugin its own backend service. I
 ```text
 Browser                    Dashboard Backend              Plugin BFF              K8s API
   |                              |                            |                     |
-  |-- fetch('/rhoai-brewet/api/namespace-summary') ----------->|                     |
+  |-- fetch('/brewet/api/namespace-summary') ----------->|                     |
   |                              |                            |                     |
   |                    [matches proxyService path]             |                     |
   |                    [authorize: true]                       |                     |
@@ -55,7 +55,7 @@ Browser                    Dashboard Backend              Plugin BFF            
 
 Key points:
 
-1. The frontend calls a path like `/rhoai-brewet/api/namespace-summary` at the same origin
+1. The frontend calls a path like `/brewet/api/namespace-summary` at the same origin
 2. The dashboard backend matches this against `proxyService` entries in the federation ConfigMap
 3. When `authorize: true`, the dashboard converts the user's `x-forwarded-access-token` into an `Authorization: Bearer <token>` header
 4. The BFF receives the user's actual OpenShift token and uses it for K8s API calls -- all RBAC permissions are the user's own
@@ -69,14 +69,14 @@ The dashboard discovers BFF services via the `proxyService` field in the federat
   "name": "brewet",
   "backend": {
     "remoteEntry": "/remoteEntry.js",
-    "service": { "name": "rhoai-brewet", "namespace": "rhoai-brewet", "port": 8080 }
+    "service": { "name": "brewet", "namespace": "brewet", "port": 8080 }
   },
   "proxyService": [{
-    "path": "/rhoai-brewet/api",
+    "path": "/brewet/api",
     "pathRewrite": "/api",
     "authorize": true,
     "tls": false,
-    "service": { "name": "brewet-bff", "namespace": "rhoai-brewet", "port": 3000 }
+    "service": { "name": "brewet-bff", "namespace": "brewet", "port": 3000 }
   }]
 }
 ```
@@ -167,11 +167,11 @@ K8S_API_BASE=$(oc whoami --show-server) npm run start:dev # must set K8S_API_BAS
 
 ### Dashboard proxy configuration
 
-The dashboard must include a `proxyService` entry in `MODULE_FEDERATION_CONFIG` to route `/rhoai-brewet/api/*` requests to the BFF:
+The dashboard must include a `proxyService` entry in `MODULE_FEDERATION_CONFIG` to route `/brewet/api/*` requests to the BFF:
 
 ```json
 "proxyService": [{
-  "path": "/rhoai-brewet/api",
+  "path": "/brewet/api",
   "pathRewrite": "/api",
   "authorize": true,
   "tls": false,
@@ -184,4 +184,4 @@ Without this entry, the dashboard won't proxy BFF requests and the frontend will
 
 ### Standalone frontend development
 
-The webpack dev server (`config/webpack.dev.js`) also has a proxy entry for `/rhoai-brewet/api` that forwards to `localhost:3000`. This allows developing the frontend against the BFF without the full dashboard, but note that no user token will be forwarded in this mode.
+The webpack dev server (`config/webpack.dev.js`) also has a proxy entry for `/brewet/api` that forwards to `localhost:3000`. This allows developing the frontend against the BFF without the full dashboard, but note that no user token will be forwarded in this mode.

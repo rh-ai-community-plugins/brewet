@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Brewet** (`rhoai-brewet`) is a community plugin for the **Red Hat OpenShift AI (RHOAI) Dashboard** that provides S3 and PVC storage management. It reimplements the storage features of [ODH-TEC](https://github.com/rh-aiservices-bu/odh-tec) as a dashboard plugin with per-project container lifecycle management.
+**Brewet** (`brewet`) is a community plugin for the **Red Hat OpenShift AI (RHOAI) Dashboard** that provides S3 and PVC storage management. It reimplements the storage features of [ODH-TEC](https://github.com/rh-aiservices-bu/odh-tec) as a dashboard plugin with per-project container lifecycle management.
 
 The plugin uses Webpack 5 Module Federation to expose remote modules that the RHOAI dashboard loads at runtime.
 

@@ -44,21 +44,21 @@ For the full architecture and project plan, see [docs/project/PROJECT_PLAN.md](d
 Install directly from the OCI registry:
 
 ```bash
-helm install rhoai-brewet oci://quay.io/OWNER/rhoai-brewet-chart \
-  --version 0.4.0 \
-  --namespace rhoai-brewet \
+helm install brewet oci://quay.io/OWNER/brewet-chart \
+  --version 0.1.0 \
+  --namespace brewet \
   --create-namespace
 ```
 
 Or from a local checkout:
 
 ```bash
-helm install rhoai-brewet chart/ \
-  --namespace rhoai-brewet \
+helm install brewet chart/ \
+  --namespace brewet \
   --create-namespace
 ```
 
-This creates a Deployment and Service for the frontend (`rhoai-brewet`, serving `remoteEntry.js` via Nginx), the BFF (`brewet-bff`, streaming proxy on port 3000), and the storage backend image reference (used when creating per-project containers).
+This creates a Deployment and Service for the frontend (`brewet`, serving `remoteEntry.js` via Nginx), the BFF (`brewet-bff`, streaming proxy on port 3000), and the storage backend image reference (used when creating per-project containers).
 
 #### 2. Register with the RHOAI Dashboard
 
@@ -78,19 +78,19 @@ config.append({
     'authorize': False,
     'tls': False,
     'service': {
-      'name': 'rhoai-brewet',
-      'namespace': 'rhoai-brewet',
+      'name': 'brewet',
+      'namespace': 'brewet',
       'port': 8080
     }
   },
   'proxyService': [{
-    'path': '/rhoai-brewet/api',
+    'path': '/brewet/api',
     'pathRewrite': '/api',
     'authorize': True,
     'tls': False,
     'service': {
       'name': 'brewet-bff',
-      'namespace': 'rhoai-brewet',
+      'namespace': 'brewet',
       'port': 3000
     }
   }]

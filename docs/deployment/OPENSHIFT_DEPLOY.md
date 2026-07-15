@@ -17,23 +17,23 @@ This guide walks through deploying the plugin on an OpenShift cluster that alrea
 Install directly from the OCI registry — no need to clone the repo:
 
 ```bash
-helm install rhoai-brewet oci://quay.io/OWNER/rhoai-brewet-chart \
-  --version 0.4.0 \
-  --namespace rhoai-brewet \
+helm install brewet oci://quay.io/OWNER/brewet-chart \
+  --version 0.1.0 \
+  --namespace brewet \
   --create-namespace
 ```
 
 Or, from a local checkout of the repository:
 
 ```bash
-helm install rhoai-brewet chart/ \
-  --namespace rhoai-brewet \
+helm install brewet chart/ \
+  --namespace brewet \
   --create-namespace
 ```
 
 This creates:
 
-- A **Deployment** and **Service** (`rhoai-brewet`) serving the plugin's static assets (including `remoteEntry.js`) via Nginx on port 8080
+- A **Deployment** and **Service** (`brewet`) serving the plugin's static assets (including `remoteEntry.js`) via Nginx on port 8080
 - A **BFF Deployment** and **Service** (`brewet-bff`) running the plugin's backend service on port 3000 (enabled by default)
 
 ### Overriding Defaults
@@ -41,9 +41,9 @@ This creates:
 Pass `--set` flags to customize the installation:
 
 ```bash
-helm install rhoai-brewet oci://quay.io/OWNER/rhoai-brewet-chart \
-  --version 0.4.0 \
-  --namespace rhoai-brewet \
+helm install brewet oci://quay.io/OWNER/brewet-chart \
+  --version 0.1.0 \
+  --namespace brewet \
   --create-namespace \
   --set replicaCount=2
 ```
@@ -51,9 +51,9 @@ helm install rhoai-brewet oci://quay.io/OWNER/rhoai-brewet-chart \
 To deploy the frontend only (no BFF):
 
 ```bash
-helm install rhoai-brewet oci://quay.io/OWNER/rhoai-brewet-chart \
-  --version 0.4.0 \
-  --namespace rhoai-brewet \
+helm install brewet oci://quay.io/OWNER/brewet-chart \
+  --version 0.1.0 \
+  --namespace brewet \
   --create-namespace \
   --set bff.enabled=false
 ```
@@ -84,8 +84,8 @@ config.append({
     'authorize': False,
     'tls': False,
     'service': {
-      'name': 'rhoai-brewet',
-      'namespace': 'rhoai-brewet',
+      'name': 'brewet',
+      'namespace': 'brewet',
       'port': 8080
     }
   }
@@ -116,19 +116,19 @@ config.append({
     'authorize': False,
     'tls': False,
     'service': {
-      'name': 'rhoai-brewet',
-      'namespace': 'rhoai-brewet',
+      'name': 'brewet',
+      'namespace': 'brewet',
       'port': 8080
     }
   },
   'proxyService': [{
-    'path': '/rhoai-brewet/api',
+    'path': '/brewet/api',
     'pathRewrite': '/api',
     'authorize': True,
     'tls': False,
     'service': {
       'name': 'brewet-bff',
-      'namespace': 'rhoai-brewet',
+      'namespace': 'brewet',
       'port': 3000
     }
   }]
@@ -141,7 +141,7 @@ oc set env deployment/rhods-dashboard \
   "MODULE_FEDERATION_CONFIG=$(cat /tmp/mf-config-extended.json)"
 ```
 
-The `proxyService` entry tells the dashboard to forward requests from `/rhoai-brewet/api/*` to the BFF service, rewriting the path to `/api/*` and forwarding the user's Bearer token (`authorize: true`).
+The `proxyService` entry tells the dashboard to forward requests from `/brewet/api/*` to the BFF service, rewriting the path to `/api/*` and forwarding the user's Bearer token (`authorize: true`).
 
 ### Why `MODULE_FEDERATION_CONFIG` Instead of the ConfigMap?
 
@@ -175,10 +175,10 @@ for entry in data:
 Verify the plugin pods are running:
 
 ```bash
-oc get pods -n rhoai-brewet
+oc get pods -n brewet
 ```
 
-You should see pods for `rhoai-brewet` (and `brewet-bff` if BFF is enabled), all in `Running` status.
+You should see pods for `brewet` (and `brewet-bff` if BFF is enabled), all in `Running` status.
 
 ### Check the dashboard
 
@@ -211,8 +211,8 @@ oc set env deployment/rhods-dashboard \
 ### 2. Uninstall the Helm release
 
 ```bash
-helm uninstall rhoai-brewet -n rhoai-brewet
-oc delete namespace rhoai-brewet   # optional: remove the namespace entirely
+helm uninstall brewet -n brewet
+oc delete namespace brewet   # optional: remove the namespace entirely
 ```
 
 ---
@@ -223,7 +223,7 @@ Key values in `chart/values.yaml`:
 
 | Parameter | Default | Description |
 |---|---|---|
-| `image.repository` | `quay.io/OWNER/rhoai-brewet` | Frontend container image |
+| `image.repository` | `quay.io/OWNER/brewet` | Frontend container image |
 | `image.tag` | `""` (defaults to appVersion) | Frontend image tag |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy |
 | `replicaCount` | `1` | Frontend replicas |

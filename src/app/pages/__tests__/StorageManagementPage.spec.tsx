@@ -73,6 +73,9 @@ describe('StorageManagementPage', () => {
 
   it('should render the page title', async () => {
     render(<StorageManagementPage />);
+    await waitFor(() => {
+      expect(screen.getByText('bucket-1')).toBeInTheDocument();
+    });
     expect(screen.getByText('Storage Management')).toBeInTheDocument();
   });
 
@@ -209,6 +212,8 @@ describe('StorageManagementPage', () => {
     });
 
     await userEvent.click(screen.getByLabelText('Refresh'));
-    expect(mockStorageService.refreshLocations).toHaveBeenCalledWith('test-ns');
+    await waitFor(() => {
+      expect(mockStorageService.refreshLocations).toHaveBeenCalledWith('test-ns');
+    });
   });
 });

@@ -1,14 +1,14 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "rhoai-brewet.name" -}}
+{{- define "brewet.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Create a default fully qualified app name.
 */}}
-{{- define "rhoai-brewet.fullname" -}}
+{{- define "brewet.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -24,16 +24,16 @@ Create a default fully qualified app name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "rhoai-brewet.chart" -}}
+{{- define "brewet.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "rhoai-brewet.labels" -}}
-helm.sh/chart: {{ include "rhoai-brewet.chart" . }}
-{{ include "rhoai-brewet.selectorLabels" . }}
+{{- define "brewet.labels" -}}
+helm.sh/chart: {{ include "brewet.chart" . }}
+{{ include "brewet.selectorLabels" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
@@ -41,17 +41,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "rhoai-brewet.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "rhoai-brewet.name" . }}
+{{- define "brewet.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "brewet.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "rhoai-brewet.serviceAccountName" -}}
+{{- define "brewet.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "rhoai-brewet.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "brewet.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

@@ -54,7 +54,7 @@ podman run --rm --network=host \
       "service": { "name": "placeholder", "namespace": "opendatahub", "port": 8080 }
     },
     "proxyService": [{
-      "path": "/rhoai-brewet/api",
+      "path": "/brewet/api",
       "pathRewrite": "/api",
       "authorize": true,
       "tls": false,
@@ -80,7 +80,7 @@ K8S_API_BASE=$(oc whoami --show-server) npm run start:dev
 
 You should see `BFF listening on port 3000`. The `K8S_API_BASE` env var tells the BFF where to find the Kubernetes API server. Without it, the BFF cannot make any cluster calls and all requests will fail with a 502 error.
 
-> **Note:** The `proxyService` entry in the `MODULE_FEDERATION_CONFIG` (Step 2) is what tells the dashboard to forward `/rhoai-brewet/api/*` requests to the BFF at `localhost:3000`. If you omit the `proxyService` block, those requests will hit the dashboard's SPA fallback and return HTML instead of JSON.
+> **Note:** The `proxyService` entry in the `MODULE_FEDERATION_CONFIG` (Step 2) is what tells the dashboard to forward `/brewet/api/*` requests to the BFF at `localhost:3000`. If you omit the `proxyService` block, those requests will hit the dashboard's SPA fallback and return HTML instead of JSON.
 
 ### Step 4: Start the plugin dev server
 
@@ -181,7 +181,7 @@ oc auth can-i create pods --all-namespaces   # Should return "yes" for cluster-a
 Edit `env.local` in the odh-dashboard root and add (or update) the `MODULE_FEDERATION_CONFIG` variable with your plugin's entry:
 
 ```bash
-MODULE_FEDERATION_CONFIG=[{"name":"brewet","backend":{"remoteEntry":"/remoteEntry.js","tls":false,"localService":{"host":"localhost","port":9500},"service":{"name":"placeholder","namespace":"opendatahub","port":8080}},"proxyService":[{"path":"/rhoai-brewet/api","pathRewrite":"/api","authorize":true,"tls":false,"localService":{"host":"localhost","port":3000},"service":{"name":"placeholder","namespace":"opendatahub","port":3000}}]}]
+MODULE_FEDERATION_CONFIG=[{"name":"brewet","backend":{"remoteEntry":"/remoteEntry.js","tls":false,"localService":{"host":"localhost","port":9500},"service":{"name":"placeholder","namespace":"opendatahub","port":8080}},"proxyService":[{"path":"/brewet/api","pathRewrite":"/api","authorize":true,"tls":false,"localService":{"host":"localhost","port":3000},"service":{"name":"placeholder","namespace":"opendatahub","port":3000}}]}]
 ```
 
 Or in readable JSON form, the entry looks like:
@@ -196,7 +196,7 @@ Or in readable JSON form, the entry looks like:
     "service": { "name": "placeholder", "namespace": "opendatahub", "port": 8080 }
   },
   "proxyService": [{
-    "path": "/rhoai-brewet/api",
+    "path": "/brewet/api",
     "pathRewrite": "/api",
     "authorize": true,
     "tls": false,
@@ -234,7 +234,7 @@ K8S_API_BASE=$(oc whoami --show-server) npm run start:dev
 
 You should see `BFF listening on port 3000`. The `K8S_API_BASE` env var tells the BFF where to find the Kubernetes API server (required for local dev since the BFF is not running in-cluster).
 
-> **Note:** The `proxyService` entry in `env.local` (Step 6) tells the dashboard to forward `/rhoai-brewet/api/*` requests to the BFF. Without it, those requests return HTML instead of JSON.
+> **Note:** The `proxyService` entry in `env.local` (Step 6) tells the dashboard to forward `/brewet/api/*` requests to the BFF. Without it, those requests return HTML instead of JSON.
 
 ### Step 9: Start the plugin dev server
 
@@ -271,7 +271,7 @@ If your plugin has its own backend service (BFF pattern), add a `proxyService` a
 
 | Field | Description |
 |---|---|
-| `proxyService[].path` | URL path prefix the dashboard intercepts (e.g. `/rhoai-brewet/api`). |
+| `proxyService[].path` | URL path prefix the dashboard intercepts (e.g. `/brewet/api`). |
 | `proxyService[].pathRewrite` | Replacement prefix forwarded to the BFF (e.g. `/api`). |
 | `proxyService[].authorize` | When `true`, the dashboard forwards the user's Bearer token as `Authorization` header. |
 | `proxyService[].tls` | Whether the BFF uses HTTPS. Set to `false` for local development. |
@@ -338,7 +338,7 @@ This project defaults to port **9500**. The port only matters if you run multipl
 
 ### BFF: "Failed to load namespace summary" with HTML parse error
 
-The frontend receives HTML instead of JSON. This means the request to `/rhoai-brewet/api/*` is not being proxied to the BFF and is hitting the SPA fallback instead.
+The frontend receives HTML instead of JSON. This means the request to `/brewet/api/*` is not being proxied to the BFF and is hitting the SPA fallback instead.
 
 - Ensure your `MODULE_FEDERATION_CONFIG` includes the `proxyService` block (see the config examples above)
 - Restart the dashboard after changing `MODULE_FEDERATION_CONFIG`

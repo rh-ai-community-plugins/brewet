@@ -37,7 +37,7 @@ EOF
 }
 
 # Target configurations
-frontend_image_name="rhoai-brewet"
+frontend_image_name="brewet"
 frontend_containerfile="Containerfile"
 frontend_context="."
 

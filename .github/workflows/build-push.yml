@@ -26,7 +26,7 @@ jobs:
       - name: Build and push image
         uses: redhat-actions/buildah-build@v2
         with:
-          image: rhoai-brewet
+          image: brewet
           tags: ${{ inputs.version }}
           containerfiles: |
             ./Containerfile
@@ -34,7 +34,7 @@ jobs:
       - name: Push to Quay.io
         uses: redhat-actions/push-to-registry@v2
         with:
-          image: rhoai-brewet
+          image: brewet
           tags: ${{ inputs.version }}
           registry: quay.io/rh-ai-community-plugins
 
