@@ -105,8 +105,32 @@ const StorageManagementContent: React.FC = () => {
   );
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    let cancelled = false;
+    (async () => {
+      if (!selectedProject) return;
+      try {
+        setLoading(true);
+        setError(null);
+        const [locs, buckets] = await Promise.all([
+          storageService.getLocations(selectedProject),
+          storageService.getBucketsList(selectedProject),
+        ]);
+        if (!cancelled) {
+          setLocations(locs);
+          setBucketsList(buckets);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load storage locations.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedProject]);
 
   const s3BucketNames = useMemo(
     () => locations.filter((l) => l.type === 's3').map((l) => l.name),

@@ -16,9 +16,10 @@ import type {
 
 class StorageService {
   private locationsCache: StorageLocation[] | null = null;
+  private cacheNamespace: string | null = null;
 
   async getLocations(namespace: string, signal?: AbortSignal): Promise<StorageLocation[]> {
-    if (this.locationsCache) {
+    if (this.locationsCache && this.cacheNamespace === namespace) {
       return this.locationsCache;
     }
 
@@ -55,11 +56,13 @@ class StorageService {
     }
 
     this.locationsCache = locations;
+    this.cacheNamespace = namespace;
     return locations;
   }
 
   async refreshLocations(namespace: string, signal?: AbortSignal): Promise<StorageLocation[]> {
     this.locationsCache = null;
+    this.cacheNamespace = null;
     return this.getLocations(namespace, signal);
   }
 
@@ -70,11 +73,13 @@ class StorageService {
   async createBucket(namespace: string, bucketName: string, signal?: AbortSignal): Promise<void> {
     await apiClient.post(namespace, '/api/buckets', { bucketName }, signal);
     this.locationsCache = null;
+    this.cacheNamespace = null;
   }
 
   async deleteBucket(namespace: string, bucketName: string, signal?: AbortSignal): Promise<void> {
     await apiClient.delete(namespace, `/api/buckets/${encodeURIComponent(bucketName)}`, signal);
     this.locationsCache = null;
+    this.cacheNamespace = null;
   }
 
   async listFiles(
