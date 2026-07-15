@@ -13,10 +13,13 @@
     "validate": "npm run typecheck && npm run lint && npm test"
   },
   "dependencies": {
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "express-rate-limit": "^8.5.2",
+    "http-proxy": "^1.18.1"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
+    "@types/http-proxy": "^1.17.17",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",

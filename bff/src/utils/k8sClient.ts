@@ -1,6 +1,13 @@
 import https from 'https';
 import fs from 'fs';
 
+export class K8sHttpError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'K8sHttpError';
+  }
+}
+
 const CA_PATH = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt';
 let cachedCa: Buffer | undefined;
 try {
@@ -59,7 +66,7 @@ export function k8sRequest<T = unknown>(token: string, path: string): Promise<T>
           }
         } else {
           reject(
-            new Error(`K8s API returned ${res.statusCode}: ${data}`),
+            new K8sHttpError(res.statusCode || 500, `K8s API returned ${res.statusCode}: ${data}`),
           );
         }
       });
