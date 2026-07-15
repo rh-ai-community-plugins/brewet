@@ -25,6 +25,7 @@ import { CloudIcon, FolderIcon } from '@patternfly/react-icons';
 import { storageService } from '~/app/services/storageService';
 import { formatBytes } from '~/app/utils/format';
 import { transferEmitter } from '~/app/utils/emitter';
+import { buildTransferPath } from '~/app/utils/transferUtils';
 import type {
   StorageLocation,
   FileInfo,
@@ -46,11 +47,6 @@ interface TransferModalProps {
   onComplete: () => void;
 }
 
-function buildTransferPath(location: StorageLocation, path: string): string {
-  const typeStr = location.type === 's3' ? 's3' : 'local';
-  const cleanPath = path.replace(/\/$/, '');
-  return cleanPath ? `${typeStr}:${location.id}/${cleanPath}` : `${typeStr}:${location.id}`;
-}
 
 const TransferModal: React.FC<TransferModalProps> = ({
   namespace,
@@ -272,7 +268,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
     } catch {
       // SSE will report final status
     } finally {
-      setIsCancelling(false);
+      if (mountedRef.current) setIsCancelling(false);
     }
   }, [namespace, jobId]);
 

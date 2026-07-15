@@ -63,6 +63,7 @@ import DocumentRenderer, { isPreviewable, getFileType } from './DocumentRenderer
 import HuggingFaceImportModal from './HuggingFaceImportModal';
 import TransferModal from './TransferModal';
 import { transferEmitter } from '~/app/utils/emitter';
+import { buildTransferPath } from '~/app/utils/transferUtils';
 import type { StorageLocation, FileInfo, FileListResponse } from '~/app/types/storage';
 import './StorageBrowser.css';
 
@@ -327,8 +328,7 @@ const StorageBrowser: React.FC = () => {
   useEffect(() => {
     const handler = ({ destination }: { destination: string }) => {
       if (!selectedLocation) return;
-      const typeStr = selectedLocation.type === 's3' ? 's3' : 'local';
-      const currentDest = `${typeStr}:${selectedLocation.id}`;
+      const currentDest = buildTransferPath(selectedLocation, '');
       if (destination === currentDest || destination.startsWith(`${currentDest}/`)) {
         loadFilesRef.current?.();
       }
@@ -356,6 +356,11 @@ const StorageBrowser: React.FC = () => {
     regularFiles.sort((a, b) => a.name.localeCompare(b.name));
     return [...dirs, ...regularFiles];
   }, [displayFiles]);
+
+  const selectedFileInfos = useMemo(
+    () => files.filter((f) => selectedFiles.has(f.name)),
+    [files, selectedFiles],
+  );
 
   // Navigation
   const navigateToLocation = useCallback(
@@ -1298,7 +1303,7 @@ const StorageBrowser: React.FC = () => {
           namespace={selectedProject}
           sourceLocation={selectedLocation}
           currentPath={currentPath}
-          selectedFiles={files.filter((f) => selectedFiles.has(f.name))}
+          selectedFiles={selectedFileInfos}
           locations={locations}
           onClose={() => setIsTransferOpen(false)}
           onComplete={() => {
