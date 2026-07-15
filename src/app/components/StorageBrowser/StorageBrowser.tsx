@@ -938,6 +938,7 @@ const StorageBrowser: React.FC = () => {
                       select={{
                         rowIndex,
                         onSelect: (_event, isSelected) => {
+                          _event.stopPropagation();
                           setSelectedFiles((prev) => {
                             const next = new Set(prev);
                             if (isSelected) {
