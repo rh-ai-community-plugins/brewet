@@ -35,4 +35,10 @@ describe('formatBytes', () => {
     expect(formatBytes(1024)).toBe('1 KB');
     expect(formatBytes(1048576)).toBe('1 MB');
   });
+
+  it('treats fractional byte values as bytes (no undefined unit)', () => {
+    expect(formatBytes(0.5)).toBe('0.5 B');
+    expect(formatBytes(0.1)).toBe('0.1 B');
+    expect(formatBytes(0.999)).toBe('0.999 B');
+  });
 });
