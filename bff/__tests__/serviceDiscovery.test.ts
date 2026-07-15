@@ -56,6 +56,43 @@ describe('resolveStorageBackend', () => {
     expect(mockedK8sRequest).toHaveBeenCalledTimes(1);
   });
 
+  it('deduplicates concurrent requests for the same namespace', async () => {
+    mockedK8sRequest.mockResolvedValue({ metadata: { name: SERVICE_NAME } });
+    const [url1, url2, url3] = await Promise.all([
+      resolveStorageBackend('my-project'),
+      resolveStorageBackend('my-project'),
+      resolveStorageBackend('my-project'),
+    ]);
+    expect(mockedK8sRequest).toHaveBeenCalledTimes(1);
+    expect(url1).toBe(url2);
+    expect(url2).toBe(url3);
+  });
+
+  it('does not deduplicate across different namespaces', async () => {
+    mockedK8sRequest.mockResolvedValue({ metadata: { name: SERVICE_NAME } });
+    await Promise.all([
+      resolveStorageBackend('ns-a'),
+      resolveStorageBackend('ns-b'),
+    ]);
+    expect(mockedK8sRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries after a deduplicated request fails', async () => {
+    mockedK8sRequest.mockRejectedValueOnce(new Error('temporary failure'));
+    const results = await Promise.allSettled([
+      resolveStorageBackend('my-project'),
+      resolveStorageBackend('my-project'),
+    ]);
+    expect(results[0].status).toBe('rejected');
+    expect(results[1].status).toBe('rejected');
+    expect(mockedK8sRequest).toHaveBeenCalledTimes(1);
+
+    mockedK8sRequest.mockResolvedValueOnce({ metadata: { name: SERVICE_NAME } });
+    const url = await resolveStorageBackend('my-project');
+    expect(url).toContain('my-project');
+    expect(mockedK8sRequest).toHaveBeenCalledTimes(2);
+  });
+
   it('refreshes cache after TTL expires', async () => {
     jest.useFakeTimers();
     mockedK8sRequest.mockResolvedValue({ metadata: { name: SERVICE_NAME } });
