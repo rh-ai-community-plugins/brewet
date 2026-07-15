@@ -1,4 +1,4 @@
-import { buildDeployment, buildService, buildNetworkPolicy, defaultMountPath } from '../k8sResources';
+import { buildDeployment, buildService, buildNetworkPolicy, defaultMountPath, validateMountPath } from '../k8sResources';
 import { ContainerConfig } from '~/app/types/k8s';
 
 describe('k8sResources', () => {
@@ -16,6 +16,20 @@ describe('k8sResources', () => {
       expect(container.envFrom).toEqual([]);
       expect(container.volumeMounts).toEqual([]);
       expect(container.env).toEqual([]);
+    });
+
+    it('should include securityContext for OpenShift restricted SCC', () => {
+      const config: ContainerConfig = { dataConnection: null, pvcMounts: [] };
+      const deployment = buildDeployment('test-ns', config);
+
+      expect(deployment.spec.template.spec.securityContext).toEqual({ runAsNonRoot: true });
+
+      const container = deployment.spec.template.spec.containers[0];
+      expect(container.securityContext).toEqual({
+        allowPrivilegeEscalation: false,
+        capabilities: { drop: ['ALL'] },
+        seccompProfile: { type: 'RuntimeDefault' },
+      });
     });
 
     it('should include envFrom when data connection is provided', () => {
@@ -92,6 +106,42 @@ describe('k8sResources', () => {
   describe('defaultMountPath', () => {
     it('should return the default mount path for a PVC', () => {
       expect(defaultMountPath('my-pvc')).toBe('/opt/app-root/src/my-pvc');
+    });
+  });
+
+  describe('validateMountPath', () => {
+    it('should accept a valid absolute path', () => {
+      expect(validateMountPath('/mnt/data', [])).toBeNull();
+    });
+
+    it('should reject an empty path', () => {
+      expect(validateMountPath('', [])).toBe('Mount path is required');
+    });
+
+    it('should reject a relative path', () => {
+      expect(validateMountPath('mnt/data', [])).toBe('Must be an absolute path starting with /');
+    });
+
+    it('should reject path traversal', () => {
+      expect(validateMountPath('/mnt/../etc', [])).toBe('Path traversal (..) is not allowed');
+    });
+
+    it('should reject dangerous system paths', () => {
+      expect(validateMountPath('/', [])).toBe('Cannot mount to a system directory');
+      expect(validateMountPath('/etc', [])).toBe('Cannot mount to a system directory');
+      expect(validateMountPath('/proc', [])).toBe('Cannot mount to a system directory');
+    });
+
+    it('should reject paths with invalid characters', () => {
+      expect(validateMountPath('/mnt/da ta', [])).toBe('Path contains invalid characters');
+    });
+
+    it('should reject duplicate paths', () => {
+      expect(validateMountPath('/mnt/data', ['/mnt/data'])).toBe('Duplicate mount path');
+    });
+
+    it('should accept unique valid paths', () => {
+      expect(validateMountPath('/mnt/models', ['/mnt/data'])).toBeNull();
     });
   });
 });

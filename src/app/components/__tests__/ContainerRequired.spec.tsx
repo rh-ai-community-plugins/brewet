@@ -97,17 +97,21 @@ describe('ContainerRequired', () => {
     expect(screen.getByText('content')).toBeInTheDocument();
   });
 
-  it('should render children when container is starting', () => {
+  it('should show starting message when container is starting', () => {
     mockContext({ containerStatus: 'starting' });
     mockContainer();
     render(<ContainerRequired><div>content</div></ContainerRequired>);
-    expect(screen.getByText('content')).toBeInTheDocument();
+    expect(screen.getByText('Container starting')).toBeInTheDocument();
+    expect(screen.queryByText('content')).not.toBeInTheDocument();
   });
 
-  it('should render children when container is in error state', () => {
+  it('should show error state with stop button when container has error', () => {
+    const stopContainer = jest.fn();
     mockContext({ containerStatus: 'error' });
-    mockContainer();
+    mockContainer({ stopContainer });
     render(<ContainerRequired><div>content</div></ContainerRequired>);
-    expect(screen.getByText('content')).toBeInTheDocument();
+    expect(screen.getByText('Container error')).toBeInTheDocument();
+    expect(screen.getByText('Stop Container')).toBeInTheDocument();
+    expect(screen.queryByText('content')).not.toBeInTheDocument();
   });
 });

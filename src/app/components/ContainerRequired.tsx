@@ -5,8 +5,9 @@ import {
   EmptyStateFooter,
   EmptyStateActions,
   Button,
+  Spinner,
 } from '@patternfly/react-core';
-import { CubesIcon } from '@patternfly/react-icons';
+import { CubesIcon, ExclamationCircleIcon } from '@patternfly/react-icons';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { useBrewetContainer } from '~/app/hooks/useBrewetContainer';
 import { ContainerWizard } from '~/app/components/ContainerWizard';
@@ -17,7 +18,7 @@ interface ContainerRequiredProps {
 
 export const ContainerRequired: React.FC<ContainerRequiredProps> = ({ children }) => {
   const { selectedProject, containerStatus } = useBrewetContext();
-  const { startContainer, isActioning } = useBrewetContainer();
+  const { startContainer, stopContainer, isActioning, refreshContainerStatus } = useBrewetContainer();
   const [isWizardOpen, setIsWizardOpen] = useState(false);
 
   if (!selectedProject) {
@@ -67,6 +68,42 @@ export const ContainerRequired: React.FC<ContainerRequiredProps> = ({ children }
               isDisabled={isActioning}
             >
               Start Container
+            </Button>
+          </EmptyStateActions>
+        </EmptyStateFooter>
+      </EmptyState>
+    );
+  }
+
+  if (containerStatus === 'starting') {
+    return (
+      <EmptyState headingLevel="h2" titleText="Container starting" icon={CubesIcon}>
+        <EmptyStateBody>
+          <Spinner size="lg" aria-label="Container starting" />
+          {' '}The storage container is starting up. This may take a moment.
+        </EmptyStateBody>
+      </EmptyState>
+    );
+  }
+
+  if (containerStatus === 'error') {
+    return (
+      <EmptyState headingLevel="h2" titleText="Container error" icon={ExclamationCircleIcon}>
+        <EmptyStateBody>
+          The storage container encountered an error. Try stopping and restarting it.
+        </EmptyStateBody>
+        <EmptyStateFooter>
+          <EmptyStateActions>
+            <Button
+              variant="primary"
+              onClick={stopContainer}
+              isLoading={isActioning}
+              isDisabled={isActioning}
+            >
+              Stop Container
+            </Button>
+            <Button variant="link" onClick={refreshContainerStatus}>
+              Refresh Status
             </Button>
           </EmptyStateActions>
         </EmptyStateFooter>

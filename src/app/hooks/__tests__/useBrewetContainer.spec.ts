@@ -158,4 +158,78 @@ describe('useBrewetContainer', () => {
     );
     expect(postCalls).toHaveLength(3);
   });
+
+  it('should rollback on partial create failure', async () => {
+    localStorage.setItem('brewet.selected-project', 'test-ns');
+
+    let callCount = 0;
+    global.fetch = jest.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      if (!init?.method || init.method === 'GET') {
+        return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+      }
+      if (init.method === 'POST') {
+        callCount++;
+        if (callCount === 2) {
+          return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('error') });
+        }
+        return Promise.resolve({ ok: true, status: 201, json: () => Promise.resolve({}) });
+      }
+      return Promise.resolve({ ok: true, status: 200 });
+    });
+
+    const { result } = renderHook(() => useBrewetContainer(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.containerStatus).toBe('none');
+    });
+
+    let results: Array<{ resource: string; success: boolean }> = [];
+    await act(async () => {
+      results = await result.current.createContainer({
+        dataConnection: null,
+        pvcMounts: [],
+      });
+    });
+
+    const failedResource = results.find((r) => !r.success);
+    expect(failedResource).toBeDefined();
+
+    const deleteCalls = (global.fetch as jest.Mock).mock.calls.filter(
+      (call: [string, RequestInit]) => call[1]?.method === 'DELETE',
+    );
+    expect(deleteCalls.length).toBeGreaterThan(0);
+  });
+
+  it('should use PATCH for update', async () => {
+    localStorage.setItem('brewet.selected-project', 'test-ns');
+
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockDeployment),
+      })
+      .mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve({}) });
+
+    const { result } = renderHook(() => useBrewetContainer(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.containerStatus).toBe('running');
+    });
+
+    await act(async () => {
+      await result.current.updateContainer({
+        dataConnection: null,
+        pvcMounts: [],
+      });
+    });
+
+    const patchCalls = (global.fetch as jest.Mock).mock.calls.filter(
+      (call: [string, RequestInit]) => call[1]?.method === 'PATCH',
+    );
+    expect(patchCalls).toHaveLength(1);
+    expect(patchCalls[0][1].headers).toEqual({
+      'Content-Type': 'application/strategic-merge-patch+json',
+    });
+  });
 });

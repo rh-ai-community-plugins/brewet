@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   Modal,
   ModalBody,
@@ -11,6 +11,7 @@ import { useDataConnections } from '~/app/hooks/useDataConnections';
 import { usePVCs } from '~/app/hooks/usePVCs';
 import { useBrewetContainer } from '~/app/hooks/useBrewetContainer';
 import { DataConnection, PvcMount, ContainerConfig } from '~/app/types/k8s';
+import { validateMountPath } from '~/app/utils/k8sResources';
 import { DataConnectionStep } from './DataConnectionStep';
 import { PvcSelectionStep } from './PvcSelectionStep';
 import { ReviewStep } from './ReviewStep';
@@ -37,8 +38,18 @@ export const ContainerWizard: React.FC<ContainerWizardProps> = ({
 
   const hasSelection = selectedDc !== null || pvcMounts.length > 0;
 
+  const hasMountPathErrors = useMemo(() => {
+    if (pvcMounts.length === 0) return false;
+    return pvcMounts.some((mount, i) => {
+      const otherPaths = pvcMounts.filter((_, j) => j !== i).map((m) => m.mountPath);
+      return validateMountPath(mount.mountPath, otherPaths) !== null;
+    });
+  }, [pvcMounts]);
+
+  const canSave = hasSelection && !hasMountPathErrors && !isActioning;
+
   const handleSave = useCallback(async () => {
-    if (!selectedProject) return;
+    if (!selectedProject || !canSave) return;
     setCreateError(null);
 
     const config: ContainerConfig = {
@@ -57,7 +68,7 @@ export const ContainerWizard: React.FC<ContainerWizardProps> = ({
     }
 
     onClose();
-  }, [selectedProject, selectedDc, pvcMounts, isEditMode, createContainer, updateContainer, onClose]);
+  }, [selectedProject, canSave, selectedDc, pvcMounts, isEditMode, createContainer, updateContainer, onClose]);
 
   const handleClose = useCallback(() => {
     setSelectedDc(null);
@@ -113,7 +124,7 @@ export const ContainerWizard: React.FC<ContainerWizardProps> = ({
             name="Review"
             id="review"
             footer={{
-              isNextDisabled: !hasSelection || isActioning,
+              isNextDisabled: !canSave,
               nextButtonText: isEditMode ? 'Save' : 'Create',
             }}
           >

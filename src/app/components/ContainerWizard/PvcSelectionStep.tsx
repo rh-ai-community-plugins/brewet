@@ -1,6 +1,8 @@
 import React from 'react';
 import {
   Alert,
+  HelperText,
+  HelperTextItem,
   Spinner,
   Content,
   Stack,
@@ -9,7 +11,7 @@ import {
 } from '@patternfly/react-core';
 import { Table, Thead, Tr, Th, Tbody, Td } from '@patternfly/react-table';
 import { PersistentVolumeClaim, PvcMount } from '~/app/types/k8s';
-import { defaultMountPath } from '~/app/utils/k8sResources';
+import { defaultMountPath, validateMountPath } from '~/app/utils/k8sResources';
 
 interface PvcSelectionStepProps {
   pvcs: PersistentVolumeClaim[];
@@ -41,6 +43,9 @@ export const PvcSelectionStep: React.FC<PvcSelectionStepProps> = ({
     const mount = selectedMounts.find((m) => m.pvc.metadata.name === pvc.metadata.name);
     return mount?.mountPath ?? defaultMountPath(pvc.metadata.name);
   };
+
+  const getOtherMountPaths = (pvcName: string) =>
+    selectedMounts.filter((m) => m.pvc.metadata.name !== pvcName).map((m) => m.mountPath);
 
   const togglePvc = (pvc: PersistentVolumeClaim) => {
     if (isSelected(pvc)) {
@@ -84,13 +89,17 @@ export const PvcSelectionStep: React.FC<PvcSelectionStepProps> = ({
               </Tr>
             </Thead>
             <Tbody>
-              {pvcs.map((pvc) => {
+              {pvcs.map((pvc, index) => {
                 const selected = isSelected(pvc);
+                const mountPath = getMountPath(pvc);
+                const pathError = selected
+                  ? validateMountPath(mountPath, getOtherMountPaths(pvc.metadata.name))
+                  : null;
                 return (
                   <Tr key={pvc.metadata.name}>
                     <Td
                       select={{
-                        rowIndex: 0,
+                        rowIndex: index,
                         onSelect: () => togglePvc(pvc),
                         isSelected: selected,
                       }}
@@ -102,11 +111,19 @@ export const PvcSelectionStep: React.FC<PvcSelectionStepProps> = ({
                     <Td dataLabel="Status">{pvc.status?.phase ?? '-'}</Td>
                     <Td dataLabel="Mount Path">
                       {selected ? (
-                        <TextInput
-                          aria-label={`Mount path for ${pvc.metadata.name}`}
-                          value={getMountPath(pvc)}
-                          onChange={(_e, val) => updateMountPath(pvc.metadata.name, val)}
-                        />
+                        <>
+                          <TextInput
+                            aria-label={`Mount path for ${pvc.metadata.name}`}
+                            value={mountPath}
+                            onChange={(_e, val) => updateMountPath(pvc.metadata.name, val)}
+                            validated={pathError ? 'error' : 'default'}
+                          />
+                          {pathError && (
+                            <HelperText>
+                              <HelperTextItem variant="error">{pathError}</HelperTextItem>
+                            </HelperText>
+                          )}
+                        </>
                       ) : (
                         '-'
                       )}

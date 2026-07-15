@@ -1,10 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { ContainerConfig } from '~/app/types/k8s';
-import { buildDeployment, buildService, buildNetworkPolicy } from '~/app/utils/k8sResources';
+import { buildDeployment, buildService, buildNetworkPolicy, DEPLOYMENT_NAME } from '~/app/utils/k8sResources';
 
-const DEPLOYMENT_NAME = 'brewet-storage-backend';
-const BFF_NAMESPACE = 'brewet';
+const BFF_NAMESPACE = process.env.BFF_NAMESPACE ?? 'brewet';
 
 interface CreateResourceResult {
   resource: string;
@@ -31,6 +30,11 @@ export function useBrewetContainer() {
     };
   }, []);
 
+  const scheduleRefresh = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(refreshContainerStatus, 1000);
+  }, [refreshContainerStatus]);
+
   const scaleReplicas = useCallback(
     async (replicas: number) => {
       if (!selectedProject) return;
@@ -56,7 +60,7 @@ export function useBrewetContainer() {
           },
         );
         if (!res.ok) throw new Error(`Scale request failed: ${res.status}`);
-        timerRef.current = setTimeout(refreshContainerStatus, 1000);
+        scheduleRefresh();
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return;
         console.error('Scale operation failed:', err);
@@ -65,7 +69,7 @@ export function useBrewetContainer() {
         setIsActioning(false);
       }
     },
-    [selectedProject, refreshContainerStatus],
+    [selectedProject, refreshContainerStatus, scheduleRefresh],
   );
 
   const startContainer = useCallback(() => scaleReplicas(1), [scaleReplicas]);
@@ -96,7 +100,7 @@ export function useBrewetContainer() {
           throw new Error(`Delete failed: ${res.status}`);
         }
       }
-      timerRef.current = setTimeout(refreshContainerStatus, 1000);
+      scheduleRefresh();
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
       console.error('Delete operation failed:', err);
@@ -104,7 +108,7 @@ export function useBrewetContainer() {
     } finally {
       setIsActioning(false);
     }
-  }, [selectedProject, refreshContainerStatus]);
+  }, [selectedProject, refreshContainerStatus, scheduleRefresh]);
 
   const createContainer = useCallback(
     async (config: ContainerConfig): Promise<CreateResourceResult[]> => {
@@ -117,28 +121,32 @@ export function useBrewetContainer() {
 
       const ns = encodeURIComponent(selectedProject);
       const results: CreateResourceResult[] = [];
+      const createdUrls: string[] = [];
 
       const resourceSpecs = [
         {
           name: 'Deployment',
-          url: `/api/k8s/apis/apps/v1/namespaces/${ns}/deployments`,
+          createUrl: `/api/k8s/apis/apps/v1/namespaces/${ns}/deployments`,
+          deleteUrl: `/api/k8s/apis/apps/v1/namespaces/${ns}/deployments/${DEPLOYMENT_NAME}`,
           body: buildDeployment(selectedProject, config),
         },
         {
           name: 'Service',
-          url: `/api/k8s/api/v1/namespaces/${ns}/services`,
+          createUrl: `/api/k8s/api/v1/namespaces/${ns}/services`,
+          deleteUrl: `/api/k8s/api/v1/namespaces/${ns}/services/${DEPLOYMENT_NAME}`,
           body: buildService(selectedProject),
         },
         {
           name: 'NetworkPolicy',
-          url: `/api/k8s/apis/networking.k8s.io/v1/namespaces/${ns}/networkpolicies`,
+          createUrl: `/api/k8s/apis/networking.k8s.io/v1/namespaces/${ns}/networkpolicies`,
+          deleteUrl: `/api/k8s/apis/networking.k8s.io/v1/namespaces/${ns}/networkpolicies/${DEPLOYMENT_NAME}-ingress`,
           body: buildNetworkPolicy(selectedProject, BFF_NAMESPACE),
         },
       ];
 
       try {
-        for (const { name, url, body } of resourceSpecs) {
-          const res = await fetch(url, {
+        for (const { name, createUrl, deleteUrl, body } of resourceSpecs) {
+          const res = await fetch(createUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -147,14 +155,25 @@ export function useBrewetContainer() {
           if (!res.ok) {
             const text = await res.text().catch(() => '');
             results.push({ resource: name, success: false, error: `${res.status}: ${text}` });
-          } else {
-            results.push({ resource: name, success: true });
+            // Rollback previously created resources
+            for (const url of createdUrls.reverse()) {
+              await fetch(url, { method: 'DELETE', signal: controller.signal }).catch(() => {});
+            }
+            break;
           }
+          results.push({ resource: name, success: true });
+          createdUrls.push(deleteUrl);
         }
-        timerRef.current = setTimeout(refreshContainerStatus, 1000);
+        if (results.every((r) => r.success)) {
+          scheduleRefresh();
+        }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return results;
         console.error('Create operation failed:', err);
+        // Best-effort rollback
+        for (const url of createdUrls.reverse()) {
+          await fetch(url, { method: 'DELETE' }).catch(() => {});
+        }
         refreshContainerStatus();
       } finally {
         setIsActioning(false);
@@ -162,7 +181,7 @@ export function useBrewetContainer() {
 
       return results;
     },
-    [selectedProject, refreshContainerStatus],
+    [selectedProject, refreshContainerStatus, scheduleRefresh],
   );
 
   const updateContainer = useCallback(
@@ -183,9 +202,11 @@ export function useBrewetContainer() {
         const res = await fetch(
           `/api/k8s/apis/apps/v1/namespaces/${ns}/deployments/${DEPLOYMENT_NAME}`,
           {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(deployment),
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/strategic-merge-patch+json' },
+            body: JSON.stringify({
+              spec: deployment.spec,
+            }),
             signal: controller.signal,
           },
         );
@@ -195,7 +216,9 @@ export function useBrewetContainer() {
         } else {
           results.push({ resource: 'Deployment', success: true });
         }
-        timerRef.current = setTimeout(refreshContainerStatus, 1000);
+        if (results.every((r) => r.success)) {
+          scheduleRefresh();
+        }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return results;
         console.error('Update operation failed:', err);
@@ -206,7 +229,7 @@ export function useBrewetContainer() {
 
       return results;
     },
-    [selectedProject, refreshContainerStatus],
+    [selectedProject, refreshContainerStatus, scheduleRefresh],
   );
 
   return {

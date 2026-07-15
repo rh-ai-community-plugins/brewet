@@ -51,9 +51,14 @@ export const DataConnectionStep: React.FC<DataConnectionStepProps> = ({
             onChange={() => onSelect(null)}
           />
           {dataConnections.map((dc) => {
-            const endpoint = dc.data?.AWS_S3_ENDPOINT
-              ? atob(dc.data.AWS_S3_ENDPOINT)
-              : undefined;
+            let endpoint: string | undefined;
+            try {
+              endpoint = dc.data?.AWS_S3_ENDPOINT
+                ? atob(dc.data.AWS_S3_ENDPOINT)
+                : undefined;
+            } catch {
+              endpoint = '(invalid encoding)';
+            }
             return (
               <Radio
                 key={dc.metadata.name}

@@ -1,9 +1,21 @@
 import { ContainerConfig } from '~/app/types/k8s';
 
-const DEPLOYMENT_NAME = 'brewet-storage-backend';
+export const DEPLOYMENT_NAME = 'brewet-storage-backend';
 const SERVICE_PORT = 8888;
 const CONTAINER_IMAGE_DEFAULT = 'quay.io/rhoai-community/brewet-storage-backend:latest';
 const DEFAULT_MOUNT_PREFIX = '/opt/app-root/src';
+
+const DANGEROUS_PATHS = ['/', '/etc', '/proc', '/sys', '/dev', '/var', '/tmp', '/root', '/home'];
+
+export function validateMountPath(path: string, existingPaths: string[]): string | null {
+  if (!path) return 'Mount path is required';
+  if (!path.startsWith('/')) return 'Must be an absolute path starting with /';
+  if (/\.\./.test(path)) return 'Path traversal (..) is not allowed';
+  if (DANGEROUS_PATHS.includes(path)) return 'Cannot mount to a system directory';
+  if (!/^\/[a-zA-Z0-9._\-/]+$/.test(path)) return 'Path contains invalid characters';
+  if (existingPaths.includes(path)) return 'Duplicate mount path';
+  return null;
+}
 
 export function buildDeployment(
   namespace: string,
@@ -16,7 +28,7 @@ export function buildDeployment(
 
   config.pvcMounts.forEach(({ pvc, mountPath }) => {
     const pvcName = pvc.metadata.name;
-    const volName = `pvc-${pvcName}`;
+    const volName = `pvc-${pvcName}`.slice(0, 63);
     volumes.push({ name: volName, persistentVolumeClaim: { claimName: pvcName } });
     volumeMounts.push({ name: volName, mountPath });
     localStoragePaths.push(mountPath);
@@ -53,6 +65,9 @@ export function buildDeployment(
           labels: { app: DEPLOYMENT_NAME },
         },
         spec: {
+          securityContext: {
+            runAsNonRoot: true,
+          },
           containers: [
             {
               name: 'storage-backend',
@@ -61,6 +76,11 @@ export function buildDeployment(
               env,
               envFrom,
               volumeMounts,
+              securityContext: {
+                allowPrivilegeEscalation: false,
+                capabilities: { drop: ['ALL'] },
+                seccompProfile: { type: 'RuntimeDefault' },
+              },
             },
           ],
           volumes,
