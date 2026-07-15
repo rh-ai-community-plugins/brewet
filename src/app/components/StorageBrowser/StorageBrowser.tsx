@@ -117,6 +117,7 @@ const StorageBrowser: React.FC = () => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [localOffset, setLocalOffset] = useState(0);
   const [totalCount, setTotalCount] = useState<number | undefined>();
+  const [pageLimit, setPageLimit] = useState(100);
 
   // Search
   const [searchText, setSearchText] = useState('');
@@ -175,6 +176,24 @@ const StorageBrowser: React.FC = () => {
       });
   }, [selectedProject]);
 
+  // Fetch maxFilesPerPage from backend when project or location changes
+  useEffect(() => {
+    if (!selectedProject || !selectedLocation) return;
+    storageService
+      .getMaxFilesPerPage(selectedProject)
+      .then((limit) => {
+        if (activeProjectRef.current === selectedProject) {
+          setPageLimit(limit);
+        }
+      })
+      .catch(() => {
+        // Fall back to the default if the setting cannot be fetched
+        if (activeProjectRef.current === selectedProject) {
+          setPageLimit(100);
+        }
+      });
+  }, [selectedProject, selectedLocation]);
+
   // Load files when location or path changes
   const loadFiles = useCallback(
     async (append = false) => {
@@ -210,7 +229,7 @@ const StorageBrowser: React.FC = () => {
           }
         } else {
           options.offset = append ? localOffset : 0;
-          options.limit = 100;
+          options.limit = pageLimit;
         }
 
         const response: FileListResponse = await storageService.listFiles(
@@ -247,7 +266,7 @@ const StorageBrowser: React.FC = () => {
         }
       }
     },
-    [selectedProject, selectedLocation, currentPath, continuationToken, localOffset, searchText, searchMode],
+    [selectedProject, selectedLocation, currentPath, continuationToken, localOffset, searchText, searchMode, pageLimit],
   );
 
   loadFilesRef.current = loadFiles;

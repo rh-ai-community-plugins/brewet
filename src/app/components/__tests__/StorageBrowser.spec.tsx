@@ -51,6 +51,7 @@ function setupMocks(params?: Record<string, string | undefined>) {
   mockStorageService.getLocations.mockResolvedValue(mockLocations);
   mockStorageService.refreshLocations.mockResolvedValue(mockLocations);
   mockStorageService.listFiles.mockResolvedValue(mockFileResponse);
+  mockStorageService.getMaxFilesPerPage.mockResolvedValue(100);
   mockStorageService.downloadFile.mockResolvedValue('/brewet/api/test-ns/objects/download/my-bucket/cmVhZG1lLnR4dA');
   mockStorageService.deleteFile.mockResolvedValue(undefined);
   mockStorageService.createFolder.mockResolvedValue(undefined);
