@@ -308,6 +308,7 @@ describe('TransferModal', () => {
       await waitFor(() => {
         expect(screen.getByText('Backend unreachable')).toBeInTheDocument();
       });
+      expect(screen.queryByRole('button', { name: 'Cancel Transfer' })).not.toBeInTheDocument();
     });
 
     it('should call cancelTransfer when Cancel Transfer is clicked', async () => {

@@ -520,7 +520,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
         )}
       </ModalBody>
       <ModalFooter>
-        {!isFinished && (
+        {!isFinished && !!jobId && (
           <Button
             variant="danger"
             onClick={handleCancel}
