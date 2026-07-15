@@ -18,21 +18,9 @@ import {
 } from '@patternfly/react-core';
 import { storageService } from '~/app/services/storageService';
 import { apiClient } from '~/app/services/apiClient';
-import type { StorageLocation } from '~/app/types/storage';
+import type { StorageLocation, TransferProgress } from '~/app/types/storage';
 
 const MODEL_ID_REGEX = /^[a-zA-Z0-9_-]+\/[a-zA-Z0-9._-]+$/;
-
-interface TransferProgress {
-  type: string;
-  jobId: string;
-  status: string;
-  completedFiles?: number;
-  totalFiles?: number;
-  completedBytes?: number;
-  totalBytes?: number;
-  currentFile?: string;
-  error?: string;
-}
 
 interface HuggingFaceImportModalProps {
   namespace: string;
