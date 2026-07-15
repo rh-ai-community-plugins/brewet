@@ -78,7 +78,10 @@ const TransferModal: React.FC<TransferModalProps> = ({
   const [transferError, setTransferError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isStartingTransfer, setIsStartingTransfer] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const mountedRef = useRef(true);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const destLocation = useMemo(
     () => locations.find((l) => l.id === destLocationId) ?? null,
@@ -109,9 +112,18 @@ const TransferModal: React.FC<TransferModalProps> = ({
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
   }, []);
 
-  useEffect(() => cleanupEventSource, [cleanupEventSource]);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      cleanupEventSource();
+    };
+  }, [cleanupEventSource]);
 
   const buildRequest = useCallback(
     (resolution?: ConflictResolution): TransferRequest | null => {
@@ -131,12 +143,14 @@ const TransferModal: React.FC<TransferModalProps> = ({
       const request = buildRequest(resolution);
       if (!request || !destLocation) return;
 
+      setIsStartingTransfer(true);
       setTransferError(null);
       try {
         const result = await storageService.initiateTransfer(namespace, request);
-        setJobId(result.jobId);
+        if (!mountedRef.current) return;
 
-        const destination = buildTransferPath(destLocation, '');
+        setJobId(result.jobId);
+        const destination = request.destination;
         transferEmitter.emit('transfer:started', { jobId: result.jobId, destination });
 
         const sseUrl = storageService.getTransferSseUrl(namespace, result.sseUrl);
@@ -146,6 +160,10 @@ const TransferModal: React.FC<TransferModalProps> = ({
         es.addEventListener('progress', (event) => {
           try {
             const data = JSON.parse(event.data) as TransferProgress;
+            if (!mountedRef.current) {
+              es.close();
+              return;
+            }
             setProgress(data);
 
             if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
@@ -153,10 +171,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
               eventSourceRef.current = null;
 
               if (data.status === 'completed') {
-                transferEmitter.emit('transfer:completed', {
-                  jobId: result.jobId,
-                  destination,
-                });
+                transferEmitter.emit('transfer:completed', { jobId: result.jobId, destination });
                 onComplete();
               } else if (data.status === 'cancelled') {
                 transferEmitter.emit('transfer:cancelled', { jobId: result.jobId });
@@ -170,10 +185,38 @@ const TransferModal: React.FC<TransferModalProps> = ({
         es.onerror = () => {
           es.close();
           eventSourceRef.current = null;
+          if (!mountedRef.current) return;
           setTransferError('Progress connection lost. The transfer continues in the background.');
+
+          pollIntervalRef.current = setInterval(async () => {
+            try {
+              const status = await storageService.getTransferProgress(namespace, result.jobId);
+              if (!mountedRef.current) {
+                if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+                return;
+              }
+              setProgress(status);
+              if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
+                if (pollIntervalRef.current) {
+                  clearInterval(pollIntervalRef.current);
+                  pollIntervalRef.current = null;
+                }
+                setTransferError(null);
+                if (status.status === 'completed') {
+                  transferEmitter.emit('transfer:completed', { jobId: result.jobId, destination });
+                  onComplete();
+                }
+              }
+            } catch {
+              // keep polling
+            }
+          }, 3000);
         };
       } catch (err) {
+        if (!mountedRef.current) return;
         setTransferError(err instanceof Error ? err.message : 'Failed to start transfer.');
+      } finally {
+        if (mountedRef.current) setIsStartingTransfer(false);
       }
     },
     [namespace, buildRequest, destLocation, onComplete],
@@ -187,6 +230,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
     setConflictError(null);
     try {
       const result = await storageService.checkConflicts(namespace, request);
+      if (!mountedRef.current) return;
       setConflictResult(result);
       if (result.conflicts.length > 0) {
         setStep('conflicts');
@@ -195,9 +239,10 @@ const TransferModal: React.FC<TransferModalProps> = ({
         startTransfer('overwrite');
       }
     } catch (err) {
+      if (!mountedRef.current) return;
       setConflictError(err instanceof Error ? err.message : 'Failed to check conflicts.');
     } finally {
-      setIsCheckingConflicts(false);
+      if (mountedRef.current) setIsCheckingConflicts(false);
     }
   }, [namespace, buildRequest, startTransfer]);
 
@@ -377,6 +422,8 @@ const TransferModal: React.FC<TransferModalProps> = ({
             setStep('progress');
             startTransfer(conflictResolution);
           }}
+          isLoading={isStartingTransfer}
+          isDisabled={isStartingTransfer}
         >
           Start Transfer
         </Button>

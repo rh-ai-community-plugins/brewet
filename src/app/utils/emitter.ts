@@ -21,7 +21,13 @@ class TypedEventEmitter {
   }
 
   emit<K extends keyof TransferEventMap>(event: K, data: TransferEventMap[K]): void {
-    this.listeners.get(event)?.forEach((handler) => handler(data as never));
+    this.listeners.get(event)?.forEach((handler) => {
+      try {
+        handler(data as never);
+      } catch {
+        // prevent a throwing listener from breaking other listeners or callers
+      }
+    });
   }
 }
 
