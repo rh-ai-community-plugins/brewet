@@ -38,9 +38,6 @@ describe('Rate Limiter', () => {
   let bffPort: number;
 
   beforeAll((done) => {
-    process.env.RATE_LIMIT_MAX = '3';
-    process.env.RATE_LIMIT_WINDOW_MS = '60000';
-
     const target = express();
     target.get('/api/buckets', (_req, res) => {
       res.json({ buckets: [] });
@@ -60,8 +57,6 @@ describe('Rate Limiter', () => {
   });
 
   afterAll((done) => {
-    delete process.env.RATE_LIMIT_MAX;
-    delete process.env.RATE_LIMIT_WINDOW_MS;
     proxy.close();
     bffServer.close(() => targetServer.close(done));
   });
@@ -74,5 +69,26 @@ describe('Rate Limiter', () => {
   it('allows requests under the rate limit', async () => {
     const res = await request(bffPort, '/api/my-project/buckets');
     expect(res.statusCode).toBe(200);
+  });
+
+  it('includes draft-8 RateLimit header on successful responses', async () => {
+    const res = await request(bffPort, '/api/my-project/buckets');
+    expect(res.statusCode).toBe(200);
+    // express-rate-limit with standardHeaders:'draft-8' emits a combined RateLimit header
+    // e.g. '"100-in-1min"; r=99; t=60'
+    expect(res.headers['ratelimit']).toBeDefined();
+  });
+
+  it('includes RateLimit-Policy header on successful responses', async () => {
+    const res = await request(bffPort, '/api/my-project/buckets');
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['ratelimit-policy']).toBeDefined();
+  });
+
+  it('does not include legacy X-RateLimit-* headers', async () => {
+    const res = await request(bffPort, '/api/my-project/buckets');
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['x-ratelimit-limit']).toBeUndefined();
+    expect(res.headers['x-ratelimit-remaining']).toBeUndefined();
   });
 });
