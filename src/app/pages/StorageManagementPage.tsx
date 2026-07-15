@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   PageSection,
   Title,
@@ -78,9 +78,13 @@ const StorageManagementContent: React.FC = () => {
   const [sortColumn, setSortColumn] = useState<SortColumn>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
+  const activeProjectRef = useRef(selectedProject);
+  activeProjectRef.current = selectedProject;
+
   const loadData = useCallback(
     async (refresh = false) => {
       if (!selectedProject) return;
+      const project = selectedProject;
       try {
         if (refresh) setIsRefreshing(true);
         else setLoading(true);
@@ -88,49 +92,29 @@ const StorageManagementContent: React.FC = () => {
 
         const [locs, buckets] = await Promise.all([
           refresh
-            ? storageService.refreshLocations(selectedProject)
-            : storageService.getLocations(selectedProject),
-          storageService.getBucketsList(selectedProject),
+            ? storageService.refreshLocations(project)
+            : storageService.getLocations(project),
+          storageService.getBucketsList(project),
         ]);
+        if (activeProjectRef.current !== project) return;
         setLocations(locs);
         setBucketsList(buckets);
       } catch (err) {
+        if (activeProjectRef.current !== project) return;
         setError(err instanceof Error ? err.message : 'Failed to load storage locations.');
       } finally {
-        setLoading(false);
-        setIsRefreshing(false);
+        if (activeProjectRef.current === project) {
+          setLoading(false);
+          setIsRefreshing(false);
+        }
       }
     },
     [selectedProject],
   );
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!selectedProject) return;
-      try {
-        setLoading(true);
-        setError(null);
-        const [locs, buckets] = await Promise.all([
-          storageService.getLocations(selectedProject),
-          storageService.getBucketsList(selectedProject),
-        ]);
-        if (!cancelled) {
-          setLocations(locs);
-          setBucketsList(buckets);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load storage locations.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedProject]);
+    loadData();
+  }, [loadData]);
 
   const s3BucketNames = useMemo(
     () => locations.filter((l) => l.type === 's3').map((l) => l.name),
