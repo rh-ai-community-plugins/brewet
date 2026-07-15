@@ -253,6 +253,7 @@ const StorageBrowser: React.FC = () => {
   loadFilesRef.current = loadFiles;
 
   useEffect(() => {
+    isInitialSearchRef.current = true;
     setSearchText('');
     setContinuationToken(undefined);
     setLocalOffset(0);
