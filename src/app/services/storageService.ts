@@ -238,39 +238,54 @@ class StorageService {
   }
 
   async getS3Settings(namespace: string, signal?: AbortSignal): Promise<S3Settings> {
-    return apiClient.get<S3Settings>(namespace, '/settings/s3', signal);
+    const result = await apiClient.get<{ settings: S3Settings }>(namespace, '/settings/s3', signal);
+    return result.settings;
   }
 
   async updateS3Settings(namespace: string, settings: S3Settings, signal?: AbortSignal): Promise<void> {
     await apiClient.put(namespace, '/settings/s3', settings, signal);
   }
 
-  async testS3Connection(namespace: string, signal?: AbortSignal): Promise<ConnectionTestResult> {
-    return apiClient.post<ConnectionTestResult>(namespace, '/settings/test-s3', undefined, signal);
+  async testS3Connection(
+    namespace: string,
+    settings: Pick<S3Settings, 'accessKeyId' | 'secretAccessKey' | 'region' | 'endpoint'>,
+    signal?: AbortSignal,
+  ): Promise<ConnectionTestResult> {
+    return apiClient.post<ConnectionTestResult>(namespace, '/settings/test-s3', settings, signal);
   }
 
   async getHuggingFaceSettings(namespace: string, signal?: AbortSignal): Promise<HuggingFaceSettings> {
-    return apiClient.get<HuggingFaceSettings>(namespace, '/settings/huggingface', signal);
+    const result = await apiClient.get<{ settings: HuggingFaceSettings }>(namespace, '/settings/huggingface', signal);
+    return result.settings;
   }
 
   async updateHuggingFaceSettings(namespace: string, settings: HuggingFaceSettings, signal?: AbortSignal): Promise<void> {
     await apiClient.put(namespace, '/settings/huggingface', settings, signal);
   }
 
-  async testHuggingFaceConnection(namespace: string, signal?: AbortSignal): Promise<ConnectionTestResult> {
-    return apiClient.post<ConnectionTestResult>(namespace, '/settings/test-huggingface', undefined, signal);
+  async testHuggingFaceConnection(
+    namespace: string,
+    settings: Pick<HuggingFaceSettings, 'hfToken'>,
+    signal?: AbortSignal,
+  ): Promise<ConnectionTestResult> {
+    return apiClient.post<ConnectionTestResult>(namespace, '/settings/test-huggingface', settings, signal);
   }
 
   async getProxySettings(namespace: string, signal?: AbortSignal): Promise<ProxySettings> {
-    return apiClient.get<ProxySettings>(namespace, '/settings/proxy', signal);
+    const result = await apiClient.get<{ settings: ProxySettings }>(namespace, '/settings/proxy', signal);
+    return result.settings;
   }
 
   async updateProxySettings(namespace: string, settings: ProxySettings, signal?: AbortSignal): Promise<void> {
     await apiClient.put(namespace, '/settings/proxy', settings, signal);
   }
 
-  async testProxyConnection(namespace: string, signal?: AbortSignal): Promise<ConnectionTestResult> {
-    return apiClient.post<ConnectionTestResult>(namespace, '/settings/test-proxy', undefined, signal);
+  async testProxyConnection(
+    namespace: string,
+    params: { testUrl: string; httpProxy?: string; httpsProxy?: string },
+    signal?: AbortSignal,
+  ): Promise<ConnectionTestResult> {
+    return apiClient.post<ConnectionTestResult>(namespace, '/settings/test-proxy', params, signal);
   }
 
   async getMaxConcurrentTransfers(namespace: string, signal?: AbortSignal): Promise<number> {

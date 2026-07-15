@@ -76,19 +76,17 @@ export interface S3Settings {
 }
 
 export interface HuggingFaceSettings {
-  token?: string;
+  hfToken?: string;
 }
 
 export interface ProxySettings {
   httpProxy?: string;
   httpsProxy?: string;
-  testUrl?: string;
 }
 
 export interface ConnectionTestResult {
-  success: boolean;
-  message?: string;
-  username?: string;
+  message: string;
+  accessTokenDisplayName?: string;
 }
 
 export interface HuggingFaceImportRequest {
