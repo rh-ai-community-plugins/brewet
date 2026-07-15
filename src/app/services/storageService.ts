@@ -104,7 +104,7 @@ class StorageService {
 
       const params = new URLSearchParams();
       if (options?.continuationToken) params.set('continuationToken', options.continuationToken);
-      if (options?.maxKeys) params.set('maxKeys', String(options.maxKeys));
+      if (options?.maxKeys != null) params.set('maxKeys', String(options.maxKeys));
       if (options?.search) {
         params.set('q', options.search);
         if (options.searchMode) params.set('mode', options.searchMode);
@@ -118,8 +118,8 @@ class StorageService {
     const url = `/local/files/${encodeURIComponent(location.id)}/${encodedPath}`;
 
     const params = new URLSearchParams();
-    if (options?.limit) params.set('limit', String(options.limit));
-    if (options?.offset) params.set('offset', String(options.offset));
+    if (options?.limit != null) params.set('limit', String(options.limit));
+    if (options?.offset != null) params.set('offset', String(options.offset));
 
     const query = params.toString();
     return apiClient.get<FileListResponse>(namespace, query ? `${url}?${query}` : url, signal);

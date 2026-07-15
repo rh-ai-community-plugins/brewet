@@ -192,6 +192,27 @@ describe('storageService', () => {
       );
     });
 
+    it('should not drop maxKeys=0', async () => {
+      mockApiClient.get.mockResolvedValue({ files: [] });
+
+      const location = { id: 'bucket', name: 'bucket', type: 's3' as const, status: 'available' as const };
+      await storageService.listFiles('ns', location, '', { maxKeys: 0 });
+
+      const url = mockApiClient.get.mock.calls[0][1] as string;
+      expect(url).toContain('maxKeys=0');
+    });
+
+    it('should not drop limit=0 or offset=0 for PVC', async () => {
+      mockApiClient.get.mockResolvedValue({ files: [], totalCount: 0 });
+
+      const location = { id: 'local-0', name: 'pvc', type: 'pvc' as const, status: 'available' as const };
+      await storageService.listFiles('ns', location, '/', { limit: 0, offset: 0 });
+
+      const url = mockApiClient.get.mock.calls[0][1] as string;
+      expect(url).toContain('limit=0');
+      expect(url).toContain('offset=0');
+    });
+
     it('should send search as q param with mode', async () => {
       mockApiClient.get.mockResolvedValue({ files: [] });
 
