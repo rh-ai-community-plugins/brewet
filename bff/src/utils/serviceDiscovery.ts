@@ -12,9 +12,10 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
-const cacheTtlMs =
-  Math.max(0, parseInt(process.env.SERVICE_CACHE_TTL_MS || '', 10)) ||
-  DEFAULT_CACHE_TTL_MS;
+const cacheTtlMs = (() => {
+  const parsed = parseInt(process.env.SERVICE_CACHE_TTL_MS || '', 10);
+  return Number.isNaN(parsed) ? DEFAULT_CACHE_TTL_MS : Math.max(0, parsed);
+})();
 
 function getServiceAccountToken(): string {
   if (process.env.K8S_SA_TOKEN) {
