@@ -44,6 +44,21 @@ describe('validateBucketName', () => {
     expect(validateBucketName('bucket-123')).toBeNull();
     expect(validateBucketName('abc')).toBeNull();
   });
+
+  it('accepts bucket names with periods', () => {
+    expect(validateBucketName('my.bucket')).toBeNull();
+    expect(validateBucketName('bucket.123.name')).toBeNull();
+    expect(validateBucketName('a.b')).toBeNull();
+  });
+
+  it('rejects consecutive periods', () => {
+    expect(validateBucketName('my..bucket')).toBeTruthy();
+  });
+
+  it('rejects period adjacent to hyphen', () => {
+    expect(validateBucketName('my.-bucket')).toBeTruthy();
+    expect(validateBucketName('my-.bucket')).toBeTruthy();
+  });
 });
 
 describe('validateQuery', () => {
