@@ -4,6 +4,7 @@ import {
   resolveStorageBackend,
   clearCache,
 } from '../utils/serviceDiscovery';
+import { K8sHttpError } from '../utils/k8sClient';
 import { rateLimiter } from '../middleware/rateLimiter';
 
 const K8S_NAMESPACE_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -68,16 +69,24 @@ function handleProxyError(
 function handleDiscoveryError(err: Error, namespace: string, res: Response): void {
   if (res.headersSent) return;
 
-  if (err.message.includes('404')) {
-    res.status(404).json({
-      error: 'Storage backend not found',
-      detail: `No Brewet storage backend found in namespace "${namespace}". Create a Brewet container first.`,
-    });
-  } else if (err.message.includes('403')) {
-    res.status(403).json({
-      error: 'Access denied',
-      detail: `The BFF service account does not have permission to access namespace "${namespace}".`,
-    });
+  if (err instanceof K8sHttpError) {
+    if (err.status === 404) {
+      res.status(404).json({
+        error: 'Storage backend not found',
+        detail: `No Brewet storage backend found in namespace "${namespace}". Create a Brewet container first.`,
+      });
+    } else if (err.status === 403) {
+      res.status(403).json({
+        error: 'Access denied',
+        detail: `The BFF service account does not have permission to access namespace "${namespace}".`,
+      });
+    } else {
+      console.error('Service discovery error for namespace %s: K8s API returned %d', namespace, err.status);
+      res.status(502).json({
+        error: 'Service discovery failed',
+        detail: 'An internal error occurred during service discovery.',
+      });
+    }
   } else {
     console.error('Service discovery error for namespace %s: %s', namespace, err.message);
     res.status(502).json({
