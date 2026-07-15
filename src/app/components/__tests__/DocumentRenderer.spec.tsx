@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DocumentRenderer, { getFileType, isPreviewable } from '../StorageBrowser/DocumentRenderer';
 import { storageService } from '~/app/services/storageService';
@@ -177,5 +177,45 @@ describe('DocumentRenderer', () => {
     });
 
     expect(mockStorageService.viewFile).not.toHaveBeenCalled();
+  });
+
+  it('should not hide spinner when prior fetch is aborted due to prop change', async () => {
+    let resolveSecond!: (v: string) => void;
+
+    // First fetch: connected to signal so abort causes rejection with AbortError
+    mockStorageService.viewFile.mockImplementationOnce(
+      (_ns: string, _loc: StorageLocation, _path: string, signal: AbortSignal) =>
+        new Promise<string>((_resolve, reject) => {
+          signal.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError'))
+          );
+        })
+    );
+
+    // Second fetch: stays pending so we can verify the spinner remains visible
+    mockStorageService.viewFile.mockImplementationOnce(
+      () => new Promise<string>((resolve) => { resolveSecond = resolve; })
+    );
+
+    const file1: FileInfo = { name: 'file1.txt', isDirectory: false, size: 10 };
+    const file2: FileInfo = { name: 'file2.txt', isDirectory: false, size: 20 };
+
+    const { rerender } = render(<DocumentRenderer {...defaultProps} file={file1} />);
+    expect(screen.getByLabelText('Loading file content')).toBeInTheDocument();
+
+    // Change file prop: triggers cleanup (abort of first fetch) and starts second fetch
+    rerender(<DocumentRenderer {...defaultProps} file={file2} />);
+
+    // Flush microtasks so the aborted promise settles and .finally() runs
+    await act(async () => {
+      await new Promise<void>((r) => setTimeout(r, 0));
+    });
+
+    // Spinner must still be visible: the aborted .finally() must not have called setLoading(false)
+    expect(screen.getByLabelText('Loading file content')).toBeInTheDocument();
+
+    // Let the second fetch complete and verify content appears
+    act(() => { resolveSecond('file2 content'); });
+    await waitFor(() => expect(screen.getByText('file2 content')).toBeInTheDocument());
   });
 });
