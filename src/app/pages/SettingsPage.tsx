@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   PageSection,
   Title,
@@ -22,49 +22,20 @@ import { EyeIcon, EyeSlashIcon } from '@patternfly/react-icons';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { ContainerRequired } from '~/app/components/ContainerRequired';
 import { storageService } from '~/app/services/storageService';
+import { useSettingsTab } from '~/app/hooks/useSettingsTab';
 import type { S3Settings, HuggingFaceSettings, ProxySettings } from '~/app/types/storage';
 
 type TabKey = 's3' | 'huggingface' | 'proxy' | 'transfers' | 'pagination';
 
-interface AlertState {
-  variant: 'success' | 'danger';
-  title: string;
-  message?: string;
-}
-
 const S3Tab: React.FC<{ namespace: string }> = ({ namespace }) => {
-  const [settings, setSettings] = useState<S3Settings>({});
-  const [loading, setLoading] = useState(true);
+  const { data: settings, setData: setSettings, loading, alert, setAlert, mountedRef } =
+    useSettingsTab<S3Settings>(
+      (ns, signal) => storageService.getS3Settings(ns, signal),
+      namespace, {}, 'Failed to load S3 settings',
+    );
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [alert, setAlert] = useState<AlertState | null>(null);
   const [showSecret, setShowSecret] = useState(false);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const load = async () => {
-      setLoading(true);
-      setAlert(null);
-      try {
-        const s = await storageService.getS3Settings(namespace, controller.signal);
-        if (!mountedRef.current) return;
-        setSettings(s);
-      } catch (err) {
-        if (!mountedRef.current || (err as Error).name === 'AbortError') return;
-        setAlert({ variant: 'danger', title: 'Failed to load S3 settings', message: (err as Error).message });
-      } finally {
-        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
-      }
-    };
-    load();
-    return () => { controller.abort(); };
-  }, [namespace]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -162,38 +133,14 @@ const S3Tab: React.FC<{ namespace: string }> = ({ namespace }) => {
 };
 
 const HuggingFaceTab: React.FC<{ namespace: string }> = ({ namespace }) => {
-  const [settings, setSettings] = useState<HuggingFaceSettings>({});
-  const [loading, setLoading] = useState(true);
+  const { data: settings, setData: setSettings, loading, alert, setAlert, mountedRef } =
+    useSettingsTab<HuggingFaceSettings>(
+      (ns, signal) => storageService.getHuggingFaceSettings(ns, signal),
+      namespace, {}, 'Failed to load HuggingFace settings',
+    );
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [alert, setAlert] = useState<AlertState | null>(null);
   const [showToken, setShowToken] = useState(false);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const load = async () => {
-      setLoading(true);
-      setAlert(null);
-      try {
-        const s = await storageService.getHuggingFaceSettings(namespace, controller.signal);
-        if (!mountedRef.current) return;
-        setSettings(s);
-      } catch (err) {
-        if (!mountedRef.current || (err as Error).name === 'AbortError') return;
-        setAlert({ variant: 'danger', title: 'Failed to load HuggingFace settings', message: (err as Error).message });
-      } finally {
-        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
-      }
-    };
-    load();
-    return () => { controller.abort(); };
-  }, [namespace]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -275,38 +222,14 @@ const HuggingFaceTab: React.FC<{ namespace: string }> = ({ namespace }) => {
 };
 
 const ProxyTab: React.FC<{ namespace: string }> = ({ namespace }) => {
-  const [settings, setSettings] = useState<ProxySettings>({});
+  const { data: settings, setData: setSettings, loading, alert, setAlert, mountedRef } =
+    useSettingsTab<ProxySettings>(
+      (ns, signal) => storageService.getProxySettings(ns, signal),
+      namespace, {}, 'Failed to load proxy settings',
+    );
   const [testUrl, setTestUrl] = useState('');
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [alert, setAlert] = useState<AlertState | null>(null);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const load = async () => {
-      setLoading(true);
-      setAlert(null);
-      try {
-        const s = await storageService.getProxySettings(namespace, controller.signal);
-        if (!mountedRef.current) return;
-        setSettings(s);
-      } catch (err) {
-        if (!mountedRef.current || (err as Error).name === 'AbortError') return;
-        setAlert({ variant: 'danger', title: 'Failed to load proxy settings', message: (err as Error).message });
-      } finally {
-        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
-      }
-    };
-    load();
-    return () => { controller.abort(); };
-  }, [namespace]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -400,36 +323,12 @@ const ProxyTab: React.FC<{ namespace: string }> = ({ namespace }) => {
 };
 
 const TransferControlsTab: React.FC<{ namespace: string }> = ({ namespace }) => {
-  const [value, setValue] = useState(2);
-  const [loading, setLoading] = useState(true);
+  const { data: value, setData: setValue, loading, alert, setAlert, mountedRef } =
+    useSettingsTab<number>(
+      (ns, signal) => storageService.getMaxConcurrentTransfers(ns, signal),
+      namespace, 2, 'Failed to load transfer settings',
+    );
   const [saving, setSaving] = useState(false);
-  const [alert, setAlert] = useState<AlertState | null>(null);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const load = async () => {
-      setLoading(true);
-      setAlert(null);
-      try {
-        const v = await storageService.getMaxConcurrentTransfers(namespace, controller.signal);
-        if (!mountedRef.current) return;
-        setValue(v);
-      } catch (err) {
-        if (!mountedRef.current || (err as Error).name === 'AbortError') return;
-        setAlert({ variant: 'danger', title: 'Failed to load transfer settings', message: (err as Error).message });
-      } finally {
-        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
-      }
-    };
-    load();
-    return () => { controller.abort(); };
-  }, [namespace]);
 
   const handleSave = async (newValue: number) => {
     setSaving(true);
@@ -487,36 +386,12 @@ const TransferControlsTab: React.FC<{ namespace: string }> = ({ namespace }) => 
 };
 
 const PaginationTab: React.FC<{ namespace: string }> = ({ namespace }) => {
-  const [value, setValue] = useState(100);
-  const [loading, setLoading] = useState(true);
+  const { data: value, setData: setValue, loading, alert, setAlert, mountedRef } =
+    useSettingsTab<number>(
+      (ns, signal) => storageService.getMaxFilesPerPage(ns, signal),
+      namespace, 100, 'Failed to load pagination settings',
+    );
   const [saving, setSaving] = useState(false);
-  const [alert, setAlert] = useState<AlertState | null>(null);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const load = async () => {
-      setLoading(true);
-      setAlert(null);
-      try {
-        const v = await storageService.getMaxFilesPerPage(namespace, controller.signal);
-        if (!mountedRef.current) return;
-        setValue(v);
-      } catch (err) {
-        if (!mountedRef.current || (err as Error).name === 'AbortError') return;
-        setAlert({ variant: 'danger', title: 'Failed to load pagination settings', message: (err as Error).message });
-      } finally {
-        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
-      }
-    };
-    load();
-    return () => { controller.abort(); };
-  }, [namespace]);
 
   const handleSave = async () => {
     setSaving(true);
