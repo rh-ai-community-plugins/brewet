@@ -26,6 +26,7 @@ import {
   Bullseye,
   Spinner,
   Alert,
+  AlertActionCloseButton,
   Divider,
   Content,
   ToggleGroup,
@@ -127,6 +128,9 @@ const StorageBrowser: React.FC = () => {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
+
+  // Download
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<FileInfo | null>(null);
@@ -348,14 +352,19 @@ const StorageBrowser: React.FC = () => {
   const handleDownload = useCallback(
     async (file: FileInfo) => {
       if (!selectedProject || !selectedLocation) return;
-      const filePath = currentPath ? `${currentPath}${file.name}` : file.name;
-      const url = await storageService.downloadFile(selectedProject, selectedLocation, filePath);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = file.name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      setDownloadError(null);
+      try {
+        const filePath = currentPath ? `${currentPath}${file.name}` : file.name;
+        const url = await storageService.downloadFile(selectedProject, selectedLocation, filePath);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (err) {
+        setDownloadError(err instanceof Error ? err.message : 'Failed to download file.');
+      }
     },
     [selectedProject, selectedLocation, currentPath],
   );
@@ -707,6 +716,19 @@ const StorageBrowser: React.FC = () => {
             </ToolbarGroup>
           </ToolbarContent>
         </Toolbar>
+      )}
+
+      {/* Download error */}
+      {downloadError && (
+        <Alert
+          variant="danger"
+          title="Download failed"
+          isInline
+          className="pf-v6-u-mt-md"
+          actionClose={<AlertActionCloseButton onClose={() => setDownloadError(null)} />}
+        >
+          {downloadError}
+        </Alert>
       )}
 
       {/* File listing */}
