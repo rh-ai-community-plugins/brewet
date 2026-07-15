@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import StorageBrowserPage from '../StorageBrowserPage';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { useBrewetContainer } from '~/app/hooks/useBrewetContainer';
@@ -17,6 +17,7 @@ const mockUseBrewetContainer = useBrewetContainer as jest.MockedFunction<typeof 
 const mockStorageService = storageService as jest.Mocked<typeof storageService>;
 
 beforeEach(() => {
+  jest.resetAllMocks();
   mockUseBrewetContext.mockReturnValue({
     selectedProject: 'test-ns',
     setSelectedProject: jest.fn(),
@@ -42,9 +43,12 @@ beforeEach(() => {
 });
 
 describe('StorageBrowserPage', () => {
-  it('should render the page title', () => {
+  it('should render the page title', async () => {
     render(<StorageBrowserPage />);
     expect(screen.getByText('Storage Browser')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockStorageService.getLocations).toHaveBeenCalled();
+    });
   });
 
   it('should show select project message when no project selected', () => {
@@ -62,6 +66,7 @@ describe('StorageBrowserPage', () => {
   });
 
   it('should show storage browser content when container is running', () => {
+    mockStorageService.getLocations.mockReturnValue(new Promise(() => {}));
     render(<StorageBrowserPage />);
     expect(screen.getByLabelText('Loading storage locations')).toBeInTheDocument();
   });
