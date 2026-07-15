@@ -365,6 +365,67 @@ describe('TransferModal', () => {
         expect(mockService.cancelTransfer).toHaveBeenCalledWith('test-ns', 'job-cancel');
       });
     });
+
+    it('should keep Cancel Transfer button visible when SSE connection drops', async () => {
+      mockService.checkConflicts.mockResolvedValue({
+        conflicts: [],
+        nonConflicting: [],
+      });
+      mockService.initiateTransfer.mockResolvedValue({
+        jobId: 'job-sse-drop',
+        sseUrl: '/api/transfer/progress/job-sse-drop',
+        fileCount: 3,
+        totalSize: 3000,
+      });
+      mockService.getTransferSseUrl.mockReturnValue('/brewet/api/test-ns/transfer/progress/job-sse-drop');
+      // Prevent the polling interval from calling the real service
+      mockService.getTransferProgress.mockReturnValue(new Promise(() => {}));
+      const mockES = setupEventSourceMock();
+
+      render(<TransferModal {...defaultProps} />);
+      await userEvent.click(screen.getByText('Select destination...'));
+      await userEvent.click(screen.getByText('dest-bucket'));
+      await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+      await waitFor(() => {
+        expect(mockES.addEventListener).toHaveBeenCalledWith('progress', expect.any(Function));
+      });
+
+      // Simulate active progress to confirm transfer is running
+      const progressHandler = mockES.addEventListener.mock.calls.find(
+        ([name]: [string]) => name === 'progress',
+      )![1] as (event: { data: string }) => void;
+      act(() => {
+        progressHandler({
+          data: JSON.stringify({
+            jobId: 'job-sse-drop',
+            status: 'active',
+            type: 'cross-storage',
+            totalFiles: 3,
+            completedFiles: 1,
+            failedFiles: 0,
+            cancelledFiles: 0,
+            totalBytes: 3000,
+            loadedBytes: 1000,
+            files: [],
+          }),
+        });
+      });
+
+      // Trigger SSE connection drop
+      act(() => {
+        if (mockES.onerror) mockES.onerror(new Event('error'));
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('Progress connection lost. The transfer continues in the background.'),
+        ).toBeInTheDocument();
+      });
+
+      // Cancel Transfer button must remain visible even after SSE error
+      expect(screen.getByRole('button', { name: 'Cancel Transfer' })).toBeInTheDocument();
+    });
   });
 
   describe('Source path construction', () => {
