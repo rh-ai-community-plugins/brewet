@@ -44,27 +44,27 @@ export interface FileListResponse {
 }
 
 export interface TransferRequest {
-  sourceType: StorageLocationType;
-  sourceLocation: string;
-  sourcePath: string;
-  destinationType: StorageLocationType;
-  destinationLocation: string;
-  destinationPath: string;
-  files: string[];
+  source: string;
+  destination: string;
+  items: Array<{ path: string; type: 'file' | 'directory' }>;
   conflictResolution?: 'overwrite' | 'skip' | 'rename';
 }
 
 export interface TransferJob {
   jobId: string;
   sseUrl: string;
-  status?: 'queued' | 'active' | 'completed' | 'failed' | 'cancelled';
+  fileCount: number;
+  totalSize: number;
 }
 
 export interface ConflictCheckResult {
   conflicts: Array<{
     path: string;
-    existsAtDestination: boolean;
+    sourceSize: number;
+    destinationSize: number;
   }>;
+  nonConflicting: string[];
+  warning?: string;
 }
 
 export interface S3Settings {
@@ -108,14 +108,30 @@ export interface HuggingFaceImportResponse {
   modelId: string;
 }
 
+export type TransferStatus = 'queued' | 'active' | 'completed' | 'failed' | 'cancelled';
+export type TransferFileStatus = 'pending' | 'active' | 'completed' | 'failed' | 'cancelled';
+export type TransferType = 's3-upload' | 's3-download' | 'local-upload' | 'cross-storage' | 'huggingface';
+
+export interface TransferFileJob {
+  sourcePath: string;
+  destinationPath: string;
+  size: number;
+  status: TransferFileStatus;
+  loaded: number;
+  error?: string;
+}
+
 export interface TransferProgress {
-  type: string;
   jobId: string;
-  status: string;
-  completedFiles?: number;
-  totalFiles?: number;
-  completedBytes?: number;
-  totalBytes?: number;
+  status: TransferStatus;
+  type: TransferType;
+  totalFiles: number;
+  completedFiles: number;
+  failedFiles: number;
+  cancelledFiles: number;
+  totalBytes: number;
+  loadedBytes: number;
   currentFile?: string;
   error?: string;
+  files: TransferFileJob[];
 }

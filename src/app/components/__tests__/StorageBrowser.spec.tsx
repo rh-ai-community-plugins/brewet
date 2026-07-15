@@ -17,6 +17,16 @@ jest.mock('~/app/utils/encoding', () => ({
   base64Decode: (s: string) => Buffer.from(s, 'base64').toString(),
 }));
 
+let capturedTransferSelectedFiles: unknown[] | null = null;
+jest.mock('../StorageBrowser/TransferModal', () => ({
+  __esModule: true,
+  // Plain function (not jest.fn) so jest.resetAllMocks() in beforeEach does not wipe the implementation.
+  default: (props: { selectedFiles: unknown[] }) => {
+    capturedTransferSelectedFiles = props.selectedFiles;
+    return null;
+  },
+}));
+
 const mockNavigate = jest.fn();
 const mockParams: Record<string, string | undefined> = {};
 
@@ -673,6 +683,59 @@ describe('StorageBrowser', () => {
           expect.any(AbortSignal),
         );
       });
+    });
+  });
+
+  describe('Transfer', () => {
+    beforeEach(() => {
+      capturedTransferSelectedFiles = null;
+    });
+
+    it('should pass all selected files to TransferModal even when search hides some', async () => {
+      // Regression test for issue #138: selectedFiles were filtered through sortedFiles
+      // (search-filtered view) so hidden files were silently excluded from the transfer payload.
+      setupMocks({ locationId: 'my-bucket' });
+      render(<StorageBrowser />);
+
+      // Wait for all 3 files to appear
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+      expect(screen.getByText('data.csv')).toBeInTheDocument();
+      expect(screen.getByText('subfolder')).toBeInTheDocument();
+
+      // Select all 3 files via the header checkbox
+      const checkboxes = screen.getAllByRole('checkbox');
+      await userEvent.click(checkboxes[0]); // select all
+
+      await waitFor(() => {
+        expect(screen.getByText(/3 items selected/)).toBeInTheDocument();
+      });
+
+      // Switch to contains mode and filter — only 'readme.txt' remains visible
+      await userEvent.click(screen.getByText('Contains'));
+      const searchInput = screen.getByPlaceholderText('Search files...');
+      await userEvent.type(searchInput, 'readme');
+
+      await waitFor(() => {
+        expect(screen.queryByText('data.csv')).not.toBeInTheDocument();
+        expect(screen.queryByText('subfolder')).not.toBeInTheDocument();
+      });
+
+      // The toolbar still reports 3 selected (selection set is unchanged)
+      expect(screen.getByText(/3 items selected/)).toBeInTheDocument();
+
+      // Open TransferModal — should receive all 3 selected files, not just visible 1
+      await userEvent.click(screen.getByText('Transfer to...'));
+
+      await waitFor(() => {
+        expect(capturedTransferSelectedFiles).not.toBeNull();
+      });
+      expect(capturedTransferSelectedFiles).toHaveLength(3);
+      const names = (capturedTransferSelectedFiles as Array<{ name: string }>).map((f) => f.name);
+      expect(names).toContain('readme.txt');
+      expect(names).toContain('data.csv');
+      expect(names).toContain('subfolder');
     });
   });
 
