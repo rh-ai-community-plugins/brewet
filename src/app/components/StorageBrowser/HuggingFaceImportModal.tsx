@@ -98,7 +98,7 @@ const HuggingFaceImportModal: React.FC<HuggingFaceImportModalProps> = ({
       const es = new EventSource(sseUrl);
       eventSourceRef.current = es;
 
-      es.onmessage = (event) => {
+      es.addEventListener('progress', (event) => {
         try {
           const data = JSON.parse(event.data) as TransferProgress;
           setProgress(data);
@@ -113,7 +113,7 @@ const HuggingFaceImportModal: React.FC<HuggingFaceImportModalProps> = ({
         } catch {
           // ignore parse errors from keep-alive comments
         }
-      };
+      });
 
       es.onerror = () => {
         es.close();

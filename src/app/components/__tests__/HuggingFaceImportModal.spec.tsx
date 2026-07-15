@@ -65,7 +65,7 @@ describe('HuggingFaceImportModal', () => {
     });
 
     // Mock EventSource
-    const mockES = { onmessage: null as unknown, onerror: null as unknown, close: jest.fn() };
+    const mockES = { addEventListener: jest.fn(), onerror: null as unknown, close: jest.fn() };
     const EventSourceSpy = jest.fn().mockImplementation(() => mockES);
     (globalThis as Record<string, unknown>).EventSource = EventSourceSpy;
 
@@ -96,7 +96,7 @@ describe('HuggingFaceImportModal', () => {
       modelId: 'owner/model',
     });
 
-    const mockES = { onmessage: null as unknown, onerror: null as unknown, close: jest.fn() };
+    const mockES = { addEventListener: jest.fn(), onerror: null as unknown, close: jest.fn() };
     const EventSourceSpy = jest.fn().mockImplementation(() => mockES);
     (globalThis as Record<string, unknown>).EventSource = EventSourceSpy;
 
@@ -140,7 +140,7 @@ describe('HuggingFaceImportModal', () => {
       modelId: 'meta-llama/Llama-2-7b',
     });
 
-    const mockES = { onmessage: null as unknown, onerror: null as unknown, close: jest.fn() };
+    const mockES = { addEventListener: jest.fn(), onerror: null as unknown, close: jest.fn() };
     const EventSourceSpy = jest.fn().mockImplementation(() => mockES);
     (globalThis as Record<string, unknown>).EventSource = EventSourceSpy;
 
@@ -171,7 +171,7 @@ describe('HuggingFaceImportModal', () => {
       modelId: 'owner/model',
     });
 
-    const mockES = { onmessage: null as unknown, onerror: null as unknown, close: jest.fn() };
+    const mockES = { addEventListener: jest.fn(), onerror: null as unknown, close: jest.fn() };
     const EventSourceSpy = jest.fn().mockImplementation(() => mockES);
     (globalThis as Record<string, unknown>).EventSource = EventSourceSpy;
 
