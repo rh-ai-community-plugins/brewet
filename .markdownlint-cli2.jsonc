@@ -9,5 +9,5 @@
     // Allow sibling headings with the same text (e.g. repeated build steps)
     "MD024": { "siblings_only": true }
   },
-  "ignores": ["node_modules", "dist", "bff/node_modules", "bff/dist"]
+  "ignores": ["node_modules", "dist", "bff/node_modules", "bff/dist", "storage-backend/node_modules", "storage-backend/dist", ".claude"]
 }

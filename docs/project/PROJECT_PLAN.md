@@ -8,7 +8,7 @@ Reimplement the Storage Browser, Storage Management, and Settings features from 
 
 ### Three-Container Model
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │  Cluster-Level (Helm chart)                                     │
 │  ┌────────────────────┐   ┌──────────────────────────────────┐  │
@@ -41,6 +41,7 @@ Reimplement the Storage Browser, Storage Management, and Settings features from 
 ### Why BFF is Required (Not K8s Service Proxy)
 
 The RHOAI Dashboard's `/api/k8s` proxy (`odh-dashboard/backend/src/utils/httpUtils.ts`):
+
 - **Buffers entire responses** in memory (`let data = ''; res.on('data', chunk => data += chunk)`) — breaks SSE streaming
 - **Sets UTF-8 encoding** on responses — corrupts binary file downloads
 - **Serializes request bodies** with `JSON.stringify` — breaks multipart/form-data uploads
@@ -56,6 +57,7 @@ The BFF provides direct streaming proxy to the storage backend with a single hop
 ### Container Lifecycle
 
 The "Brewet container" (storage backend) deployed per-project consists of:
+
 - **Deployment**: Image `brewet-storage-backend`, with Data Connection env vars (`envFrom: secretRef`) and PVC volume mounts. `LOCAL_STORAGE_PATHS` env var set to comma-separated mount paths.
 - **Service**: ClusterIP service on port 8888.
 - **NetworkPolicy**: Ingress only from the BFF namespace.
@@ -66,7 +68,7 @@ Start/Stop = scale replicas to 1/0. Delete = remove all three resources.
 
 ## Navigation & Page Structure
 
-```
+```text
 RHOAI Dashboard Sidebar
 └── Community Plugins (shared section)
     └── Brewet (plugin section)
@@ -77,6 +79,7 @@ RHOAI Dashboard Sidebar
 ```
 
 All pages share a **toolbar** at the top containing:
+
 - **Project Selector** (reused from current example, persistent across pages via React Context)
 - **Container Status Indicator** + **Start/Stop button** (shows status of Brewet container in selected project)
 - **Edit Container Config** button (opens creation wizard in edit mode)

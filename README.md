@@ -26,7 +26,7 @@ Brewet is a three-container system:
 
 **Management plane** (creating/starting/stopping containers, listing Data Connections and PVCs) goes through the dashboard's existing `/api/k8s` proxy. **Data plane** (file browsing, uploads, downloads, transfers) goes through the BFF, which streams to the per-project storage backend. A NetworkPolicy restricts storage backend ingress to the BFF namespace.
 
-```
+```text
 Browser ──► RHOAI Dashboard ──► /api/k8s ──► K8s API         (management plane)
 Browser ──► RHOAI Dashboard ──► /brewet/api ──► BFF ──► Storage Backend   (data plane)
 ```
