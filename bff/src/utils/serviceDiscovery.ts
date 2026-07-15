@@ -12,6 +12,7 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
+const inflight = new Map<string, Promise<string>>();
 const cacheTtlMs = (() => {
   const parsed = parseInt(process.env.SERVICE_CACHE_TTL_MS || '', 10);
   return Number.isNaN(parsed) ? DEFAULT_CACHE_TTL_MS : Math.max(0, parsed);
@@ -31,6 +32,17 @@ function getServiceAccountToken(): string {
   }
 }
 
+async function doResolve(namespace: string): Promise<string> {
+  const token = getServiceAccountToken();
+  const path = `/api/v1/namespaces/${encodeURIComponent(namespace)}/services/${SERVICE_NAME}`;
+
+  await k8sRequest(token, path);
+
+  const url = `http://${SERVICE_NAME}.${namespace}.svc.cluster.local:${SERVICE_PORT}`;
+  cache.set(namespace, { url, expiresAt: Date.now() + cacheTtlMs });
+  return url;
+}
+
 export async function resolveStorageBackend(
   namespace: string,
 ): Promise<string> {
@@ -43,14 +55,16 @@ export async function resolveStorageBackend(
     return cached.url;
   }
 
-  const token = getServiceAccountToken();
-  const path = `/api/v1/namespaces/${encodeURIComponent(namespace)}/services/${SERVICE_NAME}`;
+  const existing = inflight.get(namespace);
+  if (existing) return existing;
 
-  await k8sRequest(token, path);
-
-  const url = `http://${SERVICE_NAME}.${namespace}.svc.cluster.local:${SERVICE_PORT}`;
-  cache.set(namespace, { url, expiresAt: Date.now() + cacheTtlMs });
-  return url;
+  const promise = doResolve(namespace);
+  inflight.set(namespace, promise);
+  try {
+    return await promise;
+  } finally {
+    inflight.delete(namespace);
+  }
 }
 
 export function clearCache(namespace?: string): void {
