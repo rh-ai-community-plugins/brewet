@@ -90,3 +90,20 @@ export interface ConnectionTestResult {
   message?: string;
   username?: string;
 }
+
+export interface HuggingFaceImportRequest {
+  modelId: string;
+  destinationType: 's3' | 'local';
+  bucketName?: string;
+  localLocationId?: string;
+  localPath?: string;
+  hfToken?: string;
+  prefix?: string;
+}
+
+export interface HuggingFaceImportResponse {
+  jobId: string;
+  sseUrl: string;
+  fileCount: number;
+  modelId: string;
+}

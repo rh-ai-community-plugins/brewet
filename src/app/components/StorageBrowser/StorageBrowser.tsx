@@ -51,6 +51,7 @@ import {
   SyncIcon,
   PlusCircleIcon,
   EyeIcon,
+  ExternalLinkAltIcon,
 } from '@patternfly/react-icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useBrewetContext } from '~/app/context/BrewetContext';
@@ -58,6 +59,7 @@ import { storageService } from '~/app/services/storageService';
 import { base64Encode, base64Decode } from '~/app/utils/encoding';
 import { formatBytes } from '~/app/utils/format';
 import DocumentRenderer, { isPreviewable, getFileType } from './DocumentRenderer';
+import HuggingFaceImportModal from './HuggingFaceImportModal';
 import type { StorageLocation, FileInfo, FileListResponse } from '~/app/types/storage';
 import './StorageBrowser.css';
 
@@ -148,6 +150,9 @@ const StorageBrowser: React.FC = () => {
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
+
+  // HuggingFace import
+  const [isHfImportOpen, setIsHfImportOpen] = useState(false);
 
   // Create folder
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
@@ -772,6 +777,17 @@ const StorageBrowser: React.FC = () => {
                   Create Folder
                 </Button>
               </ToolbarItem>
+              {selectedLocation && (
+                <ToolbarItem>
+                  <Button
+                    variant="secondary"
+                    icon={<ExternalLinkAltIcon />}
+                    onClick={() => setIsHfImportOpen(true)}
+                  >
+                    Import from HuggingFace
+                  </Button>
+                </ToolbarItem>
+              )}
               <ToolbarItem>
                 <Button
                   variant="plain"
@@ -1216,6 +1232,20 @@ const StorageBrowser: React.FC = () => {
           </Button>
         </ModalFooter>
       </Modal>
+
+      {/* HuggingFace import modal */}
+      {isHfImportOpen && selectedLocation && selectedProject && (
+        <HuggingFaceImportModal
+          namespace={selectedProject}
+          location={selectedLocation}
+          currentPath={currentPath}
+          onClose={() => setIsHfImportOpen(false)}
+          onComplete={() => {
+            setIsHfImportOpen(false);
+            loadFilesRef.current?.();
+          }}
+        />
+      )}
     </>
   );
 };

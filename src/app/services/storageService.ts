@@ -12,6 +12,8 @@ import type {
   HuggingFaceSettings,
   ProxySettings,
   ConnectionTestResult,
+  HuggingFaceImportRequest,
+  HuggingFaceImportResponse,
 } from '~/app/types/storage';
 
 class StorageService {
@@ -286,6 +288,19 @@ class StorageService {
 
   async updateMaxFilesPerPage(namespace: string, value: number, signal?: AbortSignal): Promise<void> {
     await apiClient.put(namespace, '/settings/max-files-per-page', { maxFilesPerPage: value }, signal);
+  }
+
+  async importHuggingFace(
+    namespace: string,
+    request: HuggingFaceImportRequest,
+    signal?: AbortSignal,
+  ): Promise<HuggingFaceImportResponse> {
+    return apiClient.post<HuggingFaceImportResponse>(
+      namespace,
+      '/objects/huggingface-import',
+      request,
+      signal,
+    );
   }
 
   async initiateTransfer(
