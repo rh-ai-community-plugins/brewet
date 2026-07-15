@@ -474,4 +474,38 @@ describe('StorageBrowser', () => {
     });
   });
 
+  describe('PVC pagination', () => {
+    it('should pass fetched pageLimit to listFiles for PVC locations', async () => {
+      setupMocks({ locationId: 'local-0' });
+      mockStorageService.getMaxFilesPerPage.mockResolvedValue(50);
+      render(<StorageBrowser />);
+
+      await waitFor(() => {
+        expect(mockStorageService.listFiles).toHaveBeenCalledWith(
+          'test-ns',
+          expect.objectContaining({ id: 'local-0', type: 'pvc' }),
+          '',
+          expect.objectContaining({ limit: 50 }),
+          expect.any(AbortSignal),
+        );
+      });
+    });
+
+    it('should fall back to default pageLimit when getMaxFilesPerPage fails for PVC', async () => {
+      setupMocks({ locationId: 'local-0' });
+      mockStorageService.getMaxFilesPerPage.mockRejectedValue(new Error('Service unavailable'));
+      render(<StorageBrowser />);
+
+      await waitFor(() => {
+        expect(mockStorageService.listFiles).toHaveBeenCalledWith(
+          'test-ns',
+          expect.objectContaining({ id: 'local-0', type: 'pvc' }),
+          '',
+          expect.objectContaining({ limit: 100 }),
+          expect.any(AbortSignal),
+        );
+      });
+    });
+  });
+
 });

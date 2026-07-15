@@ -271,21 +271,21 @@ class StorageService {
   }
 
   async getMaxConcurrentTransfers(namespace: string, signal?: AbortSignal): Promise<number> {
-    const result = await apiClient.get<{ value: number }>(namespace, '/settings/max-concurrent-transfers', signal);
-    return result.value;
+    const result = await apiClient.get<{ maxConcurrentTransfers: number }>(namespace, '/settings/max-concurrent-transfers', signal);
+    return result.maxConcurrentTransfers;
   }
 
   async updateMaxConcurrentTransfers(namespace: string, value: number, signal?: AbortSignal): Promise<void> {
-    await apiClient.put(namespace, '/settings/max-concurrent-transfers', { value }, signal);
+    await apiClient.put(namespace, '/settings/max-concurrent-transfers', { maxConcurrentTransfers: value }, signal);
   }
 
   async getMaxFilesPerPage(namespace: string, signal?: AbortSignal): Promise<number> {
-    const result = await apiClient.get<{ value: number }>(namespace, '/settings/max-files-per-page', signal);
-    return result.value;
+    const result = await apiClient.get<{ maxFilesPerPage: number }>(namespace, '/settings/max-files-per-page', signal);
+    return result.maxFilesPerPage;
   }
 
   async updateMaxFilesPerPage(namespace: string, value: number, signal?: AbortSignal): Promise<void> {
-    await apiClient.put(namespace, '/settings/max-files-per-page', { value }, signal);
+    await apiClient.put(namespace, '/settings/max-files-per-page', { maxFilesPerPage: value }, signal);
   }
 
   async initiateTransfer(

@@ -176,24 +176,6 @@ const StorageBrowser: React.FC = () => {
       });
   }, [selectedProject]);
 
-  // Fetch maxFilesPerPage from backend when project or location changes
-  useEffect(() => {
-    if (!selectedProject || !selectedLocation) return;
-    storageService
-      .getMaxFilesPerPage(selectedProject)
-      .then((limit) => {
-        if (activeProjectRef.current === selectedProject) {
-          setPageLimit(limit);
-        }
-      })
-      .catch(() => {
-        // Fall back to the default if the setting cannot be fetched
-        if (activeProjectRef.current === selectedProject) {
-          setPageLimit(100);
-        }
-      });
-  }, [selectedProject, selectedLocation]);
-
   // Load files when location or path changes
   const loadFiles = useCallback(
     async (append = false) => {
@@ -229,7 +211,19 @@ const StorageBrowser: React.FC = () => {
           }
         } else {
           options.offset = append ? localOffset : 0;
-          options.limit = pageLimit;
+          // Fetch the current page limit directly so the correct value is always
+          // used on initial load, avoiding a race with a concurrent settings fetch.
+          if (!append) {
+            try {
+              const fetchedLimit = await storageService.getMaxFilesPerPage(project);
+              setPageLimit(fetchedLimit);
+              options.limit = fetchedLimit;
+            } catch {
+              options.limit = pageLimit;
+            }
+          } else {
+            options.limit = pageLimit;
+          }
         }
 
         const response: FileListResponse = await storageService.listFiles(
