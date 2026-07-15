@@ -447,8 +447,8 @@ const StorageBrowser: React.FC = () => {
       setBulkDeleteError(`Failed to delete ${errors.length} item(s): ${errors.join('; ')}`);
     } else {
       setIsBulkDeleteOpen(false);
+      setSelectedFiles(new Set());
     }
-    setSelectedFiles(new Set());
     setIsBulkDeleting(false);
     loadFilesRef.current?.();
   }, [selectedProject, selectedLocation, selectedFiles, sortedFiles, currentPath]);
