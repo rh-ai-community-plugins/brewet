@@ -7,11 +7,17 @@ export function validateBucketName(bucketName: string | undefined): string | nul
     return 'Bucket name must be between 3 and 63 characters.';
   }
 
-  if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(bucketName)) {
+  if (!/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/.test(bucketName)) {
     return 'Bucket name format is invalid.';
   }
 
-  const invalidPatterns = [/^xn--/, /--/, /^\d+\.\d+\./];
+  const invalidPatterns = [
+    /^xn--/,                    // Punycode prefix
+    /--/,                       // Consecutive hyphens
+    /\.\./ ,                    // Consecutive periods
+    /\.-|-\./,                  // Period adjacent to hyphen
+    /^(\d{1,3}\.){3}\d{1,3}$/, // IP address format
+  ];
   if (invalidPatterns.some((pattern) => pattern.test(bucketName))) {
     return 'Bucket name contains invalid patterns.';
   }
