@@ -232,4 +232,55 @@ describe('useBrewetContainer', () => {
       'Content-Type': 'application/strategic-merge-patch+json',
     });
   });
+
+  it('should return Operation:Aborted entry and rollback on abort during create', async () => {
+    localStorage.setItem('brewet.selected-project', 'test-ns');
+
+    let abortCalled = false;
+    const abortError = Object.assign(new Error('AbortError'), { name: 'AbortError' });
+
+    let postCallCount = 0;
+    global.fetch = jest.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      if (!init?.method || init.method === 'GET') {
+        return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+      }
+      if (init.method === 'POST') {
+        postCallCount++;
+        if (postCallCount === 1) {
+          return Promise.resolve({ ok: true, status: 201, json: () => Promise.resolve({}) });
+        }
+        // Second POST (Service) throws AbortError
+        abortCalled = true;
+        return Promise.reject(abortError);
+      }
+      return Promise.resolve({ ok: true, status: 200 });
+    });
+
+    const { result } = renderHook(() => useBrewetContainer(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.containerStatus).toBe('none');
+    });
+
+    let results: Array<{ resource: string; success: boolean; error?: string }> = [];
+    await act(async () => {
+      results = await result.current.createContainer({
+        dataConnection: null,
+        pvcMounts: [],
+      });
+    });
+
+    expect(abortCalled).toBe(true);
+
+    const abortEntry = results.find((r) => r.resource === 'Operation' && r.error === 'Aborted');
+    expect(abortEntry).toBeDefined();
+    expect(abortEntry?.success).toBe(false);
+
+    // Deployment was created before abort — rollback DELETE should be issued
+    const deleteCalls = (global.fetch as jest.Mock).mock.calls.filter(
+      (call: [string, RequestInit]) => call[1]?.method === 'DELETE',
+    );
+    expect(deleteCalls.length).toBeGreaterThan(0);
+    expect(deleteCalls.some((call: [string]) => call[0].includes('deployments'))).toBe(true);
+  });
 });

@@ -75,6 +75,14 @@ describe('k8sResources', () => {
       const deployment = buildDeployment('test-ns', config, 'custom:v1');
       expect(deployment.spec.template.spec.containers[0].image).toBe('custom:v1');
     });
+
+    it('should not use the :latest tag by default', () => {
+      const config: ContainerConfig = { dataConnection: null, pvcMounts: [] };
+      const deployment = buildDeployment('test-ns', config);
+      const image = deployment.spec.template.spec.containers[0].image as string;
+      expect(image).toBeTruthy();
+      expect(image).not.toMatch(/:latest$/);
+    });
   });
 
   describe('buildService', () => {

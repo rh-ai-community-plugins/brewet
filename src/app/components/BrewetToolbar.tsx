@@ -11,6 +11,7 @@ import {
   ModalFooter,
   ModalHeader,
   Spinner,
+  Alert,
 } from '@patternfly/react-core';
 import {
   PlayIcon,
@@ -47,6 +48,7 @@ export const BrewetToolbar: React.FC = () => {
   } = useBrewetContainer();
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
 
@@ -65,9 +67,19 @@ export const BrewetToolbar: React.FC = () => {
   }, [isActioning, canStart, startContainer, stopContainer]);
 
   const handleDelete = useCallback(async () => {
-    await deleteContainer();
-    setIsDeleteModalOpen(false);
+    const success = await deleteContainer();
+    if (success) {
+      setIsDeleteModalOpen(false);
+      setDeleteError(null);
+    } else {
+      setDeleteError('Failed to delete the storage container. Check your permissions and try again.');
+    }
   }, [deleteContainer]);
+
+  const handleCloseDeleteModal = useCallback(() => {
+    setIsDeleteModalOpen(false);
+    setDeleteError(null);
+  }, []);
 
   const openCreateWizard = useCallback(() => {
     setIsEditMode(false);
@@ -154,20 +166,24 @@ export const BrewetToolbar: React.FC = () => {
         </ToolbarContent>
       </Toolbar>
 
-      <ContainerWizard
-        isOpen={isWizardOpen}
-        onClose={() => setIsWizardOpen(false)}
-        isEditMode={isEditMode}
-      />
+      {isWizardOpen && (
+        <ContainerWizard
+          onClose={() => setIsWizardOpen(false)}
+          isEditMode={isEditMode}
+        />
+      )}
 
       <Modal
         variant="small"
         isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
+        onClose={handleCloseDeleteModal}
         aria-label="Delete container confirmation"
       >
         <ModalHeader title="Delete storage container?" />
         <ModalBody>
+          {deleteError && (
+            <Alert variant="danger" isInline title={deleteError} className="pf-v6-u-mb-md" />
+          )}
           This will delete the storage backend Deployment, Service, and NetworkPolicy
           in project <strong>{selectedProject}</strong>. This action cannot be undone.
         </ModalBody>
@@ -182,7 +198,7 @@ export const BrewetToolbar: React.FC = () => {
           </Button>
           <Button
             variant="link"
-            onClick={() => setIsDeleteModalOpen(false)}
+            onClick={handleCloseDeleteModal}
             isDisabled={isActioning}
           >
             Cancel

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { ContainerConfig } from '~/app/types/k8s';
 import { buildDeployment, buildService, buildNetworkPolicy, DEPLOYMENT_NAME } from '~/app/utils/k8sResources';
@@ -17,9 +17,10 @@ export function useBrewetContainer() {
     containerStatus,
     containerInfo,
     refreshContainerStatus,
+    isActioning,
+    setIsActioning,
   } = useBrewetContext();
 
-  const [isActioning, setIsActioning] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -69,14 +70,14 @@ export function useBrewetContainer() {
         setIsActioning(false);
       }
     },
-    [selectedProject, refreshContainerStatus, scheduleRefresh],
+    [selectedProject, refreshContainerStatus, scheduleRefresh, setIsActioning],
   );
 
   const startContainer = useCallback(() => scaleReplicas(1), [scaleReplicas]);
   const stopContainer = useCallback(() => scaleReplicas(0), [scaleReplicas]);
 
-  const deleteContainer = useCallback(async () => {
-    if (!selectedProject) return;
+  const deleteContainer = useCallback(async (): Promise<boolean> => {
+    if (!selectedProject) return false;
 
     controllerRef.current?.abort();
     const controller = new AbortController();
@@ -101,14 +102,16 @@ export function useBrewetContainer() {
         }
       }
       scheduleRefresh();
+      return true;
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') return;
+      if (err instanceof Error && err.name === 'AbortError') return false;
       console.error('Delete operation failed:', err);
       refreshContainerStatus();
+      return false;
     } finally {
       setIsActioning(false);
     }
-  }, [selectedProject, refreshContainerStatus, scheduleRefresh]);
+  }, [selectedProject, refreshContainerStatus, scheduleRefresh, setIsActioning]);
 
   const createContainer = useCallback(
     async (config: ContainerConfig): Promise<CreateResourceResult[]> => {
@@ -155,9 +158,9 @@ export function useBrewetContainer() {
           if (!res.ok) {
             const text = await res.text().catch(() => '');
             results.push({ resource: name, success: false, error: `${res.status}: ${text}` });
-            // Rollback previously created resources
+            // Rollback previously created resources (no signal — must not be cancellable)
             for (const url of createdUrls.reverse()) {
-              await fetch(url, { method: 'DELETE', signal: controller.signal }).catch(() => {});
+              await fetch(url, { method: 'DELETE' }).catch(() => {});
             }
             break;
           }
@@ -168,7 +171,13 @@ export function useBrewetContainer() {
           scheduleRefresh();
         }
       } catch (err: unknown) {
-        if (err instanceof Error && err.name === 'AbortError') return results;
+        if (err instanceof Error && err.name === 'AbortError') {
+          results.push({ resource: 'Operation', success: false, error: 'Aborted' });
+          for (const url of [...createdUrls].reverse()) {
+            await fetch(url, { method: 'DELETE' }).catch(() => {});
+          }
+          return results;
+        }
         console.error('Create operation failed:', err);
         // Best-effort rollback
         for (const url of createdUrls.reverse()) {
@@ -181,7 +190,7 @@ export function useBrewetContainer() {
 
       return results;
     },
-    [selectedProject, refreshContainerStatus, scheduleRefresh],
+    [selectedProject, refreshContainerStatus, scheduleRefresh, setIsActioning],
   );
 
   const updateContainer = useCallback(
@@ -229,7 +238,7 @@ export function useBrewetContainer() {
 
       return results;
     },
-    [selectedProject, refreshContainerStatus, scheduleRefresh],
+    [selectedProject, refreshContainerStatus, scheduleRefresh, setIsActioning],
   );
 
   return {

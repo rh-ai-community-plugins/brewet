@@ -20,6 +20,8 @@ beforeEach(() => {
     containerStatus: 'running',
     containerInfo: null,
     refreshContainerStatus: jest.fn(),
+    isActioning: false,
+    setIsActioning: jest.fn(),
   });
   mockUseBrewetContainer.mockReturnValue({
     selectedProject: 'test-ns',
@@ -53,6 +55,8 @@ describe('StorageBrowserPage', () => {
       containerStatus: 'none',
       containerInfo: null,
       refreshContainerStatus: jest.fn(),
+      isActioning: false,
+      setIsActioning: jest.fn(),
     });
     render(<StorageBrowserPage />);
     expect(screen.getByText('Select a project')).toBeInTheDocument();

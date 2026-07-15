@@ -8,8 +8,7 @@ jest.mock('~/app/context/BrewetContext');
 jest.mock('~/app/hooks/useBrewetContainer');
 
 jest.mock('~/app/components/ContainerWizard', () => ({
-  ContainerWizard: ({ isOpen }: { isOpen: boolean }) =>
-    isOpen ? <div data-testid="container-wizard">Wizard</div> : null,
+  ContainerWizard: () => <div data-testid="container-wizard">Wizard</div>,
 }));
 
 const mockUseBrewetContext = useBrewetContext as jest.MockedFunction<typeof useBrewetContext>;
@@ -22,6 +21,8 @@ function mockContext(overrides: Partial<ReturnType<typeof useBrewetContext>> = {
     containerStatus: 'running',
     containerInfo: null,
     refreshContainerStatus: jest.fn(),
+    isActioning: false,
+    setIsActioning: jest.fn(),
     ...overrides,
   });
 }

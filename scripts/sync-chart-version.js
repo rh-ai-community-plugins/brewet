@@ -18,6 +18,11 @@ plugin = plugin.replace(/^version:.*/m, `version: ${version}`);
 plugin = plugin.replace(/^(\s+tag:)\s.*/m, `$1 "${version}"`);
 fs.writeFileSync(pluginPath, plugin);
 
+const valuesPath = 'chart/values.yaml';
+let values = fs.readFileSync(valuesPath, 'utf8');
+values = values.replace(/(storageBackend:\s*\n\s+image:\s*\n\s+repository:[^\n]*\n\s+tag:)\s*"[^"]*"/, `$1 "${version}"`);
+fs.writeFileSync(valuesPath, values);
+
 const versionFlag = /--version \S+/g;
 for (const docPath of ['README.md', 'docs/development/BUILD_AND_PUSH.md', 'docs/deployment/OPENSHIFT_DEPLOY.md']) {
   const content = fs.readFileSync(docPath, 'utf8');
