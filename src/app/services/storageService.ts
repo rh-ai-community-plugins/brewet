@@ -1,0 +1,300 @@
+import { apiClient } from '~/app/services/apiClient';
+import { base64Encode } from '~/app/utils/encoding';
+import type {
+  StorageLocation,
+  BucketsList,
+  LocalStorageLocation,
+  FileListResponse,
+  TransferRequest,
+  TransferJob,
+  ConflictCheckResult,
+  S3Settings,
+  HuggingFaceSettings,
+  ProxySettings,
+  ConnectionTestResult,
+} from '~/app/types/storage';
+
+class StorageService {
+  private locationsCache: StorageLocation[] | null = null;
+
+  async getLocations(namespace: string, signal?: AbortSignal): Promise<StorageLocation[]> {
+    if (this.locationsCache) {
+      return this.locationsCache;
+    }
+
+    const [bucketsResult, localResult] = await Promise.allSettled([
+      apiClient.get<BucketsList>(namespace, '/api/buckets', signal),
+      apiClient.get<LocalStorageLocation[]>(namespace, '/api/local/locations', signal),
+    ]);
+
+    const locations: StorageLocation[] = [];
+
+    if (bucketsResult.status === 'fulfilled') {
+      const bucketsList = bucketsResult.value;
+      for (const bucket of bucketsList.buckets) {
+        locations.push({
+          id: bucket.name,
+          name: bucket.name,
+          type: 's3',
+          status: 'available',
+          creationDate: bucket.creationDate,
+        });
+      }
+    }
+
+    if (localResult.status === 'fulfilled') {
+      for (const loc of localResult.value) {
+        locations.push({
+          id: loc.id,
+          name: loc.name,
+          type: 'pvc',
+          status: loc.available ? 'available' : 'unavailable',
+          error: loc.error,
+        });
+      }
+    }
+
+    this.locationsCache = locations;
+    return locations;
+  }
+
+  async refreshLocations(namespace: string, signal?: AbortSignal): Promise<StorageLocation[]> {
+    this.locationsCache = null;
+    return this.getLocations(namespace, signal);
+  }
+
+  async getBucketsList(namespace: string, signal?: AbortSignal): Promise<BucketsList> {
+    return apiClient.get<BucketsList>(namespace, '/api/buckets', signal);
+  }
+
+  async createBucket(namespace: string, bucketName: string, signal?: AbortSignal): Promise<void> {
+    await apiClient.post(namespace, '/api/buckets', { bucketName }, signal);
+    this.locationsCache = null;
+  }
+
+  async deleteBucket(namespace: string, bucketName: string, signal?: AbortSignal): Promise<void> {
+    await apiClient.delete(namespace, `/api/buckets/${encodeURIComponent(bucketName)}`, signal);
+    this.locationsCache = null;
+  }
+
+  async listFiles(
+    namespace: string,
+    location: StorageLocation,
+    path: string,
+    options?: {
+      continuationToken?: string;
+      maxKeys?: number;
+      limit?: number;
+      offset?: number;
+      search?: string;
+      searchMode?: 'startsWith' | 'contains';
+    },
+    signal?: AbortSignal,
+  ): Promise<FileListResponse> {
+    if (location.type === 's3') {
+      const encodedPath = path ? base64Encode(path) : '';
+      const url = encodedPath
+        ? `/api/objects/${encodeURIComponent(location.id)}/${encodedPath}`
+        : `/api/objects/${encodeURIComponent(location.id)}`;
+
+      const params = new URLSearchParams();
+      if (options?.continuationToken) params.set('continuationToken', options.continuationToken);
+      if (options?.maxKeys) params.set('maxKeys', String(options.maxKeys));
+      if (options?.search && options?.searchMode === 'startsWith') params.set('prefix', options.search);
+
+      const query = params.toString();
+      return apiClient.get<FileListResponse>(namespace, query ? `${url}?${query}` : url, signal);
+    }
+
+    const encodedPath = base64Encode(path || '/');
+    const url = `/api/local/files/${encodeURIComponent(location.id)}/${encodedPath}`;
+
+    const params = new URLSearchParams();
+    if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.offset) params.set('offset', String(options.offset));
+
+    const query = params.toString();
+    return apiClient.get<FileListResponse>(namespace, query ? `${url}?${query}` : url, signal);
+  }
+
+  async uploadFile(
+    namespace: string,
+    location: StorageLocation,
+    path: string,
+    file: File,
+    signal?: AbortSignal,
+  ): Promise<Response> {
+    const encodedPath = base64Encode(path);
+    if (location.type === 's3') {
+      return apiClient.uploadFile(
+        namespace,
+        `/api/objects/upload/${encodeURIComponent(location.id)}/${encodedPath}`,
+        file,
+        signal,
+      );
+    }
+    return apiClient.uploadFile(
+      namespace,
+      `/api/local/files/${encodeURIComponent(location.id)}/${encodedPath}`,
+      file,
+      signal,
+    );
+  }
+
+  async downloadFile(
+    namespace: string,
+    location: StorageLocation,
+    path: string,
+  ): Promise<string> {
+    const encodedPath = base64Encode(path);
+    if (location.type === 's3') {
+      return apiClient.getDownloadUrl(
+        namespace,
+        `/api/objects/download/${encodeURIComponent(location.id)}/${encodedPath}`,
+      );
+    }
+    return apiClient.getDownloadUrl(
+      namespace,
+      `/api/local/download/${encodeURIComponent(location.id)}/${encodedPath}`,
+    );
+  }
+
+  async deleteFile(
+    namespace: string,
+    location: StorageLocation,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const encodedPath = base64Encode(path);
+    if (location.type === 's3') {
+      await apiClient.delete(
+        namespace,
+        `/api/objects/${encodeURIComponent(location.id)}/${encodedPath}`,
+        signal,
+      );
+      return;
+    }
+    await apiClient.delete(
+      namespace,
+      `/api/local/files/${encodeURIComponent(location.id)}/${encodedPath}`,
+      signal,
+    );
+  }
+
+  async createFolder(
+    namespace: string,
+    location: StorageLocation,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const encodedPath = base64Encode(path);
+    if (location.type === 's3') {
+      await apiClient.post(
+        namespace,
+        `/api/objects/folder/${encodeURIComponent(location.id)}/${encodedPath}`,
+        undefined,
+        signal,
+      );
+      return;
+    }
+    await apiClient.post(
+      namespace,
+      `/api/local/directories/${encodeURIComponent(location.id)}/${encodedPath}`,
+      undefined,
+      signal,
+    );
+  }
+
+  async viewFile(
+    namespace: string,
+    location: StorageLocation,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const encodedPath = base64Encode(path);
+    if (location.type === 's3') {
+      return apiClient.get<string>(
+        namespace,
+        `/api/objects/view/${encodeURIComponent(location.id)}/${encodedPath}`,
+        signal,
+      );
+    }
+    return apiClient.get<string>(
+      namespace,
+      `/api/local/view/${encodeURIComponent(location.id)}/${encodedPath}`,
+      signal,
+    );
+  }
+
+  async getS3Settings(namespace: string, signal?: AbortSignal): Promise<S3Settings> {
+    return apiClient.get<S3Settings>(namespace, '/api/settings/s3', signal);
+  }
+
+  async updateS3Settings(namespace: string, settings: S3Settings, signal?: AbortSignal): Promise<void> {
+    await apiClient.put(namespace, '/api/settings/s3', settings, signal);
+  }
+
+  async testS3Connection(namespace: string, signal?: AbortSignal): Promise<ConnectionTestResult> {
+    return apiClient.post<ConnectionTestResult>(namespace, '/api/settings/test-s3', undefined, signal);
+  }
+
+  async getHuggingFaceSettings(namespace: string, signal?: AbortSignal): Promise<HuggingFaceSettings> {
+    return apiClient.get<HuggingFaceSettings>(namespace, '/api/settings/huggingface', signal);
+  }
+
+  async updateHuggingFaceSettings(namespace: string, settings: HuggingFaceSettings, signal?: AbortSignal): Promise<void> {
+    await apiClient.put(namespace, '/api/settings/huggingface', settings, signal);
+  }
+
+  async testHuggingFaceConnection(namespace: string, signal?: AbortSignal): Promise<ConnectionTestResult> {
+    return apiClient.post<ConnectionTestResult>(namespace, '/api/settings/test-huggingface', undefined, signal);
+  }
+
+  async getProxySettings(namespace: string, signal?: AbortSignal): Promise<ProxySettings> {
+    return apiClient.get<ProxySettings>(namespace, '/api/settings/proxy', signal);
+  }
+
+  async updateProxySettings(namespace: string, settings: ProxySettings, signal?: AbortSignal): Promise<void> {
+    await apiClient.put(namespace, '/api/settings/proxy', settings, signal);
+  }
+
+  async testProxyConnection(namespace: string, signal?: AbortSignal): Promise<ConnectionTestResult> {
+    return apiClient.post<ConnectionTestResult>(namespace, '/api/settings/test-proxy', undefined, signal);
+  }
+
+  async getMaxConcurrentTransfers(namespace: string, signal?: AbortSignal): Promise<number> {
+    const result = await apiClient.get<{ value: number }>(namespace, '/api/settings/max-concurrent-transfers', signal);
+    return result.value;
+  }
+
+  async updateMaxConcurrentTransfers(namespace: string, value: number, signal?: AbortSignal): Promise<void> {
+    await apiClient.put(namespace, '/api/settings/max-concurrent-transfers', { value }, signal);
+  }
+
+  async getMaxFilesPerPage(namespace: string, signal?: AbortSignal): Promise<number> {
+    const result = await apiClient.get<{ value: number }>(namespace, '/api/settings/max-files-per-page', signal);
+    return result.value;
+  }
+
+  async updateMaxFilesPerPage(namespace: string, value: number, signal?: AbortSignal): Promise<void> {
+    await apiClient.put(namespace, '/api/settings/max-files-per-page', { value }, signal);
+  }
+
+  async initiateTransfer(
+    namespace: string,
+    request: TransferRequest,
+    signal?: AbortSignal,
+  ): Promise<TransferJob> {
+    return apiClient.post<TransferJob>(namespace, '/api/transfer', request, signal);
+  }
+
+  async checkConflicts(
+    namespace: string,
+    request: Omit<TransferRequest, 'conflictResolution'>,
+    signal?: AbortSignal,
+  ): Promise<ConflictCheckResult> {
+    return apiClient.post<ConflictCheckResult>(namespace, '/api/transfer/check-conflicts', request, signal);
+  }
+}
+
+export const storageService = new StorageService();
