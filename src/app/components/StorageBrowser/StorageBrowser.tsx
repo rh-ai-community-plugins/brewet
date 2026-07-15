@@ -290,6 +290,7 @@ const StorageBrowser: React.FC = () => {
     setTotalCount(undefined);
     setDownloadError(null);
     setSelectedFiles(new Set());
+    setPreviewFile(null);
   }, [locationId, encodedPath]);
 
   useEffect(() => {
