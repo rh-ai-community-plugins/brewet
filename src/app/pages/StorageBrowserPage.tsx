@@ -1,12 +1,19 @@
 import React from 'react';
+import { Routes, Route } from 'react-router-dom';
 import {
   PageSection,
   Title,
-  EmptyState,
-  EmptyStateBody,
 } from '@patternfly/react-core';
-import { SearchIcon } from '@patternfly/react-icons';
 import { ContainerRequired } from '~/app/components/ContainerRequired';
+import { StorageBrowser } from '~/app/components/StorageBrowser';
+
+const StorageBrowserContent: React.FC = () => (
+  <Routes>
+    <Route path="/" element={<StorageBrowser />} />
+    <Route path=":locationId" element={<StorageBrowser />} />
+    <Route path=":locationId/:path" element={<StorageBrowser />} />
+  </Routes>
+);
 
 const StorageBrowserPage: React.FC = () => (
   <PageSection>
@@ -14,11 +21,7 @@ const StorageBrowserPage: React.FC = () => (
       Storage Browser
     </Title>
     <ContainerRequired>
-      <EmptyState headingLevel="h2" titleText="Coming soon" icon={SearchIcon}>
-        <EmptyStateBody>
-          Browse and manage files across S3 buckets and PVC storage locations.
-        </EmptyStateBody>
-      </EmptyState>
+      <StorageBrowserContent />
     </ContainerRequired>
   </PageSection>
 );
