@@ -120,6 +120,7 @@ describe('TransferModal', () => {
               { path: 'models/', type: 'directory' },
             ],
           }),
+          expect.any(AbortSignal),
         );
       });
 
@@ -392,6 +393,7 @@ describe('TransferModal', () => {
           expect.objectContaining({
             source: 's3:source-bucket/data/models',
           }),
+          expect.any(AbortSignal),
         );
       });
     });
@@ -422,6 +424,7 @@ describe('TransferModal', () => {
           expect.objectContaining({
             source: 'local:local-0',
           }),
+          expect.any(AbortSignal),
         );
       });
     });

@@ -82,6 +82,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
   const eventSourceRef = useRef<EventSource | null>(null);
   const mountedRef = useRef(true);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const destLocation = useMemo(
     () => locations.find((l) => l.id === destLocationId) ?? null,
@@ -89,8 +90,8 @@ const TransferModal: React.FC<TransferModalProps> = ({
   );
 
   const availableDestinations = useMemo(
-    () => locations.filter((l) => l.status === 'available'),
-    [locations],
+    () => locations.filter((l) => l.status === 'available' && l.id !== sourceLocation.id),
+    [locations, sourceLocation.id],
   );
 
   const items = useMemo(
@@ -121,6 +122,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
   useEffect(() => {
     return () => {
       mountedRef.current = false;
+      abortControllerRef.current?.abort();
       cleanupEventSource();
     };
   }, [cleanupEventSource]);
@@ -143,10 +145,14 @@ const TransferModal: React.FC<TransferModalProps> = ({
       const request = buildRequest(resolution);
       if (!request || !destLocation) return;
 
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       setIsStartingTransfer(true);
       setTransferError(null);
       try {
-        const result = await storageService.initiateTransfer(namespace, request);
+        const result = await storageService.initiateTransfer(namespace, request, controller.signal);
         if (!mountedRef.current) return;
 
         setJobId(result.jobId);
@@ -213,6 +219,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
           }, 3000);
         };
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (!mountedRef.current) return;
         setTransferError(err instanceof Error ? err.message : 'Failed to start transfer.');
       } finally {
@@ -226,10 +233,14 @@ const TransferModal: React.FC<TransferModalProps> = ({
     const request = buildRequest();
     if (!request) return;
 
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setIsCheckingConflicts(true);
     setConflictError(null);
     try {
-      const result = await storageService.checkConflicts(namespace, request);
+      const result = await storageService.checkConflicts(namespace, request, controller.signal);
       if (!mountedRef.current) return;
       setConflictResult(result);
       if (result.conflicts.length > 0) {
@@ -239,6 +250,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
         startTransfer('overwrite');
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       if (!mountedRef.current) return;
       setConflictError(err instanceof Error ? err.message : 'Failed to check conflicts.');
     } finally {
