@@ -58,8 +58,11 @@ import { useBrewetContext } from '~/app/context/BrewetContext';
 import { storageService } from '~/app/services/storageService';
 import { base64Encode, base64Decode } from '~/app/utils/encoding';
 import { formatBytes } from '~/app/utils/format';
+import { ArrowRightIcon } from '@patternfly/react-icons';
 import DocumentRenderer, { isPreviewable, getFileType } from './DocumentRenderer';
 import HuggingFaceImportModal from './HuggingFaceImportModal';
+import TransferModal from './TransferModal';
+import { transferEmitter } from '~/app/utils/emitter';
 import type { StorageLocation, FileInfo, FileListResponse } from '~/app/types/storage';
 import './StorageBrowser.css';
 
@@ -153,6 +156,9 @@ const StorageBrowser: React.FC = () => {
 
   // HuggingFace import
   const [isHfImportOpen, setIsHfImportOpen] = useState(false);
+
+  // Transfer
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
 
   // Create folder
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
@@ -316,6 +322,20 @@ const StorageBrowser: React.FC = () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
   }, [searchText, searchMode]);
+
+  // Refresh file listing when a transfer completes to the current location
+  useEffect(() => {
+    const handler = ({ destination }: { destination: string }) => {
+      if (!selectedLocation) return;
+      const typeStr = selectedLocation.type === 's3' ? 's3' : 'local';
+      const currentDest = `${typeStr}:${selectedLocation.id}`;
+      if (destination === currentDest || destination.startsWith(`${currentDest}/`)) {
+        loadFilesRef.current?.();
+      }
+    };
+    transferEmitter.on('transfer:completed', handler);
+    return () => transferEmitter.off('transfer:completed', handler);
+  }, [selectedLocation]);
 
   // Filtered files (client-side contains filter)
   const displayFiles = useMemo(() => {
@@ -813,6 +833,15 @@ const StorageBrowser: React.FC = () => {
             <ToolbarItem>
               <Button
                 variant="secondary"
+                icon={<ArrowRightIcon />}
+                onClick={() => setIsTransferOpen(true)}
+              >
+                Transfer to...
+              </Button>
+            </ToolbarItem>
+            <ToolbarItem>
+              <Button
+                variant="secondary"
                 isDanger
                 icon={<TrashIcon />}
                 onClick={() => {
@@ -1258,6 +1287,23 @@ const StorageBrowser: React.FC = () => {
           onClose={() => setIsHfImportOpen(false)}
           onComplete={() => {
             setIsHfImportOpen(false);
+            loadFilesRef.current?.();
+          }}
+        />
+      )}
+
+      {/* Transfer modal */}
+      {isTransferOpen && selectedLocation && selectedProject && (
+        <TransferModal
+          namespace={selectedProject}
+          sourceLocation={selectedLocation}
+          currentPath={currentPath}
+          selectedFiles={sortedFiles.filter((f) => selectedFiles.has(f.name))}
+          locations={locations}
+          onClose={() => setIsTransferOpen(false)}
+          onComplete={() => {
+            setIsTransferOpen(false);
+            setSelectedFiles(new Set());
             loadFilesRef.current?.();
           }}
         />

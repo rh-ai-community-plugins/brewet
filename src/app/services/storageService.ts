@@ -7,6 +7,7 @@ import type {
   FileListResponse,
   TransferRequest,
   TransferJob,
+  TransferProgress,
   ConflictCheckResult,
   S3Settings,
   HuggingFaceSettings,
@@ -317,6 +318,35 @@ class StorageService {
     signal?: AbortSignal,
   ): Promise<ConflictCheckResult> {
     return apiClient.post<ConflictCheckResult>(namespace, '/transfer/check-conflicts', request, signal);
+  }
+
+  async cancelTransfer(
+    namespace: string,
+    jobId: string,
+    signal?: AbortSignal,
+  ): Promise<{ cancelled: boolean; jobId: string }> {
+    return apiClient.delete(namespace, `/transfer/${encodeURIComponent(jobId)}`, signal);
+  }
+
+  async cleanupTransfer(
+    namespace: string,
+    jobId: string,
+    signal?: AbortSignal,
+  ): Promise<{ cleaned: number; errors: number; jobId: string }> {
+    return apiClient.post(namespace, `/transfer/${encodeURIComponent(jobId)}/cleanup`, undefined, signal);
+  }
+
+  async getTransferProgress(
+    namespace: string,
+    jobId: string,
+    signal?: AbortSignal,
+  ): Promise<TransferProgress> {
+    return apiClient.get<TransferProgress>(namespace, `/transfer/${encodeURIComponent(jobId)}`, signal);
+  }
+
+  getTransferSseUrl(namespace: string, sseUrl: string): string {
+    const path = sseUrl.replace(/^\/api/, '');
+    return apiClient.getDownloadUrl(namespace, path);
   }
 }
 

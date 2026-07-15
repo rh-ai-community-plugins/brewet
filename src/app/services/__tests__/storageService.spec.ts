@@ -248,4 +248,56 @@ describe('storageService', () => {
       expect(url).toContain('/local/download/local-0/');
     });
   });
+
+  describe('cancelTransfer', () => {
+    it('should DELETE transfer by jobId', async () => {
+      mockApiClient.delete.mockResolvedValue({ cancelled: true, jobId: 'j1' });
+
+      const result = await storageService.cancelTransfer('ns', 'j1');
+      expect(mockApiClient.delete).toHaveBeenCalledWith('ns', '/transfer/j1', undefined);
+      expect(result).toEqual({ cancelled: true, jobId: 'j1' });
+    });
+  });
+
+  describe('cleanupTransfer', () => {
+    it('should POST to cleanup endpoint', async () => {
+      mockApiClient.post.mockResolvedValue({ cleaned: 3, errors: 0, jobId: 'j2' });
+
+      const result = await storageService.cleanupTransfer('ns', 'j2');
+      expect(mockApiClient.post).toHaveBeenCalledWith('ns', '/transfer/j2/cleanup', undefined, undefined);
+      expect(result).toEqual({ cleaned: 3, errors: 0, jobId: 'j2' });
+    });
+  });
+
+  describe('getTransferProgress', () => {
+    it('should GET transfer progress by jobId', async () => {
+      const progress = {
+        jobId: 'j3',
+        status: 'active',
+        type: 'cross-storage',
+        totalFiles: 5,
+        completedFiles: 2,
+        failedFiles: 0,
+        cancelledFiles: 0,
+        totalBytes: 5000,
+        loadedBytes: 2000,
+        files: [],
+      };
+      mockApiClient.get.mockResolvedValue(progress);
+
+      const result = await storageService.getTransferProgress('ns', 'j3');
+      expect(mockApiClient.get).toHaveBeenCalledWith('ns', '/transfer/j3', undefined);
+      expect(result).toEqual(progress);
+    });
+  });
+
+  describe('getTransferSseUrl', () => {
+    it('should strip /api prefix and build URL via apiClient', () => {
+      mockApiClient.getDownloadUrl.mockReturnValue('/brewet/api/ns/transfer/progress/j4');
+
+      const url = storageService.getTransferSseUrl('ns', '/api/transfer/progress/j4');
+      expect(mockApiClient.getDownloadUrl).toHaveBeenCalledWith('ns', '/transfer/progress/j4');
+      expect(url).toBe('/brewet/api/ns/transfer/progress/j4');
+    });
+  });
 });
