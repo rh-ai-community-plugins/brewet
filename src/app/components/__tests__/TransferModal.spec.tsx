@@ -537,9 +537,6 @@ describe('TransferModal', () => {
     });
 
     it('should call onComplete exactly once when polling fallback resolves completed', async () => {
-      jest.useFakeTimers();
-      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
-
       mockService.checkConflicts.mockResolvedValue({ conflicts: [], nonConflicting: [] });
       mockService.initiateTransfer.mockResolvedValue({
         jobId: 'job-poll-once',
@@ -569,35 +566,43 @@ describe('TransferModal', () => {
 
       render(<TransferModal {...defaultProps} />);
 
-      await user.click(screen.getByText('Select destination...'));
-      await user.click(screen.getByText('dest-bucket'));
-      await user.click(screen.getByRole('button', { name: 'Next' }));
+      // Interactions use real timers to avoid hanging userEvent
+      await userEvent.click(screen.getByText('Select destination...'));
+      await userEvent.click(screen.getByText('dest-bucket'));
+      await userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
       await waitFor(() => {
         expect(mockES.addEventListener).toHaveBeenCalled();
       });
 
-      // Trigger SSE connection drop — polling fallback kicks in
-      act(() => {
-        if (mockES.onerror) mockES.onerror(new Event('error'));
-      });
+      // Switch to fake timers only for the polling phase
+      jest.useFakeTimers();
+      try {
+        // Trigger SSE connection drop — polling fallback kicks in
+        act(() => {
+          if (mockES.onerror) mockES.onerror(new Event('error'));
+        });
 
-      // Advance past the 3s poll delay and flush all microtasks
-      await act(async () => {
-        jest.advanceTimersByTime(3001);
-        await jest.runAllTimersAsync();
-      });
+        // Advance past the 3s poll delay and flush microtasks
+        await act(async () => {
+          jest.advanceTimersByTime(3001);
+          await Promise.resolve();
+          await Promise.resolve();
+        });
 
-      // onComplete must fire exactly once — recursive setTimeout does not re-schedule after terminal status
-      expect(defaultProps.onComplete).toHaveBeenCalledTimes(1);
+        // onComplete must fire exactly once — recursive setTimeout does not re-schedule after terminal status
+        expect(defaultProps.onComplete).toHaveBeenCalledTimes(1);
 
-      // Advance further to confirm no second poll fires
-      await act(async () => {
-        jest.advanceTimersByTime(10000);
-        await jest.runAllTimersAsync();
-      });
+        // Advance further to confirm no second poll fires
+        await act(async () => {
+          jest.advanceTimersByTime(10000);
+          await Promise.resolve();
+        });
 
-      expect(defaultProps.onComplete).toHaveBeenCalledTimes(1);
+        expect(defaultProps.onComplete).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 
