@@ -4,10 +4,29 @@ import {
   resolveStorageBackend,
   clearCache,
 } from '../utils/serviceDiscovery';
+import { rateLimiter } from '../middleware/rateLimiter';
 
 const K8S_NAMESPACE_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 const proxy = httpProxy.createProxyServer({});
+
+const SANITIZED_HEADERS = [
+  'x-forwarded-for',
+  'x-forwarded-host',
+  'x-forwarded-proto',
+  'x-real-ip',
+  'forwarded',
+];
+
+proxy.on('proxyReq', (proxyReq, req) => {
+  for (const header of SANITIZED_HEADERS) {
+    proxyReq.removeHeader(header);
+  }
+  const clientIp = (req as Request).ip || req.socket.remoteAddress;
+  if (clientIp) {
+    proxyReq.setHeader('x-forwarded-for', clientIp);
+  }
+});
 
 proxy.on('proxyRes', (proxyRes, _req, res) => {
   const contentType = proxyRes.headers['content-type'] || '';
@@ -73,7 +92,7 @@ const PROXY_TIMEOUT_MS = 300_000;
 export function createStorageProxyRouter(): Router {
   const router = Router();
 
-  router.use('/:namespace', (req: Request, res: Response) => {
+  router.use('/:namespace', rateLimiter, (req: Request, res: Response) => {
     const namespace = req.params.namespace;
     const remainingPath = req.url;
 
