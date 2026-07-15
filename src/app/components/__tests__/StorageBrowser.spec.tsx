@@ -357,6 +357,33 @@ describe('StorageBrowser', () => {
       expect(screen.getByText('Prefix')).toBeInTheDocument();
       expect(screen.getByText('Contains')).toBeInTheDocument();
     });
+
+    it('should filter S3 files client-side when fewer than 3 characters are typed in startsWith mode', async () => {
+      // Regression test for issue #100: 1-2 character S3 prefix searches were showing all
+      // files instead of filtering because the client-side bypass was unconditional.
+      setupMocks({ locationId: 'my-bucket' });
+      render(<StorageBrowser />);
+
+      // Wait for initial file listing to load (all three items present)
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+      expect(screen.getByText('data.csv')).toBeInTheDocument();
+      expect(screen.getByText('subfolder')).toBeInTheDocument();
+
+      // Type 2 characters — startsWith (Prefix) is the default search mode.
+      // Server-side filtering only activates at >=3 characters, so the client-side
+      // prefix filter must handle this range.
+      const searchInput = screen.getByPlaceholderText('Search files...');
+      await userEvent.type(searchInput, 're');
+
+      // Only 'readme.txt' starts with 're'; the other entries must be filtered out.
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+        expect(screen.queryByText('data.csv')).not.toBeInTheDocument();
+        expect(screen.queryByText('subfolder')).not.toBeInTheDocument();
+      });
+    });
   });
 
   describe('Refresh', () => {
