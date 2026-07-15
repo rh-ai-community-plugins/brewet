@@ -263,7 +263,12 @@ const StorageBrowser: React.FC = () => {
 
   // Reload on search change (debounced for server-side)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const isInitialSearchRef = useRef(true);
   useEffect(() => {
+    if (isInitialSearchRef.current) {
+      isInitialSearchRef.current = false;
+      return;
+    }
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(() => {
       setContinuationToken(undefined);
@@ -367,13 +372,13 @@ const StorageBrowser: React.FC = () => {
         : `${deleteTarget.name}${deleteTarget.isDirectory ? '/' : ''}`;
       await storageService.deleteFile(selectedProject, selectedLocation, filePath);
       setDeleteTarget(null);
-      loadFiles();
+      loadFilesRef.current?.();
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Failed to delete.');
     } finally {
       setIsDeleting(false);
     }
-  }, [selectedProject, selectedLocation, deleteTarget, currentPath, loadFiles]);
+  }, [selectedProject, selectedLocation, deleteTarget, currentPath]);
 
   // Create folder
   const handleCreateFolder = useCallback(async () => {
@@ -397,13 +402,13 @@ const StorageBrowser: React.FC = () => {
       await storageService.createFolder(selectedProject, selectedLocation, folderPath);
       setIsCreateFolderOpen(false);
       setNewFolderName('');
-      loadFiles();
+      loadFilesRef.current?.();
     } catch (err) {
       setCreateFolderError(err instanceof Error ? err.message : 'Failed to create folder.');
     } finally {
       setIsCreatingFolder(false);
     }
-  }, [selectedProject, selectedLocation, currentPath, newFolderName, loadFiles]);
+  }, [selectedProject, selectedLocation, currentPath, newFolderName]);
 
   // Upload
   const processUpload = useCallback(
@@ -451,9 +456,9 @@ const StorageBrowser: React.FC = () => {
         }
       }
 
-      loadFiles();
+      loadFilesRef.current?.();
     },
-    [selectedProject, selectedLocation, currentPath, loadFiles],
+    [selectedProject, selectedLocation, currentPath],
   );
 
   const handleFileSelect = useCallback(
@@ -519,8 +524,8 @@ const StorageBrowser: React.FC = () => {
     }
     setContinuationToken(undefined);
     setLocalOffset(0);
-    loadFiles();
-  }, [selectedProject, loadFiles]);
+    loadFilesRef.current?.();
+  }, [selectedProject]);
 
   // No project or no locations loading state
   if (locationsLoading) {
@@ -808,7 +813,7 @@ const StorageBrowser: React.FC = () => {
             <Bullseye className="pf-v6-u-mt-md pf-v6-u-mb-md">
               <Button
                 variant="secondary"
-                onClick={() => loadFiles(true)}
+                onClick={() => loadFilesRef.current?.(true)}
                 isLoading={isLoadingMore}
                 isDisabled={isLoadingMore}
               >
