@@ -2,7 +2,7 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import TransferModal from '../StorageBrowser/TransferModal';
 import { storageService } from '~/app/services/storageService';
-import type { StorageLocation, FileInfo } from '~/app/types/storage';
+import type { StorageLocation, FileInfo, TransferProgress } from '~/app/types/storage';
 
 jest.mock('~/app/services/storageService');
 jest.mock('~/app/services/apiClient', () => ({
@@ -56,6 +56,7 @@ describe('TransferModal', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     cleanupEventSourceMock();
   });
 
@@ -367,6 +368,113 @@ describe('TransferModal', () => {
       });
     });
 
+    it('should call cleanupTransfer when SSE reports cancelled', async () => {
+      mockService.checkConflicts.mockResolvedValue({
+        conflicts: [],
+        nonConflicting: [],
+      });
+      mockService.initiateTransfer.mockResolvedValue({
+        jobId: 'job-cleanup-sse',
+        sseUrl: '/api/transfer/progress/job-cleanup-sse',
+        fileCount: 2,
+        totalSize: 2000,
+      });
+      mockService.getTransferSseUrl.mockReturnValue('/brewet/api/test-ns/transfer/progress/job-cleanup-sse');
+      mockService.cleanupTransfer.mockResolvedValue({ cleaned: 1, errors: 0, jobId: 'job-cleanup-sse' });
+      const mockES = setupEventSourceMock();
+
+      render(<TransferModal {...defaultProps} />);
+      await userEvent.click(screen.getByText('Select destination...'));
+      await userEvent.click(screen.getByText('dest-bucket'));
+      await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+      await waitFor(() => {
+        expect(mockES.addEventListener).toHaveBeenCalledWith('progress', expect.any(Function));
+      });
+
+      const progressHandler = mockES.addEventListener.mock.calls.find(
+        ([name]: [string]) => name === 'progress',
+      )![1] as (event: { data: string }) => void;
+
+      act(() => {
+        progressHandler({
+          data: JSON.stringify({
+            jobId: 'job-cleanup-sse',
+            status: 'cancelled',
+            type: 'cross-storage',
+            totalFiles: 2,
+            completedFiles: 1,
+            failedFiles: 0,
+            cancelledFiles: 1,
+            totalBytes: 2000,
+            loadedBytes: 1000,
+            files: [],
+          }),
+        });
+      });
+
+      await waitFor(() => {
+        expect(mockService.cleanupTransfer).toHaveBeenCalledWith('test-ns', 'job-cleanup-sse');
+      });
+    });
+
+    it('should call cleanupTransfer when polling reports cancelled', async () => {
+      mockService.checkConflicts.mockResolvedValue({
+        conflicts: [],
+        nonConflicting: [],
+      });
+      mockService.initiateTransfer.mockResolvedValue({
+        jobId: 'job-cleanup-poll',
+        sseUrl: '/api/transfer/progress/job-cleanup-poll',
+        fileCount: 2,
+        totalSize: 2000,
+      });
+      mockService.getTransferSseUrl.mockReturnValue('/brewet/api/test-ns/transfer/progress/job-cleanup-poll');
+      mockService.cleanupTransfer.mockResolvedValue({ cleaned: 1, errors: 0, jobId: 'job-cleanup-poll' });
+      mockService.getTransferProgress.mockResolvedValue({
+        jobId: 'job-cleanup-poll',
+        status: 'cancelled',
+        type: 'cross-storage',
+        totalFiles: 2,
+        completedFiles: 1,
+        failedFiles: 0,
+        cancelledFiles: 1,
+        totalBytes: 2000,
+        loadedBytes: 1000,
+        files: [],
+      });
+      const mockES = setupEventSourceMock();
+
+      render(<TransferModal {...defaultProps} />);
+
+      // Interactions use real timers to avoid hanging userEvent
+      await userEvent.click(screen.getByText('Select destination...'));
+      await userEvent.click(screen.getByText('dest-bucket'));
+      await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+      await waitFor(() => {
+        expect(mockES.addEventListener).toHaveBeenCalledWith('progress', expect.any(Function));
+      });
+
+      // Switch to fake timers only for the polling phase
+      jest.useFakeTimers();
+      try {
+        act(() => {
+          if (mockES.onerror) mockES.onerror(new Event('error'));
+        });
+
+        await act(async () => {
+          jest.advanceTimersByTime(3100);
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        expect(mockService.cleanupTransfer).toHaveBeenCalledWith('test-ns', 'job-cleanup-poll');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('should keep Cancel Transfer button visible when SSE connection drops', async () => {
       mockService.checkConflicts.mockResolvedValue({
         conflicts: [],
@@ -426,6 +534,70 @@ describe('TransferModal', () => {
 
       // Cancel Transfer button must remain visible even after SSE error
       expect(screen.getByRole('button', { name: 'Cancel Transfer' })).toBeInTheDocument();
+    });
+
+    it('should call onComplete exactly once when polling fallback resolves completed', async () => {
+      jest.useFakeTimers();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+
+      mockService.checkConflicts.mockResolvedValue({ conflicts: [], nonConflicting: [] });
+      mockService.initiateTransfer.mockResolvedValue({
+        jobId: 'job-poll-once',
+        sseUrl: '/api/transfer/progress/job-poll-once',
+        fileCount: 1,
+        totalSize: 100,
+      });
+      mockService.getTransferSseUrl.mockReturnValue(
+        '/brewet/api/test-ns/transfer/progress/job-poll-once',
+      );
+
+      const completedStatus: TransferProgress = {
+        jobId: 'job-poll-once',
+        status: 'completed',
+        type: 'cross-storage',
+        totalFiles: 1,
+        completedFiles: 1,
+        failedFiles: 0,
+        cancelledFiles: 0,
+        totalBytes: 100,
+        loadedBytes: 100,
+        files: [],
+      };
+      mockService.getTransferProgress.mockResolvedValue(completedStatus);
+
+      const mockES = setupEventSourceMock();
+
+      render(<TransferModal {...defaultProps} />);
+
+      await user.click(screen.getByText('Select destination...'));
+      await user.click(screen.getByText('dest-bucket'));
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+
+      await waitFor(() => {
+        expect(mockES.addEventListener).toHaveBeenCalled();
+      });
+
+      // Trigger SSE connection drop — polling fallback kicks in
+      act(() => {
+        if (mockES.onerror) mockES.onerror(new Event('error'));
+      });
+
+      // Advance past the 3s poll delay and flush all microtasks
+      await act(async () => {
+        jest.advanceTimersByTime(3001);
+        await jest.runAllTimersAsync();
+      });
+
+      // onComplete must fire exactly once — recursive setTimeout does not re-schedule after terminal status
+      expect(defaultProps.onComplete).toHaveBeenCalledTimes(1);
+
+      // Advance further to confirm no second poll fires
+      await act(async () => {
+        jest.advanceTimersByTime(10000);
+        await jest.runAllTimersAsync();
+      });
+
+      expect(defaultProps.onComplete).toHaveBeenCalledTimes(1);
     });
   });
 

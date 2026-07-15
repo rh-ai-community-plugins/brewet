@@ -81,7 +81,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
   const [isStartingTransfer, setIsStartingTransfer] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const mountedRef = useRef(true);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const destLocation = useMemo(
@@ -114,7 +114,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
       eventSourceRef.current = null;
     }
     if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
+      clearTimeout(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
   }, []);
@@ -180,6 +180,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
                 transferEmitter.emit('transfer:completed', { jobId: result.jobId, destination });
                 onComplete();
               } else if (data.status === 'cancelled') {
+                storageService.cleanupTransfer(namespace, result.jobId).catch(() => undefined);
                 transferEmitter.emit('transfer:cancelled', { jobId: result.jobId });
               }
             }
@@ -194,29 +195,33 @@ const TransferModal: React.FC<TransferModalProps> = ({
           if (!mountedRef.current) return;
           setTransferError('Progress connection lost. The transfer continues in the background.');
 
-          pollIntervalRef.current = setInterval(async () => {
-            try {
-              const status = await storageService.getTransferProgress(namespace, result.jobId);
-              if (!mountedRef.current) {
-                if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-                return;
-              }
-              setProgress(status);
-              if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
-                if (pollIntervalRef.current) {
-                  clearInterval(pollIntervalRef.current);
+          const schedulePoll = () => {
+            const doPoll = async () => {
+              try {
+                const status = await storageService.getTransferProgress(namespace, result.jobId);
+                if (!mountedRef.current) return;
+                setProgress(status);
+                if (status.status === 'completed' || status.status === 'failed' || status.status === 'cancelled') {
                   pollIntervalRef.current = null;
+                  setTransferError(null);
+                  if (status.status === 'completed') {
+                    transferEmitter.emit('transfer:completed', { jobId: result.jobId, destination });
+                    onComplete();
+                  } else if (status.status === 'cancelled') {
+                    storageService.cleanupTransfer(namespace, result.jobId).catch(() => undefined);
+                  }
+                } else {
+                  schedulePoll();
                 }
-                setTransferError(null);
-                if (status.status === 'completed') {
-                  transferEmitter.emit('transfer:completed', { jobId: result.jobId, destination });
-                  onComplete();
+              } catch {
+                if (mountedRef.current) {
+                  schedulePoll();
                 }
               }
-            } catch {
-              // keep polling
-            }
-          }, 3000);
+            };
+            pollIntervalRef.current = setTimeout(doPoll, 3000);
+          };
+          schedulePoll();
         };
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
