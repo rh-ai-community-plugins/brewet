@@ -188,10 +188,29 @@ describe('resolveStorageBackend', () => {
 
   it('URL-encodes namespace in K8s API path', async () => {
     mockedK8sRequest.mockResolvedValue({ metadata: { name: SERVICE_NAME } });
-    await resolveStorageBackend('ns/with/slashes');
+    await resolveStorageBackend('ns-with-dashes');
     expect(mockedK8sRequest).toHaveBeenCalledWith(
       'test-sa-token',
-      `/api/v1/namespaces/ns%2Fwith%2Fslashes/services/${SERVICE_NAME}`,
+      `/api/v1/namespaces/ns-with-dashes/services/${SERVICE_NAME}`,
+    );
+  });
+
+  it('rejects namespaces with invalid characters', async () => {
+    await expect(resolveStorageBackend('ns/with/slashes')).rejects.toThrow(
+      'Invalid namespace',
+    );
+    await expect(resolveStorageBackend('NS-UPPER')).rejects.toThrow(
+      'Invalid namespace',
+    );
+    await expect(resolveStorageBackend('-starts-with-dash')).rejects.toThrow(
+      'Invalid namespace',
+    );
+    expect(mockedK8sRequest).not.toHaveBeenCalled();
+  });
+
+  it('rejects empty namespace', async () => {
+    await expect(resolveStorageBackend('')).rejects.toThrow(
+      'Invalid namespace',
     );
   });
 });
