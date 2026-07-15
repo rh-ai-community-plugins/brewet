@@ -86,11 +86,16 @@ const HuggingFaceImportModal: React.FC<HuggingFaceImportModalProps> = ({
 
       setJobId(result.jobId);
       setProgress({
-        type: 'progress',
+        type: 'huggingface',
         jobId: result.jobId,
         status: 'queued',
         totalFiles: result.fileCount,
         completedFiles: 0,
+        failedFiles: 0,
+        cancelledFiles: 0,
+        totalBytes: 0,
+        loadedBytes: 0,
+        files: [],
       });
 
       const ssePath = result.sseUrl.replace(/^\/api/, '');
