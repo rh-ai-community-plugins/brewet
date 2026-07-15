@@ -59,7 +59,7 @@ const S3Tab: React.FC<{ namespace: string }> = ({ namespace }) => {
         if (!mountedRef.current || (err as Error).name === 'AbortError') return;
         setAlert({ variant: 'danger', title: 'Failed to load S3 settings', message: (err as Error).message });
       } finally {
-        if (mountedRef.current) setLoading(false);
+        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
       }
     };
     load();
@@ -188,7 +188,7 @@ const HuggingFaceTab: React.FC<{ namespace: string }> = ({ namespace }) => {
         if (!mountedRef.current || (err as Error).name === 'AbortError') return;
         setAlert({ variant: 'danger', title: 'Failed to load HuggingFace settings', message: (err as Error).message });
       } finally {
-        if (mountedRef.current) setLoading(false);
+        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
       }
     };
     load();
@@ -301,7 +301,7 @@ const ProxyTab: React.FC<{ namespace: string }> = ({ namespace }) => {
         if (!mountedRef.current || (err as Error).name === 'AbortError') return;
         setAlert({ variant: 'danger', title: 'Failed to load proxy settings', message: (err as Error).message });
       } finally {
-        if (mountedRef.current) setLoading(false);
+        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
       }
     };
     load();
@@ -418,7 +418,7 @@ const TransferControlsTab: React.FC<{ namespace: string }> = ({ namespace }) => 
         if (!mountedRef.current || (err as Error).name === 'AbortError') return;
         setAlert({ variant: 'danger', title: 'Failed to load transfer settings', message: (err as Error).message });
       } finally {
-        if (mountedRef.current) setLoading(false);
+        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
       }
     };
     load();
@@ -505,7 +505,7 @@ const PaginationTab: React.FC<{ namespace: string }> = ({ namespace }) => {
         if (!mountedRef.current || (err as Error).name === 'AbortError') return;
         setAlert({ variant: 'danger', title: 'Failed to load pagination settings', message: (err as Error).message });
       } finally {
-        if (mountedRef.current) setLoading(false);
+        if (mountedRef.current && !controller.signal.aborted) setLoading(false);
       }
     };
     load();
