@@ -50,12 +50,14 @@ import {
   UploadIcon,
   SyncIcon,
   PlusCircleIcon,
+  EyeIcon,
 } from '@patternfly/react-icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { storageService } from '~/app/services/storageService';
 import { base64Encode, base64Decode } from '~/app/utils/encoding';
 import { formatBytes } from '~/app/utils/format';
+import DocumentRenderer, { isPreviewable, getFileType } from './DocumentRenderer';
 import type { StorageLocation, FileInfo, FileListResponse } from '~/app/types/storage';
 import './StorageBrowser.css';
 
@@ -137,6 +139,9 @@ const StorageBrowser: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<FileInfo | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Preview
+  const [previewFile, setPreviewFile] = useState<FileInfo | null>(null);
 
   // Create folder
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
@@ -818,9 +823,13 @@ const StorageBrowser: React.FC = () => {
                 sortedFiles.map((file) => (
                   <Tr
                     key={file.name}
-                    isClickable={file.isDirectory}
+                    isClickable={file.isDirectory || isPreviewable(getFileType(file.name))}
                     onRowClick={
-                      file.isDirectory ? () => handleFileClick(file) : undefined
+                      file.isDirectory
+                        ? () => handleFileClick(file)
+                        : isPreviewable(getFileType(file.name))
+                          ? () => setPreviewFile(file)
+                          : undefined
                     }
                   >
                     <Td dataLabel="Name">
@@ -840,6 +849,17 @@ const StorageBrowser: React.FC = () => {
                       {file.isDirectory ? '—' : formatBytes(file.size)}
                     </Td>
                     <Td dataLabel="Actions" isActionCell>
+                      {!file.isDirectory && isPreviewable(getFileType(file.name)) && (
+                        <Button
+                          variant="plain"
+                          icon={<EyeIcon />}
+                          aria-label={`Preview ${file.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewFile(file);
+                          }}
+                        />
+                      )}
                       {!file.isDirectory && (
                         <Button
                           variant="plain"
@@ -983,6 +1003,21 @@ const StorageBrowser: React.FC = () => {
           </Button>
         </ModalFooter>
       </Modal>
+
+      {/* File preview modal */}
+      {previewFile && selectedLocation && selectedProject && (
+        <DocumentRenderer
+          file={previewFile}
+          namespace={selectedProject}
+          location={selectedLocation}
+          currentPath={currentPath}
+          onClose={() => setPreviewFile(null)}
+          onDownload={(file) => {
+            setPreviewFile(null);
+            handleDownload(file);
+          }}
+        />
+      )}
 
       {/* Upload progress modal */}
       <Modal
