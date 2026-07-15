@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   ModalHeader,
@@ -62,6 +62,11 @@ function isPreviewable(fileType: FileType): boolean {
   return fileType !== 'unsupported';
 }
 
+function normalizeToString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value, null, 2);
+}
+
 function formatJsonContent(content: string): string {
   try {
     return JSON.stringify(JSON.parse(content), null, 2);
@@ -91,6 +96,7 @@ const DocumentRenderer: React.FC<DocumentRendererProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const fileType = getFileType(file.name);
   const filePath = currentPath ? `${currentPath}${file.name}` : file.name;
@@ -107,7 +113,8 @@ const DocumentRenderer: React.FC<DocumentRendererProps> = ({
 
     storageService
       .viewFile(namespace, location, filePath, controller.signal)
-      .then((text) => {
+      .then((raw) => {
+        const text = normalizeToString(raw);
         setContent(fileType === 'json' ? formatJsonContent(text) : text);
       })
       .catch((err) => {
@@ -117,12 +124,20 @@ const DocumentRenderer: React.FC<DocumentRendererProps> = ({
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [namespace, location, filePath, fileType]);
+  }, [namespace, location.id, location.type, filePath, fileType]);
+
+  useEffect(() => {
+    return () => { if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current); };
+  }, []);
 
   const handleCopy = (_event: React.MouseEvent, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    navigator.clipboard.writeText(text).then(
+      () => {
+        setCopied(true);
+        copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+      },
+      () => { /* clipboard access denied — ignore silently */ },
+    );
   };
 
   const imageUrl = fileType === 'image'

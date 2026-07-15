@@ -105,7 +105,8 @@ const HuggingFaceImportModal: React.FC<HuggingFaceImportModalProps> = ({
         completedFiles: 0,
       });
 
-      const sseUrl = apiClient.getDownloadUrl(namespace, `/transfer/progress/${result.jobId}`);
+      const ssePath = result.sseUrl.replace(/^\/api/, '');
+      const sseUrl = apiClient.getDownloadUrl(namespace, ssePath);
       const es = new EventSource(sseUrl);
       eventSourceRef.current = es;
 
@@ -129,6 +130,7 @@ const HuggingFaceImportModal: React.FC<HuggingFaceImportModalProps> = ({
       es.onerror = () => {
         es.close();
         eventSourceRef.current = null;
+        setError('Progress connection lost. The import continues in the background.');
       };
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start import.');

@@ -429,8 +429,9 @@ const StorageBrowser: React.FC = () => {
     setBulkDeleteError(null);
     const errors: string[] = [];
 
+    const fileMap = new Map(sortedFiles.map((f) => [f.name, f]));
     for (const fileName of selectedFiles) {
-      const file = sortedFiles.find((f) => f.name === fileName);
+      const file = fileMap.get(fileName);
       if (!file) continue;
       try {
         const filePath = currentPath
@@ -777,17 +778,15 @@ const StorageBrowser: React.FC = () => {
                   Create Folder
                 </Button>
               </ToolbarItem>
-              {selectedLocation && (
-                <ToolbarItem>
-                  <Button
-                    variant="secondary"
-                    icon={<ExternalLinkAltIcon />}
-                    onClick={() => setIsHfImportOpen(true)}
-                  >
-                    Import from HuggingFace
-                  </Button>
-                </ToolbarItem>
-              )}
+              <ToolbarItem>
+                <Button
+                  variant="secondary"
+                  icon={<ExternalLinkAltIcon />}
+                  onClick={() => setIsHfImportOpen(true)}
+                >
+                  Import from HuggingFace
+                </Button>
+              </ToolbarItem>
               <ToolbarItem>
                 <Button
                   variant="plain"
@@ -920,14 +919,17 @@ const StorageBrowser: React.FC = () => {
                   </Td>
                 </Tr>
               ) : (
-                sortedFiles.map((file, rowIndex) => (
+                sortedFiles.map((file, rowIndex) => {
+                  const fileType = file.isDirectory ? undefined : getFileType(file.name);
+                  const canPreview = fileType != null && isPreviewable(fileType);
+                  return (
                   <Tr
                     key={file.name}
-                    isClickable={file.isDirectory || isPreviewable(getFileType(file.name))}
+                    isClickable={file.isDirectory || canPreview}
                     onRowClick={
                       file.isDirectory
                         ? () => handleFileClick(file)
-                        : isPreviewable(getFileType(file.name))
+                        : canPreview
                           ? () => setPreviewFile(file)
                           : undefined
                     }
@@ -966,7 +968,7 @@ const StorageBrowser: React.FC = () => {
                       {file.isDirectory ? '—' : formatBytes(file.size)}
                     </Td>
                     <Td dataLabel="Actions" isActionCell>
-                      {!file.isDirectory && isPreviewable(getFileType(file.name)) && (
+                      {canPreview && (
                         <Button
                           variant="plain"
                           icon={<EyeIcon />}
@@ -1000,7 +1002,8 @@ const StorageBrowser: React.FC = () => {
                       />
                     </Td>
                   </Tr>
-                ))
+                  );
+                })
               )}
             </Tbody>
           </Table>
