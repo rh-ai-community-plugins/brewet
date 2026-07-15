@@ -291,7 +291,7 @@ const StorageBrowser: React.FC = () => {
     setDownloadError(null);
     setSelectedFiles(new Set());
     setPreviewFile(null);
-  }, [locationId, encodedPath]);
+  }, [locationId, encodedPath, selectedProject]);
 
   useEffect(() => {
     loadFilesRef.current?.();
