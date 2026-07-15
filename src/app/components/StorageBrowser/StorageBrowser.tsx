@@ -230,7 +230,7 @@ const StorageBrowser: React.FC = () => {
         setTotalCount(response.totalCount);
 
         if (location.type === 'pvc') {
-          setLocalOffset((append ? localOffset : 0) + response.files.length);
+          setLocalOffset((prev) => (append ? prev : 0) + response.files.length);
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
