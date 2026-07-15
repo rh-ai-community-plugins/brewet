@@ -742,6 +742,20 @@ const StorageBrowser: React.FC = () => {
         </Alert>
       )}
 
+      {/* Contains search warning: only loaded pages are filtered */}
+      {searchText && searchMode === 'contains' && selectedLocation?.type === 's3' && (continuationToken || isTruncated) && (
+        <Alert
+          variant="info"
+          title="Search covers loaded files only"
+          isInline
+          className="pf-v6-u-mt-md"
+        >
+          &ldquo;Contains&rdquo; search filters only the files loaded so far. There are more pages
+          in this bucket that have not been searched. Load more files or switch to{' '}
+          <strong>Prefix</strong> search for complete server-side results.
+        </Alert>
+      )}
+
       {/* File listing */}
       {!selectedLocation ? (
         <Content component="p" className="pf-v6-u-mt-md">
