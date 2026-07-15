@@ -1304,7 +1304,6 @@ const StorageBrowser: React.FC = () => {
           onComplete={() => {
             setIsTransferOpen(false);
             setSelectedFiles(new Set());
-            loadFilesRef.current?.();
           }}
         />
       )}
