@@ -1,3 +1,5 @@
+import { base64Decode } from './encoding';
+
 export function validateBucketName(bucketName: string | undefined): string | null {
   if (!bucketName || typeof bucketName !== 'string' || bucketName === '') {
     return 'Bucket name is required.';
@@ -50,13 +52,13 @@ export function validateAndDecodePrefix(prefix: string | undefined): {
   if (typeof prefix !== 'string' || prefix.length > 2048) {
     return { decoded: '', error: 'Prefix parameter is invalid.' };
   }
-  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(prefix)) {
+  if (!/^[A-Za-z0-9+/\-_]*=*$/.test(prefix)) {
     return { decoded: '', error: 'Prefix is not valid base64.' };
   }
 
   let decoded: string;
   try {
-    decoded = Buffer.from(prefix, 'base64').toString('utf-8');
+    decoded = base64Decode(prefix);
   } catch {
     return { decoded: '', error: 'Prefix is not valid base64.' };
   }

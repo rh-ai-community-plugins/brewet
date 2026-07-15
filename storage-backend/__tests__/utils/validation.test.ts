@@ -130,4 +130,13 @@ describe('validateAndDecodePrefix', () => {
     const result = validateAndDecodePrefix(encoded);
     expect(result.error).toBeTruthy();
   });
+
+  it('decodes URL-safe base64 (- and _ chars, no padding)', () => {
+    const original = 'query?id=1/path';
+    const standard = Buffer.from(original).toString('base64');
+    const urlSafe = standard.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const result = validateAndDecodePrefix(urlSafe);
+    expect(result.decoded).toBe(original);
+    expect(result.error).toBeNull();
+  });
 });
