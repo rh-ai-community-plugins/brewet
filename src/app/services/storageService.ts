@@ -105,7 +105,10 @@ class StorageService {
       const params = new URLSearchParams();
       if (options?.continuationToken) params.set('continuationToken', options.continuationToken);
       if (options?.maxKeys) params.set('maxKeys', String(options.maxKeys));
-      if (options?.search && options?.searchMode === 'startsWith') params.set('prefix', options.search);
+      if (options?.search) {
+        params.set('q', options.search);
+        if (options.searchMode) params.set('mode', options.searchMode);
+      }
 
       const query = params.toString();
       return apiClient.get<FileListResponse>(namespace, query ? `${url}?${query}` : url, signal);

@@ -191,6 +191,21 @@ describe('storageService', () => {
         undefined,
       );
     });
+
+    it('should send search as q param with mode', async () => {
+      mockApiClient.get.mockResolvedValue({ files: [] });
+
+      const location = { id: 'bucket', name: 'bucket', type: 's3' as const, status: 'available' as const };
+      await storageService.listFiles('ns', location, '', {
+        search: 'model',
+        searchMode: 'contains',
+      });
+
+      const url = mockApiClient.get.mock.calls[0][1] as string;
+      expect(url).toContain('q=model');
+      expect(url).toContain('mode=contains');
+      expect(url).not.toContain('prefix=');
+    });
   });
 
   describe('downloadFile', () => {
