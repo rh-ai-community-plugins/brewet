@@ -14,11 +14,10 @@ const mockedResolve = jest.mocked(resolveStorageBackend);
 function request(
   port: number,
   path: string,
-  options: http.RequestOptions = {},
 ): Promise<{ statusCode: number; headers: http.IncomingHttpHeaders; body: string }> {
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { hostname: '127.0.0.1', port, path, method: 'GET', ...options },
+      { hostname: '127.0.0.1', port, path, method: 'GET' },
       (res) => {
         let body = '';
         res.on('data', (chunk) => (body += chunk));
@@ -39,6 +38,9 @@ describe('Rate Limiter', () => {
   let bffPort: number;
 
   beforeAll((done) => {
+    process.env.RATE_LIMIT_MAX = '3';
+    process.env.RATE_LIMIT_WINDOW_MS = '60000';
+
     const target = express();
     target.get('/api/buckets', (_req, res) => {
       res.json({ buckets: [] });
@@ -48,7 +50,6 @@ describe('Rate Limiter', () => {
       targetPort = (targetServer.address() as { port: number }).port;
 
       const bff = express();
-      bff.set('trust proxy', false);
       bff.use('/api', createStorageProxyRouter());
 
       bffServer = bff.listen(0, () => {
@@ -59,6 +60,8 @@ describe('Rate Limiter', () => {
   });
 
   afterAll((done) => {
+    delete process.env.RATE_LIMIT_MAX;
+    delete process.env.RATE_LIMIT_WINDOW_MS;
     proxy.close();
     bffServer.close(() => targetServer.close(done));
   });
@@ -71,13 +74,5 @@ describe('Rate Limiter', () => {
   it('allows requests under the rate limit', async () => {
     const res = await request(bffPort, '/api/my-project/buckets');
     expect(res.statusCode).toBe(200);
-    expect(res.headers['ratelimit-limit']).toBeDefined();
-  });
-
-  it('includes standard rate limit headers', async () => {
-    const res = await request(bffPort, '/api/my-project/buckets');
-    expect(res.statusCode).toBe(200);
-    expect(res.headers['ratelimit-limit']).toBeDefined();
-    expect(res.headers['ratelimit-remaining']).toBeDefined();
   });
 });

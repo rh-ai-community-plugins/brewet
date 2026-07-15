@@ -101,7 +101,14 @@ export function createStorageProxyRouter(): Router {
       return;
     }
 
-    if (remainingPath.includes('..')) {
+    let decodedPath: string;
+    try {
+      decodedPath = decodeURIComponent(remainingPath);
+    } catch {
+      res.status(400).json({ error: 'Invalid path.' });
+      return;
+    }
+    if (decodedPath.includes('..')) {
       res.status(400).json({ error: 'Invalid path.' });
       return;
     }

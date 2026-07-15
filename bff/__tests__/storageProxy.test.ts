@@ -82,6 +82,16 @@ describe('Storage Proxy', () => {
       res.json({ authorization: req.headers.authorization });
     });
 
+    target.get('/api/echo-sensitive-headers', (req, res) => {
+      res.json({
+        'x-forwarded-for': req.headers['x-forwarded-for'] ?? null,
+        'x-real-ip': req.headers['x-real-ip'] ?? null,
+        'x-forwarded-host': req.headers['x-forwarded-host'] ?? null,
+        'x-forwarded-proto': req.headers['x-forwarded-proto'] ?? null,
+        'forwarded': req.headers['forwarded'] ?? null,
+      });
+    });
+
     targetServer = target.listen(0, () => {
       targetPort = (targetServer.address() as { port: number }).port;
 
@@ -240,6 +250,27 @@ describe('Storage Proxy', () => {
       expect(JSON.parse(res.body).error).toBe('Invalid path.');
       expect(mockedResolve).not.toHaveBeenCalled();
     });
+
+    it('rejects URL-encoded dot-dot traversal (%2e%2e)', async () => {
+      const res = await request(bffPort, '/api/my-project/%2e%2e/admin/config');
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('Invalid path.');
+      expect(mockedResolve).not.toHaveBeenCalled();
+    });
+
+    it('rejects mixed-case URL-encoded dot-dot traversal (%2E%2E)', async () => {
+      const res = await request(bffPort, '/api/my-project/%2E%2E/admin/config');
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('Invalid path.');
+      expect(mockedResolve).not.toHaveBeenCalled();
+    });
+
+    it('rejects malformed percent-encoding', async () => {
+      const res = await request(bffPort, '/api/my-project/%GG/data');
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('Invalid path.');
+      expect(mockedResolve).not.toHaveBeenCalled();
+    });
   });
 
   describe('error handling', () => {
@@ -282,6 +313,72 @@ describe('Storage Proxy', () => {
       expect(body.detail).toBe(
         'An internal error occurred during service discovery.',
       );
+    });
+  });
+
+  describe('header sanitization', () => {
+    it('strips a spoofed x-real-ip header', async () => {
+      const res = await request(
+        bffPort,
+        '/api/my-project/echo-sensitive-headers',
+        { headers: { 'x-real-ip': '10.0.0.1' } },
+      );
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)['x-real-ip']).toBeNull();
+    });
+
+    it('strips a spoofed x-forwarded-host header', async () => {
+      const res = await request(
+        bffPort,
+        '/api/my-project/echo-sensitive-headers',
+        { headers: { 'x-forwarded-host': 'evil.example.com' } },
+      );
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)['x-forwarded-host']).toBeNull();
+    });
+
+    it('strips a spoofed x-forwarded-proto header', async () => {
+      const res = await request(
+        bffPort,
+        '/api/my-project/echo-sensitive-headers',
+        { headers: { 'x-forwarded-proto': 'https' } },
+      );
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)['x-forwarded-proto']).toBeNull();
+    });
+
+    it('strips a spoofed forwarded header', async () => {
+      const res = await request(
+        bffPort,
+        '/api/my-project/echo-sensitive-headers',
+        { headers: { forwarded: 'for=1.2.3.4;proto=http' } },
+      );
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)['forwarded']).toBeNull();
+    });
+
+    it('overwrites a spoofed x-forwarded-for with the actual client IP', async () => {
+      const res = await request(
+        bffPort,
+        '/api/my-project/echo-sensitive-headers',
+        { headers: { 'x-forwarded-for': '1.2.3.4' } },
+      );
+      expect(res.statusCode).toBe(200);
+      const forwardedFor = JSON.parse(res.body)['x-forwarded-for'];
+      // The proxy replaces the spoofed value with the real socket address.
+      expect(forwardedFor).not.toBe('1.2.3.4');
+      expect(forwardedFor).not.toBeNull();
+    });
+
+    it('sets x-forwarded-for to the loopback address for local test clients', async () => {
+      const res = await request(
+        bffPort,
+        '/api/my-project/echo-sensitive-headers',
+      );
+      expect(res.statusCode).toBe(200);
+      const forwardedFor = JSON.parse(res.body)['x-forwarded-for'];
+      // In-process test clients connect via loopback.
+      expect(['127.0.0.1', '::1', '::ffff:127.0.0.1']).toContain(forwardedFor);
     });
   });
 });
