@@ -430,7 +430,7 @@ const StorageBrowser: React.FC = () => {
     setBulkDeleteError(null);
     const errors: string[] = [];
 
-    const fileMap = new Map(sortedFiles.map((f) => [f.name, f]));
+    const fileMap = new Map(files.map((f) => [f.name, f]));
     for (const fileName of selectedFiles) {
       const file = fileMap.get(fileName);
       if (!file) continue;
@@ -452,7 +452,7 @@ const StorageBrowser: React.FC = () => {
     setSelectedFiles(new Set());
     setIsBulkDeleting(false);
     loadFilesRef.current?.();
-  }, [selectedProject, selectedLocation, selectedFiles, sortedFiles, currentPath]);
+  }, [selectedProject, selectedLocation, selectedFiles, files, currentPath]);
 
   // Create folder
   const handleCreateFolder = useCallback(async () => {
