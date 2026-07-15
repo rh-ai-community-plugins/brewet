@@ -258,6 +258,7 @@ const StorageBrowser: React.FC = () => {
     setLocalOffset(0);
     setIsTruncated(false);
     setTotalCount(undefined);
+    setDownloadError(null);
   }, [locationId, encodedPath]);
 
   useEffect(() => {
