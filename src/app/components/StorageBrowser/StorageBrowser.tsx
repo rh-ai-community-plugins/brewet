@@ -516,11 +516,20 @@ const StorageBrowser: React.FC = () => {
   // Refresh
   const handleRefresh = useCallback(() => {
     if (selectedProject) {
-      storageService.refreshLocations(selectedProject).then((locs) => {
-        if (activeProjectRef.current === selectedProject) {
-          setLocations(locs);
-        }
-      });
+      storageService
+        .refreshLocations(selectedProject)
+        .then((locs) => {
+          if (activeProjectRef.current === selectedProject) {
+            setLocations(locs);
+          }
+        })
+        .catch((err: unknown) => {
+          if (activeProjectRef.current === selectedProject) {
+            setFilesError(
+              err instanceof Error ? err.message : 'Failed to refresh storage locations.',
+            );
+          }
+        });
     }
     setContinuationToken(undefined);
     setLocalOffset(0);
