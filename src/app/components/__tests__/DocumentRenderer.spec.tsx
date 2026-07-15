@@ -87,7 +87,7 @@ describe('DocumentRenderer', () => {
     render(<DocumentRenderer {...defaultProps} file={file} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/\"key\"/)).toBeInTheDocument();
+      expect(screen.getByText(/"key"/)).toBeInTheDocument();
     });
   });
 
