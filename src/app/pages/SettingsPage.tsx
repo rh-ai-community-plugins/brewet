@@ -10,6 +10,7 @@ import {
   TextInput,
   Button,
   Alert,
+  AlertActionCloseButton,
   Spinner,
   Bullseye,
   ActionGroup,
@@ -108,7 +109,7 @@ const S3Tab: React.FC<{ namespace: string }> = ({ namespace }) => {
   return (
     <Form>
       {alert && (
-        <Alert variant={alert.variant} title={alert.title} isInline actionClose={<Button variant="plain" aria-label="Close alert" onClick={() => setAlert(null)}>×</Button>}>
+        <Alert variant={alert.variant} title={alert.title} isInline actionClose={<AlertActionCloseButton onClose={() => setAlert(null)} />}>
           {alert.message}
         </Alert>
       )}
@@ -230,7 +231,7 @@ const HuggingFaceTab: React.FC<{ namespace: string }> = ({ namespace }) => {
   return (
     <Form>
       {alert && (
-        <Alert variant={alert.variant} title={alert.title} isInline actionClose={<Button variant="plain" aria-label="Close alert" onClick={() => setAlert(null)}>×</Button>}>
+        <Alert variant={alert.variant} title={alert.title} isInline actionClose={<AlertActionCloseButton onClose={() => setAlert(null)} />}>
           {alert.message}
         </Alert>
       )}
@@ -343,7 +344,7 @@ const ProxyTab: React.FC<{ namespace: string }> = ({ namespace }) => {
   return (
     <Form>
       {alert && (
-        <Alert variant={alert.variant} title={alert.title} isInline actionClose={<Button variant="plain" aria-label="Close alert" onClick={() => setAlert(null)}>×</Button>}>
+        <Alert variant={alert.variant} title={alert.title} isInline actionClose={<AlertActionCloseButton onClose={() => setAlert(null)} />}>
           {alert.message}
         </Alert>
       )}
@@ -434,7 +435,7 @@ const TransferControlsTab: React.FC<{ namespace: string }> = ({ namespace }) => 
   return (
     <Form>
       {alert && (
-        <Alert variant={alert.variant} title={alert.title} isInline actionClose={<Button variant="plain" aria-label="Close alert" onClick={() => setAlert(null)}>×</Button>}>
+        <Alert variant={alert.variant} title={alert.title} isInline actionClose={<AlertActionCloseButton onClose={() => setAlert(null)} />}>
           {alert.message}
         </Alert>
       )}
@@ -518,7 +519,7 @@ const PaginationTab: React.FC<{ namespace: string }> = ({ namespace }) => {
   return (
     <Form>
       {alert && (
-        <Alert variant={alert.variant} title={alert.title} isInline actionClose={<Button variant="plain" aria-label="Close alert" onClick={() => setAlert(null)}>×</Button>}>
+        <Alert variant={alert.variant} title={alert.title} isInline actionClose={<AlertActionCloseButton onClose={() => setAlert(null)} />}>
           {alert.message}
         </Alert>
       )}
