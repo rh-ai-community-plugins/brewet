@@ -1,7 +1,8 @@
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const { ModuleFederationPlugin } = require('webpack').container;
+const webpack = require('webpack');
+const { ModuleFederationPlugin } = webpack.container;
 const path = require('path');
-const { name, version, 'module-federation': moduleFederation } = require('../package.json');
+const { version, 'module-federation': moduleFederation } = require('../package.json');
 const stylePaths = require('./stylePaths');
 
 const remoteEntry = path.posix.join(moduleFederation.remoteEntry);
@@ -55,8 +56,14 @@ module.exports = {
     new HtmlWebpackPlugin({
       template: path.resolve(__dirname, '../src/index.html'),
     }),
+    new webpack.DefinePlugin({
+      'process.env.STORAGE_BACKEND_IMAGE': JSON.stringify(
+        process.env.STORAGE_BACKEND_IMAGE ||
+          `quay.io/rhoai-community/brewet-storage-backend:${version}`,
+      ),
+    }),
     new ModuleFederationPlugin({
-      name: "brewet", // [PLUGIN-SPECIFIC] must match package.json and plugin.yaml
+      name: 'brewet', // [PLUGIN-SPECIFIC] must match package.json and plugin.yaml
       filename: remoteEntry,
       exposes: {
         './extensions': './src/rhoai/extensions.ts',

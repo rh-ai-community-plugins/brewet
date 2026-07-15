@@ -305,6 +305,7 @@ describe('Storage Proxy', () => {
     });
 
     it('returns 502 with sanitized message for generic discovery errors', async () => {
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
       mockedResolve.mockRejectedValue(new Error('Network timeout'));
       const res = await request(bffPort, '/api/my-project/buckets');
       expect(res.statusCode).toBe(502);
@@ -314,6 +315,7 @@ describe('Storage Proxy', () => {
       expect(body.detail).toBe(
         'An internal error occurred during service discovery.',
       );
+      spy.mockRestore();
     });
   });
 

@@ -34,7 +34,7 @@ The project is being built from a seed scaffold. The implementation plan is at `
 
 ## Navigation & Pages
 
-```
+```text
 RHOAI Dashboard Sidebar
 └── Community Plugins
     └── Brewet
@@ -127,12 +127,14 @@ The storage backend in `storage-backend/` is a Fastify 4 server ported from [ODH
 - **URL encoding**: `locationId` is plain text; file paths are base64-encoded in URLs.
 
 The storage backend runs per-project with:
+
 - S3 credentials injected from a Data Connection (K8s Secret with `opendatahub.io/dashboard=true` label) as env vars (`AWS_S3_ENDPOINT`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_S3_BUCKET`)
 - PVCs mounted as volumes, paths configured via `LOCAL_STORAGE_PATHS` env var
 
 ### BFF Proxy
 
 The BFF in `bff/` is an Express server that proxies data-plane requests to per-project storage backends:
+
 - Route pattern: `/api/:namespace/*` → `http://brewet-storage-backend.{namespace}.svc.cluster.local:8888/api/{remainingPath}`
 - Supports streaming (SSE, file downloads), multipart uploads, and binary responses
 - Forwards the user's Bearer token
@@ -141,6 +143,7 @@ The BFF in `bff/` is an Express server that proxies data-plane requests to per-p
 ### Container Lifecycle
 
 The "Brewet container" deployed per-project consists of:
+
 - **Deployment**: `brewet-storage-backend` image with Data Connection `envFrom` and PVC `volumeMounts`
 - **Service**: ClusterIP on port 8888
 - **NetworkPolicy**: Ingress only from BFF namespace

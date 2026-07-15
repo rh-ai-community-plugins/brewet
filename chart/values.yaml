@@ -70,3 +70,11 @@ bff:
     requests:
       cpu: 100m
       memory: 128Mi
+
+# Storage backend image — used by the frontend when creating per-project containers.
+# The tag should match the deployed plugin version.
+storageBackend:
+  image:
+    repository: quay.io/rhoai-community/brewet-storage-backend
+    tag: "0.4.0"
+    pullPolicy: IfNotPresent

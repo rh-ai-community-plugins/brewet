@@ -8,6 +8,9 @@ export interface ContainerInfo {
   replicas: number;
   readyReplicas: number;
   creationTimestamp?: string;
+  envFrom?: Array<{ secretRef: { name: string } }>;
+  volumes?: Array<{ name: string; persistentVolumeClaim?: { claimName: string } }>;
+  volumeMounts?: Array<{ name: string; mountPath: string }>;
 }
 
 export interface BrewetContextValue {
@@ -16,9 +19,14 @@ export interface BrewetContextValue {
   containerStatus: ContainerStatus;
   containerInfo: ContainerInfo | null;
   refreshContainerStatus: () => void;
+  isActioning: boolean;
+  setIsActioning: (value: boolean) => void;
 }
 
 const STORAGE_KEY = 'brewet.selected-project';
+const MAX_START_POLLS = 60; // 60 × 5 s = 5 minutes
+
+type K8sCondition = { type: string; status: string; reason?: string };
 
 const BrewetContext = createContext<BrewetContextValue | undefined>(undefined);
 
@@ -33,7 +41,9 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [containerStatus, setContainerStatus] = useState<ContainerStatus>('none');
   const [containerInfo, setContainerInfo] = useState<ContainerInfo | null>(null);
+  const [isActioning, setIsActioning] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const pollCountRef = useRef(0);
 
   const setSelectedProject = useCallback((project: string | null) => {
     setSelectedProjectState(project);
@@ -85,18 +95,36 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const replicas = deployment.spec?.replicas ?? 0;
         const readyReplicas = deployment.status?.readyReplicas ?? 0;
 
+        const containers: Array<{
+          envFrom?: Array<{ secretRef: { name: string } }>;
+          volumeMounts?: Array<{ name: string; mountPath: string }>;
+        }> = deployment.spec?.template?.spec?.containers ?? [];
+        const primaryContainer = containers[0] ?? {};
+
         setContainerInfo({
           name,
           namespace,
           replicas,
           readyReplicas,
           creationTimestamp: deployment.metadata?.creationTimestamp,
+          envFrom: primaryContainer.envFrom ?? [],
+          volumes: deployment.spec?.template?.spec?.volumes ?? [],
+          volumeMounts: primaryContainer.volumeMounts ?? [],
         });
+
+        const conditions: K8sCondition[] = deployment.status?.conditions ?? [];
+        const isDeploymentFailed = conditions.some(
+          (c) =>
+            (c.type === 'Progressing' && c.status === 'False' && c.reason === 'ProgressDeadlineExceeded') ||
+            (c.type === 'ReplicaFailure' && c.status === 'True'),
+        );
 
         if (replicas === 0) {
           setContainerStatus('stopped');
         } else if (readyReplicas > 0) {
           setContainerStatus('running');
+        } else if (isDeploymentFailed) {
+          setContainerStatus('error');
         } else {
           setContainerStatus('starting');
         }
@@ -114,8 +142,18 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [refreshContainerStatus]);
 
   useEffect(() => {
-    if (containerStatus !== 'starting') return;
-    const intervalId = setInterval(refreshContainerStatus, 5000);
+    if (containerStatus !== 'starting') {
+      pollCountRef.current = 0;
+      return;
+    }
+    const intervalId = setInterval(() => {
+      if (pollCountRef.current >= MAX_START_POLLS) {
+        setContainerStatus('error');
+        return;
+      }
+      pollCountRef.current += 1;
+      refreshContainerStatus();
+    }, 5000);
     return () => clearInterval(intervalId);
   }, [containerStatus, refreshContainerStatus]);
 
@@ -126,8 +164,10 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       containerStatus,
       containerInfo,
       refreshContainerStatus,
+      isActioning,
+      setIsActioning,
     }),
-    [selectedProject, setSelectedProject, containerStatus, containerInfo, refreshContainerStatus],
+    [selectedProject, setSelectedProject, containerStatus, containerInfo, refreshContainerStatus, isActioning],
   );
 
   return <BrewetContext.Provider value={contextValue}>{children}</BrewetContext.Provider>;
