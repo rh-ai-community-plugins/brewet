@@ -282,6 +282,22 @@ describe('StorageBrowser', () => {
 
       expect(screen.queryByLabelText('Download subfolder')).not.toBeInTheDocument();
     });
+
+    it('should show error alert when downloadFile rejects', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      mockStorageService.downloadFile.mockRejectedValue(new Error('Network error'));
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByLabelText('Download readme.txt'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Download failed')).toBeInTheDocument();
+        expect(screen.getByText('Network error')).toBeInTheDocument();
+      });
+    });
   });
 
   describe('Upload', () => {
