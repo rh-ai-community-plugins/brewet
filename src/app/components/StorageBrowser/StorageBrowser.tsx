@@ -1134,6 +1134,17 @@ const StorageBrowser: React.FC = () => {
         >
           <ModalHeader title="Delete Selected Items" />
           <ModalBody>
+            {sortedFiles.some((f) => f.isDirectory && selectedFiles.has(f.name)) && (
+              <Alert
+                variant="warning"
+                title="Recursive deletion"
+                isInline
+                isPlain
+                className="pf-v6-u-mb-md"
+              >
+                Selected folders and all their contents will be permanently deleted.
+              </Alert>
+            )}
             <Content>
               Are you sure you want to delete <strong>{selectedFiles.size}</strong> selected
               item{selectedFiles.size !== 1 ? 's' : ''}? This action cannot be undone.
