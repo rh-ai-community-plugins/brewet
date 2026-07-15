@@ -711,7 +711,7 @@ const StorageBrowser: React.FC = () => {
 
       {/* File listing */}
       {!selectedLocation ? (
-        <Content component="p" className="pf-v6-u-mt-md pf-v6-u-color-200">
+        <Content component="p" className="pf-v6-u-mt-md">
           Select a storage location to browse files.
         </Content>
       ) : filesLoading ? (
@@ -944,7 +944,7 @@ const StorageBrowser: React.FC = () => {
                 <Content component="p" className="pf-v6-u-mb-xs">
                   <FileIcon className="pf-v6-u-mr-sm" />
                   {upload.file.name}
-                  <span className="pf-v6-u-ml-sm pf-v6-u-color-200">
+                  <span className="pf-v6-u-ml-sm">
                     ({formatBytes(upload.file.size)})
                   </span>
                 </Content>
