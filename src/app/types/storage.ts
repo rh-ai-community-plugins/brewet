@@ -107,3 +107,15 @@ export interface HuggingFaceImportResponse {
   fileCount: number;
   modelId: string;
 }
+
+export interface TransferProgress {
+  type: string;
+  jobId: string;
+  status: string;
+  completedFiles?: number;
+  totalFiles?: number;
+  completedBytes?: number;
+  totalBytes?: number;
+  currentFile?: string;
+  error?: string;
+}
