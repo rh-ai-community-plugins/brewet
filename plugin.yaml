@@ -2,7 +2,7 @@
 name: brewet                    # [PLUGIN-SPECIFIC] unique plugin identifier (kebab-case)
 displayName: Brewet             # [PLUGIN-SPECIFIC] human-readable name
 description: A reference implementation and scaffold plugin for the RHOAI Dashboard
-version: 0.4.0
+version: 0.1.0
 
 # --- Maintainer (required) ---
 maintainer:                          # [PLUGIN-SPECIFIC]
@@ -18,19 +18,19 @@ rhoai_compatibility:                 # [PLUGIN-SPECIFIC]
 deployment_model: cluster-shared     # per-project | cluster-shared | both
 
 image:                               # [PLUGIN-SPECIFIC]
-  repository: quay.io/OWNER/rhoai-brewet
-  tag: "0.4.0"
+  repository: quay.io/OWNER/brewet
+  tag: "0.1.0"
 
 bff_image:                           # [PLUGIN-SPECIFIC] (optional — only if using BFF pattern)
-  repository: quay.io/OWNER/rhoai-brewet-bff
-  tag: "0.4.0"
+  repository: quay.io/OWNER/brewet-bff
+  tag: "0.1.0"
 
 # --- Installation (required) ---
 install:
   method: automatic                  # automatic | assisted | manual
   helm:
     chart_path: chart/
-    registry: oci://quay.io/OWNER/rhoai-brewet-chart  # [PLUGIN-SPECIFIC]
+    registry: oci://quay.io/OWNER/brewet-chart  # [PLUGIN-SPECIFIC]
   prerequisites: []
   instructions: https://github.com/rh-ai-community-plugins/brewet/blob/main/docs/deployment  # [PLUGIN-SPECIFIC]
 

@@ -281,15 +281,22 @@ After all issues in the batch are processed:
    git checkout -- . 2>/dev/null
    ```
 
-3. Drop any stash entries created during this batch:
+3. Delete orphaned remote branches from this batch (agent worktrees may push branches that `--delete-branch` doesn't know about):
 
    ```bash
-   git stash list
+   git fetch --prune origin
+   git branch -r | grep -E "origin/(worktree-agent|fix/|feat/|chore/)" | grep -v "$BASE_BRANCH" | sed 's|origin/||' | while read b; do
+     # Only delete if the branch has no open PR
+     pr_state=$(gh pr list --head "$b" --state open --json number --jq 'length' 2>/dev/null)
+     if [ "$pr_state" = "0" ] || [ -z "$pr_state" ]; then
+       git push origin --delete "$b" 2>/dev/null
+     fi
+   done
    ```
 
-   If stashes exist from this session, drop them.
-
 4. Continue to the next batch.
+
+**Important:** Do NOT use `git stash` during the pipeline. If uncommitted changes from one issue are present when switching to the next, either commit them to the current branch before switching, or discard them with `git checkout -- .`. Stashes create cleanup debt and may be blocked by safety hooks.
 
 ## Step 3: Summary
 
@@ -347,24 +354,39 @@ Before finishing, ensure the repository is left in a clean state:
 3. Delete leftover local branches from this session that weren't cleaned up by `--delete-branch`:
 
    ```bash
-   git branch | grep -E "^  (fix|feat|chore)/" | xargs git branch -d 2>/dev/null
+   git branch | grep -E "^  (fix|feat|chore|worktree-agent)/" | xargs git branch -d 2>/dev/null
    ```
 
-4. Drop all stash entries from this session:
+4. Delete orphaned remote branches from this session (agent worktrees, un-cleaned fix branches):
 
    ```bash
-   git stash clear
+   git fetch --prune origin
+   git branch -r | grep -E "origin/(worktree-agent|fix/|feat/|chore/)" | grep -v "$BASE_BRANCH" | sed 's|origin/||' | while read b; do
+     pr_state=$(gh pr list --head "$b" --state open --json number --jq 'length' 2>/dev/null)
+     if [ "$pr_state" = "0" ] || [ -z "$pr_state" ]; then
+       git push origin --delete "$b" 2>/dev/null
+     fi
+   done
    ```
 
-5. Final verification:
+5. Verify no stashes were left behind:
+
+   ```bash
+   git stash list
+   ```
+
+   If any exist, warn the user (do not force-drop — safety hooks may block it).
+
+6. Final verification:
 
    ```bash
    git status
    git stash list
    git branch
+   git branch -r | grep -v "$BASE_BRANCH\|main\|dev\|HEAD"
    ```
 
-   Report the final state to the user.
+   Report the final state to the user, including any remaining remote branches.
 
 ## Error Handling
 

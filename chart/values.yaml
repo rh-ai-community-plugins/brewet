@@ -1,8 +1,8 @@
-# Default values for rhoai-brewet.
+# Default values for brewet.
 # This is a YAML-formatted file.
 
 image:
-  repository: quay.io/OWNER/rhoai-brewet
+  repository: quay.io/OWNER/brewet
   tag: ""
   pullPolicy: IfNotPresent
 
@@ -30,7 +30,7 @@ ingress:
   hosts:
     - host: chart-example.local
       paths:
-        - path: /rhoai-brewet
+        - path: /brewet
           pathType: Prefix
   tls: []
 
@@ -76,5 +76,5 @@ bff:
 storageBackend:
   image:
     repository: quay.io/rhoai-community/brewet-storage-backend
-    tag: "0.4.0"
+    tag: "0.1.0"
     pullPolicy: IfNotPresent

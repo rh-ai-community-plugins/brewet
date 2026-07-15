@@ -1,24 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "rhoai-brewet.fullname" . }}
+  name: {{ include "brewet.fullname" . }}
   labels:
-    {{- include "rhoai-brewet.labels" . | nindent 4 }}
+    {{- include "brewet.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "rhoai-brewet.selectorLabels" . | nindent 6 }}
+      {{- include "brewet.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "rhoai-brewet.selectorLabels" . | nindent 8 }}
+        {{- include "brewet.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "rhoai-brewet.serviceAccountName" . }}
+      serviceAccountName: {{ include "brewet.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.securityContext | nindent 8 }}
       containers:
-        - name: {{ include "rhoai-brewet.name" . }}
+        - name: {{ include "brewet.name" . }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:

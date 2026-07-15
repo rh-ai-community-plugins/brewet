@@ -2,9 +2,9 @@
 
 # Container image settings
 REGISTRY       ?= quay.io/rh-ai-community-plugins
-FRONTEND_IMAGE ?= rhoai-brewet
+FRONTEND_IMAGE ?= brewet
 BFF_IMAGE      ?= brewet-bff
-CHART_NAME     ?= rhoai-brewet-chart  # used by help display only; chart-package/chart-push use chart/ directly
+CHART_NAME     ?= brewet-chart  # used by help display only; chart-package/chart-push use chart/ directly
 VERSION        ?=
 BUILDER        ?= podman
 IMAGE_TAG      ?= latest
@@ -73,7 +73,7 @@ test-frontend:
 	npm test
 
 test-bff:
-	cd bff && npm test
+	cd bff && NODE_OPTIONS=--no-deprecation npm test
 
 test-storage-backend:
 	cd storage-backend && npm test

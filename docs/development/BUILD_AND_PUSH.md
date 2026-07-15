@@ -38,9 +38,9 @@ make image-scan SEVERITY=MEDIUM
 | Variable | Description | Default |
 |---|---|---|
 | `REGISTRY` | Container image registry | `quay.io/rh-ai-community-plugins` |
-| `FRONTEND_IMAGE` | Frontend image name | `rhoai-brewet` |
+| `FRONTEND_IMAGE` | Frontend image name | `brewet` |
 | `BFF_IMAGE` | BFF image name | `brewet-bff` |
-| `CHART_NAME` | Helm chart name | `rhoai-brewet-chart` |
+| `CHART_NAME` | Helm chart name | `brewet-chart` |
 | `VERSION` | Release version for `image-push` | Auto-computed from git tags |
 | `BUILDER` | Container build tool | `podman` |
 | `IMAGE_TAG` | Tag for `image-build` / `image-scan` | `latest` |
@@ -53,7 +53,7 @@ The sections below document the underlying scripts that the Makefile wraps.
 ## Image Details
 
 - **Registry**: `quay.io`
-- **Frontend image**: `quay.io/rh-ai-community-plugins/rhoai-brewet`
+- **Frontend image**: `quay.io/rh-ai-community-plugins/brewet`
 - **BFF image**: `quay.io/rh-ai-community-plugins/brewet-bff`
 
 ## Prerequisites
@@ -96,8 +96,8 @@ To build and push images manually without the script:
 
 ```bash
 podman login quay.io
-podman build -t quay.io/rh-ai-community-plugins/rhoai-brewet:0.5.0 -f Containerfile .
-podman push quay.io/rh-ai-community-plugins/rhoai-brewet:0.5.0
+podman build -t quay.io/rh-ai-community-plugins/brewet:0.5.0 -f Containerfile .
+podman push quay.io/rh-ai-community-plugins/brewet:0.5.0
 
 podman build -t quay.io/rh-ai-community-plugins/brewet-bff:0.5.0 -f bff/Containerfile bff/
 podman push quay.io/rh-ai-community-plugins/brewet-bff:0.5.0
@@ -150,8 +150,8 @@ BUILDER=docker ./scripts/scan-image.sh   # Use Docker instead of Podman
 
 The `chart/` directory contains a Helm chart for deploying both the frontend and BFF to Kubernetes/OpenShift. The chart is published to the same Quay.io registry as an OCI artifact.
 
-- **Chart name**: `rhoai-brewet-chart`
-- **OCI registry**: `oci://quay.io/rh-ai-community-plugins/rhoai-brewet-chart`
+- **Chart name**: `brewet-chart`
+- **OCI registry**: `oci://quay.io/rh-ai-community-plugins/brewet-chart`
 
 The chart version is kept in sync with the project version in `package.json` by the `scripts/sync-chart-version.js` script, which runs automatically on `npm version`.
 
@@ -161,7 +161,7 @@ The chart version is kept in sync with the project version in `package.json` by 
 helm package chart/
 ```
 
-This produces a `rhoai-brewet-chart-<version>.tgz` file in the current directory, using the version from `chart/Chart.yaml`.
+This produces a `brewet-chart-<version>.tgz` file in the current directory, using the version from `chart/Chart.yaml`.
 
 ### Push to OCI Registry
 
@@ -169,7 +169,7 @@ Pushing Helm charts to an OCI registry requires **Helm 3.8+** (`helm push` was a
 
 ```bash
 helm registry login quay.io
-helm push rhoai-brewet-chart-<version>.tgz oci://quay.io/rh-ai-community-plugins
+helm push brewet-chart-<version>.tgz oci://quay.io/rh-ai-community-plugins
 ```
 
 Or use the Makefile to package and push in one step:
@@ -181,9 +181,9 @@ make chart-push
 ### Install from OCI Registry
 
 ```bash
-helm install rhoai-brewet oci://quay.io/rh-ai-community-plugins/rhoai-brewet-chart \
-  --version 0.4.0 \
-  --namespace rhoai-brewet \
+helm install brewet oci://quay.io/rh-ai-community-plugins/brewet-chart \
+  --version 0.1.0 \
+  --namespace brewet \
   --create-namespace
 ```
 

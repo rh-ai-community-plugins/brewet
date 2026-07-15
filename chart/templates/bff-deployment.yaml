@@ -2,20 +2,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "rhoai-brewet.fullname" . }}-bff
+  name: {{ include "brewet.fullname" . }}-bff
   labels:
-    {{- include "rhoai-brewet.labels" . | nindent 4 }}
+    {{- include "brewet.labels" . | nindent 4 }}
     app.kubernetes.io/component: bff
 spec:
   replicas: {{ .Values.bff.replicaCount }}
   selector:
     matchLabels:
-      {{- include "rhoai-brewet.selectorLabels" . | nindent 6 }}
+      {{- include "brewet.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: bff
   template:
     metadata:
       labels:
-        {{- include "rhoai-brewet.selectorLabels" . | nindent 8 }}
+        {{- include "brewet.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: bff
     spec:
       securityContext:

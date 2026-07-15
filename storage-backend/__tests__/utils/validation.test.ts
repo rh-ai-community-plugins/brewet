@@ -44,6 +44,21 @@ describe('validateBucketName', () => {
     expect(validateBucketName('bucket-123')).toBeNull();
     expect(validateBucketName('abc')).toBeNull();
   });
+
+  it('accepts bucket names with periods', () => {
+    expect(validateBucketName('my.bucket')).toBeNull();
+    expect(validateBucketName('bucket.123.name')).toBeNull();
+    expect(validateBucketName('a.b')).toBeNull();
+  });
+
+  it('rejects consecutive periods', () => {
+    expect(validateBucketName('my..bucket')).toBeTruthy();
+  });
+
+  it('rejects period adjacent to hyphen', () => {
+    expect(validateBucketName('my.-bucket')).toBeTruthy();
+    expect(validateBucketName('my-.bucket')).toBeTruthy();
+  });
 });
 
 describe('validateQuery', () => {
@@ -114,5 +129,14 @@ describe('validateAndDecodePrefix', () => {
     const encoded = Buffer.from('test\0path').toString('base64');
     const result = validateAndDecodePrefix(encoded);
     expect(result.error).toBeTruthy();
+  });
+
+  it('decodes URL-safe base64 (- and _ chars, no padding)', () => {
+    const original = 'query?id=1/path';
+    const standard = Buffer.from(original).toString('base64');
+    const urlSafe = standard.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const result = validateAndDecodePrefix(urlSafe);
+    expect(result.decoded).toBe(original);
+    expect(result.error).toBeNull();
   });
 });
