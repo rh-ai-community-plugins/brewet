@@ -6,6 +6,14 @@ import { setupGracefulShutdown } from './shutdown';
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
+  });
+  next();
+});
+
 app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
 
 app.use('/api', createStorageProxyRouter());

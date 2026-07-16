@@ -9,10 +9,12 @@ spec:
   selector:
     matchLabels:
       {{- include "brewet.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
   template:
     metadata:
       labels:
         {{- include "brewet.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend
     spec:
       serviceAccountName: {{ include "brewet.serviceAccountName" . }}
       securityContext:

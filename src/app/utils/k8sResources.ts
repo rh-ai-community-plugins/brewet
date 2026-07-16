@@ -55,16 +55,23 @@ export function buildDeployment(
       labels: {
         app: DEPLOYMENT_NAME,
         'app.kubernetes.io/part-of': 'brewet',
+        'app.kubernetes.io/component': 'storage-backend',
       },
     },
     spec: {
       replicas: 1,
       selector: {
-        matchLabels: { app: DEPLOYMENT_NAME },
+        matchLabels: {
+          app: DEPLOYMENT_NAME,
+          'app.kubernetes.io/component': 'storage-backend',
+        },
       },
       template: {
         metadata: {
-          labels: { app: DEPLOYMENT_NAME },
+          labels: {
+            app: DEPLOYMENT_NAME,
+            'app.kubernetes.io/component': 'storage-backend',
+          },
         },
         spec: {
           securityContext: {
@@ -102,10 +109,14 @@ export function buildService(namespace: string) {
       labels: {
         app: DEPLOYMENT_NAME,
         'app.kubernetes.io/part-of': 'brewet',
+        'app.kubernetes.io/component': 'storage-backend',
       },
     },
     spec: {
-      selector: { app: DEPLOYMENT_NAME },
+      selector: {
+        app: DEPLOYMENT_NAME,
+        'app.kubernetes.io/component': 'storage-backend',
+      },
       ports: [
         {
           port: SERVICE_PORT,
@@ -128,6 +139,7 @@ export function buildNetworkPolicy(namespace: string, bffNamespace: string) {
       labels: {
         app: DEPLOYMENT_NAME,
         'app.kubernetes.io/part-of': 'brewet',
+        'app.kubernetes.io/component': 'storage-backend',
       },
     },
     spec: {
