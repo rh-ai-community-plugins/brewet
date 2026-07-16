@@ -23,6 +23,33 @@ The container-based method additionally requires:
 
 ---
 
+## Optional: Local Storage Setup
+
+Before starting the storage backend, set up the local storage targets you want to test. You can set up S3, local directories (PVC simulation), or both.
+
+**S3 with MinIO:**
+
+```bash
+podman run --rm -p 9000:9000 -p 9001:9001 \
+  -e MINIO_ROOT_USER=minioadmin \
+  -e MINIO_ROOT_PASSWORD=minioadmin \
+  quay.io/minio/minio server /data --console-address ":9001"
+```
+
+The MinIO console is at `http://localhost:9001` (login: `minioadmin` / `minioadmin`). Create a test bucket before starting the storage backend.
+
+**Local directories for PVC simulation:**
+
+PVCs in the cluster are just mounted directories. To simulate them locally, create any writable directories:
+
+```bash
+mkdir -p /tmp/brewet-vol1 /tmp/brewet-vol2
+```
+
+These paths are passed to the storage backend via the `LOCAL_STORAGE_PATHS` env var and appear as `local-0`, `local-1`, etc. in the storage browser.
+
+---
+
 ## Method 1: Container-Based (Recommended)
 
 Run the dashboard from a container image with `--network=host` so it can reach your plugin dev server on localhost. No need to clone the dashboard repo.
@@ -66,23 +93,46 @@ podman run --rm --network=host \
   bash -c "npm install pino-pretty && npm run start"
 ```
 
-### Step 3: Start the BFF service
+### Step 3: Start the storage backend
 
-The BFF is a separate Node.js server that runs alongside the plugin's webpack dev server. It needs to know the cluster API server URL so it can make Kubernetes API calls with the user's forwarded token.
+The storage backend handles S3 and local filesystem (PVC) operations. In production it runs per-project inside the cluster; for local dev you run a single instance on your machine. See [Local Storage Setup](#optional-local-storage-setup) above for MinIO and PVC directory setup.
+
+In a **separate terminal**, from the plugin project root:
+
+```bash
+cd storage-backend
+npm install   # first time only
+
+AWS_ACCESS_KEY_ID=minioadmin \
+AWS_SECRET_ACCESS_KEY=minioadmin \
+AWS_S3_ENDPOINT=http://localhost:9000 \
+AWS_DEFAULT_REGION=us-east-1 \
+LOCAL_STORAGE_PATHS=/tmp/brewet-vol1,/tmp/brewet-vol2 \
+APP_ENV=development \
+npm run start:dev
+```
+
+You should see the server start on port 8888. If you only need S3 testing, omit `LOCAL_STORAGE_PATHS` (defaults to a single ephemeral directory at `/opt/app-root/src/data`). If you only need local storage testing, omit the `AWS_*` variables.
+
+### Step 4: Start the BFF service
+
+The BFF proxies data-plane requests from the dashboard to the storage backend. It needs `STORAGE_BACKEND_URL` to find the local storage backend (bypassing K8s service discovery) and `K8S_API_BASE` for cluster API calls.
 
 In a **separate terminal**, from the plugin project root:
 
 ```bash
 cd bff
 npm install   # first time only
-K8S_API_BASE=$(oc whoami --show-server) npm run start:dev
+STORAGE_BACKEND_URL=http://localhost:8888 \
+K8S_API_BASE=$(oc whoami --show-server) \
+npm run start:dev
 ```
 
-You should see `BFF listening on port 3000`. The `K8S_API_BASE` env var tells the BFF where to find the Kubernetes API server. Without it, the BFF cannot make any cluster calls and all requests will fail with a 502 error.
+You should see `BFF listening on port 3000`. Without `STORAGE_BACKEND_URL`, the BFF tries K8s service discovery (which won't work locally). Without `K8S_API_BASE`, cluster API calls will fail with 502 errors.
 
 > **Note:** The `proxyService` entry in the `MODULE_FEDERATION_CONFIG` (Step 2) is what tells the dashboard to forward `/brewet/api/*` requests to the BFF at `localhost:3000`. If you omit the `proxyService` block, those requests will hit the dashboard's SPA fallback and return HTML instead of JSON.
 
-### Step 4: Start the plugin dev server
+### Step 5: Start the plugin dev server
 
 In another terminal, from the plugin project root:
 
@@ -90,17 +140,19 @@ In another terminal, from the plugin project root:
 npm run start:dev
 ```
 
-### Step 5: Verify
+### Step 6: Verify
 
-You should now have **three processes** running:
+You should now have **four processes** running (plus optionally MinIO):
 
 | Process | Port | Purpose |
 |---|---|---|
 | Dashboard container | 8080 | Host application, proxies to plugin and BFF |
-| BFF service | 3000 | Plugin backend (namespace summary aggregation) |
+| Storage backend | 8888 | Data-plane server for S3 and local filesystem operations |
+| BFF service | 3000 | Proxy routing data-plane requests to the storage backend |
 | Plugin dev server | 9500 | Plugin frontend (webpack dev server with HMR) |
+| MinIO (optional) | 9000 / 9001 | Local S3-compatible object storage |
 
-Open the dashboard URL in your browser. You should see the RHOAI Dashboard with your plugin loaded in the sidebar, including the Namespace Summary page under the Brewet section.
+Open the dashboard URL in your browser. You should see the RHOAI Dashboard with the Brewet plugin loaded in the sidebar.
 
 ### How it works
 
@@ -222,21 +274,44 @@ cd frontend
 npm run start:dev
 ```
 
-### Step 8: Start the BFF service
+### Step 8: Start the storage backend
 
-The BFF is a separate Node.js server. In a **separate terminal**, from the plugin project root:
+The storage backend handles S3 and local filesystem (PVC) operations. See [Local Storage Setup](#optional-local-storage-setup) above for MinIO and PVC directory setup.
+
+In a **separate terminal**, from the plugin project root:
+
+```bash
+cd storage-backend
+npm install   # first time only
+
+AWS_ACCESS_KEY_ID=minioadmin \
+AWS_SECRET_ACCESS_KEY=minioadmin \
+AWS_S3_ENDPOINT=http://localhost:9000 \
+AWS_DEFAULT_REGION=us-east-1 \
+LOCAL_STORAGE_PATHS=/tmp/brewet-vol1,/tmp/brewet-vol2 \
+APP_ENV=development \
+npm run start:dev
+```
+
+You should see the server start on port 8888. Omit `LOCAL_STORAGE_PATHS` for S3-only testing, or omit the `AWS_*` variables for local-storage-only testing.
+
+### Step 9: Start the BFF service
+
+The BFF proxies data-plane requests to the storage backend. In a **separate terminal**, from the plugin project root:
 
 ```bash
 cd bff
 npm install   # first time only
-K8S_API_BASE=$(oc whoami --show-server) npm run start:dev
+STORAGE_BACKEND_URL=http://localhost:8888 \
+K8S_API_BASE=$(oc whoami --show-server) \
+npm run start:dev
 ```
 
-You should see `BFF listening on port 3000`. The `K8S_API_BASE` env var tells the BFF where to find the Kubernetes API server (required for local dev since the BFF is not running in-cluster).
+You should see `BFF listening on port 3000`. `STORAGE_BACKEND_URL` bypasses K8s service discovery for local dev. `K8S_API_BASE` is required for cluster API calls.
 
 > **Note:** The `proxyService` entry in `env.local` (Step 6) tells the dashboard to forward `/brewet/api/*` requests to the BFF. Without it, those requests return HTML instead of JSON.
 
-### Step 9: Start the plugin dev server
+### Step 10: Start the plugin dev server
 
 From the plugin project root:
 
@@ -244,9 +319,11 @@ From the plugin project root:
 npm run start:dev
 ```
 
-### Step 10: Verify
+### Step 11: Verify
 
-Open <http://localhost:4010> in your browser. You should see the RHOAI Dashboard with your plugin loaded in the sidebar.
+You should now have **five processes** running (plus optionally MinIO): dashboard backend (terminal 1), dashboard frontend (terminal 2), storage backend (port 8888), BFF (port 3000), and plugin dev server (port 9500).
+
+Open <http://localhost:4010> in your browser. You should see the RHOAI Dashboard with the Brewet plugin loaded in the sidebar.
 
 ---
 
@@ -290,11 +367,13 @@ When `localService` is present, the dashboard backend proxies to that host/port 
 Regardless of which method you chose above, the plugin development workflow is the same:
 
 1. Start the dashboard (container or source) -- ensure `MODULE_FEDERATION_CONFIG` includes the `proxyService` entry
-2. Start the BFF service with `cd bff && K8S_API_BASE=$(oc whoami --show-server) npm run start:dev`
-3. Start the plugin dev server with `npm run start:dev`
-4. Open the dashboard URL in your browser
-5. Navigate to the plugin's page in the dashboard sidebar
-6. Edit plugin source files -- changes are picked up automatically with both methods
+2. Start MinIO or create local directories for PVC simulation (see [Local Storage Setup](#optional-local-storage-setup))
+3. Start the storage backend with S3 and/or local storage env vars (see the storage backend step in your chosen method above)
+4. Start the BFF service with `cd bff && STORAGE_BACKEND_URL=http://localhost:8888 K8S_API_BASE=$(oc whoami --show-server) npm run start:dev`
+5. Start the plugin dev server with `npm run start:dev`
+6. Open the dashboard URL in your browser
+7. Navigate to the plugin's page in the dashboard sidebar
+8. Edit plugin source files -- changes are picked up automatically with both methods
 
 The dev server supports a custom port via the `PORT` environment variable:
 
@@ -347,7 +426,7 @@ The frontend receives HTML instead of JSON. This means the request to `/brewet/a
 
 The dashboard is correctly proxying to the BFF, but the BFF is returning an error.
 
-- **BFF not running**: Ensure the BFF is running (`cd bff && K8S_API_BASE=$(oc whoami --show-server) npm run start:dev`). You should see `BFF listening on port 3000`.
+- **BFF not running**: Ensure the BFF is running (`cd bff && STORAGE_BACKEND_URL=http://localhost:8888 K8S_API_BASE=$(oc whoami --show-server) npm run start:dev`). You should see `BFF listening on port 3000`.
 - **Missing `K8S_API_BASE`**: The BFF needs to know the cluster API URL. Without `K8S_API_BASE`, it cannot make Kubernetes API calls. Set it with `K8S_API_BASE=$(oc whoami --show-server)`.
 - **Cluster unreachable**: Verify you can reach the cluster API from your machine with `oc whoami`. If your login session has expired, run `oc login` again.
 - Check the BFF terminal for error messages -- they will indicate whether the issue is with the K8s API connection, token, or RBAC permissions.
@@ -356,5 +435,25 @@ The dashboard is correctly proxying to the BFF, but the BFF is returning an erro
 
 The dashboard log shows `connect ECONNREFUSED ... :3000`. The dashboard is trying to proxy to the BFF but nothing is listening on port 3000.
 
-- Start the BFF: `cd bff && K8S_API_BASE=$(oc whoami --show-server) npm run start:dev`
+- Start the BFF: `cd bff && STORAGE_BACKEND_URL=http://localhost:8888 K8S_API_BASE=$(oc whoami --show-server) npm run start:dev`
 - If using a container without `--network=host`, `localhost` inside the container won't reach the host. Use `--network=host` or set `localService.host` to `host.containers.internal` in the `proxyService` config.
+
+### BFF: 502 or ECONNREFUSED on port 8888
+
+The BFF log shows connection errors to port 8888. The BFF is trying to reach the storage backend but nothing is listening.
+
+- Start the storage backend: `cd storage-backend && APP_ENV=development npm run start:dev`
+- Ensure `STORAGE_BACKEND_URL=http://localhost:8888` is set when starting the BFF. Without it, the BFF tries K8s service discovery, which won't work outside the cluster.
+
+### Storage backend: S3 connection errors
+
+- Verify MinIO (or your S3-compatible server) is running and accessible at the `AWS_S3_ENDPOINT` URL
+- Check that `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` match the MinIO credentials
+- Ensure the bucket exists — create it via the MinIO console at `http://localhost:9001`
+- If `AWS_S3_ENDPOINT` is empty, S3 operations will fail but local storage operations will still work
+
+### Storage backend: Local storage path errors
+
+- Verify the directories in `LOCAL_STORAGE_PATHS` exist and are writable
+- Paths must be absolute (e.g. `/tmp/brewet-vol1`, not `./brewet-vol1`)
+- Check the storage backend terminal for warnings about missing or inaccessible paths
