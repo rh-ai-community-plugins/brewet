@@ -30,6 +30,8 @@ fs.writeFileSync(k8sResPath, k8sRes);
 
 const valuesPath = 'chart/values.yaml';
 let values = fs.readFileSync(valuesPath, 'utf8');
+values = values.replace(/(^image:\s*\n\s+repository:[^\n]*\n\s+tag:)\s*"[^"]*"/m, `$1 "${version}"`);
+values = values.replace(/(bff:\s*\n\s+enabled:[^\n]*\n\s+image:\s*\n\s+repository:[^\n]*\n\s+tag:)\s*"[^"]*"/, `$1 "${version}"`);
 values = values.replace(/(storageBackend:\s*\n\s+image:\s*\n\s+repository:[^\n]*\n\s+tag:)\s*"[^"]*"/, `$1 "${version}"`);
 fs.writeFileSync(valuesPath, values);
 

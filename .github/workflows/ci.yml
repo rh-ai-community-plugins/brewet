@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 jobs:
   test:
@@ -45,6 +45,32 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: bff/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run linter
+        run: npm run lint
+
+  test-storage-backend:
+    runs-on: ubuntu-latest
+    name: Run storage backend tests and linting
+    defaults:
+      run:
+        working-directory: storage-backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: storage-backend/package-lock.json
 
       - name: Install dependencies
         run: npm ci

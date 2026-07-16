@@ -23,16 +23,17 @@ Usage: $(basename "$0") [TARGET] [VERSION]
 Build and push container images to Quay.io.
 
 Arguments:
-  TARGET    Which image to build: frontend, bff, or all (default: all)
+  TARGET    Which image to build: frontend, bff, storage-backend, or all (default: all)
   VERSION   Version tag for the images (e.g. 0.5.0, 0.5.0-rc1). If omitted,
             the next minor version is computed from existing git tags and you
             are prompted to confirm before proceeding.
 
 Examples:
-  $(basename "$0")                  # Build+push both, auto-version with confirmation
-  $(basename "$0") frontend         # Build+push frontend only, auto-version
-  $(basename "$0") bff 0.5.0-rc1    # Build+push BFF with explicit version
-  $(basename "$0") all 0.5.0        # Build+push both with explicit version
+  $(basename "$0")                          # Build+push all three, auto-version with confirmation
+  $(basename "$0") frontend                 # Build+push frontend only, auto-version
+  $(basename "$0") bff 0.5.0-rc1            # Build+push BFF with explicit version
+  $(basename "$0") storage-backend 0.5.0    # Build+push storage backend with explicit version
+  $(basename "$0") all 0.5.0                # Build+push all three with explicit version
 EOF
 }
 
@@ -44,6 +45,10 @@ frontend_context="."
 bff_image_name="brewet-bff"
 bff_containerfile="bff/Containerfile"
 bff_context="bff/"
+
+sb_image_name="brewet-storage-backend"
+sb_containerfile="storage-backend/Containerfile"
+sb_context="storage-backend/"
 
 # Get the next semantic version tag
 get_next_version() {
@@ -103,11 +108,11 @@ check_prerequisites() {
 
     for target in "${targets[@]}"; do
         local containerfile
-        if [[ "${target}" == "frontend" ]]; then
-            containerfile="${frontend_containerfile}"
-        else
-            containerfile="${bff_containerfile}"
-        fi
+        case "${target}" in
+            frontend) containerfile="${frontend_containerfile}" ;;
+            bff)      containerfile="${bff_containerfile}" ;;
+            storage-backend) containerfile="${sb_containerfile}" ;;
+        esac
 
         if [[ ! -f "${containerfile}" ]]; then
             log_error "Containerfile not found: ${containerfile}"
@@ -126,15 +131,23 @@ process_target() {
     local version="$2"
     local image_name containerfile context
 
-    if [[ "${target}" == "frontend" ]]; then
-        image_name="${frontend_image_name}"
-        containerfile="${frontend_containerfile}"
-        context="${frontend_context}"
-    else
-        image_name="${bff_image_name}"
-        containerfile="${bff_containerfile}"
-        context="${bff_context}"
-    fi
+    case "${target}" in
+        frontend)
+            image_name="${frontend_image_name}"
+            containerfile="${frontend_containerfile}"
+            context="${frontend_context}"
+            ;;
+        bff)
+            image_name="${bff_image_name}"
+            containerfile="${bff_containerfile}"
+            context="${bff_context}"
+            ;;
+        storage-backend)
+            image_name="${sb_image_name}"
+            containerfile="${sb_containerfile}"
+            context="${sb_context}"
+            ;;
+    esac
 
     local full_image="${REGISTRY}/${image_name}:${version}"
 
@@ -161,7 +174,7 @@ main() {
     fi
 
     case "${target}" in
-        frontend|bff|all) ;;
+        frontend|bff|storage-backend|all) ;;
         *)
             log_error "Unknown target: ${target}"
             usage
@@ -182,7 +195,7 @@ main() {
 
     local targets=()
     if [[ "${target}" == "all" ]]; then
-        targets=("frontend" "bff")
+        targets=("frontend" "bff" "storage-backend")
     else
         targets=("${target}")
     fi
@@ -209,11 +222,11 @@ main() {
     log_success "Done! Images pushed for version ${version}:"
     for t in "${targets[@]}"; do
         local image_name
-        if [[ "${t}" == "frontend" ]]; then
-            image_name="${frontend_image_name}"
-        else
-            image_name="${bff_image_name}"
-        fi
+        case "${t}" in
+            frontend)        image_name="${frontend_image_name}" ;;
+            bff)             image_name="${bff_image_name}" ;;
+            storage-backend) image_name="${sb_image_name}" ;;
+        esac
         log_success "  ${REGISTRY}/${image_name}:${version}"
     done
 }

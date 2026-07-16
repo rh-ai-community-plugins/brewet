@@ -71,10 +71,15 @@ bff:
       cpu: 100m
       memory: 128Mi
 
+# Optional reference NetworkPolicy — restricts per-project storage backend
+# ingress to the BFF namespace only. Deploy to each project namespace.
+networkPolicy:
+  enabled: false
+
 # Storage backend image — used by the frontend when creating per-project containers.
 # The tag should match the deployed plugin version.
 storageBackend:
   image:
-    repository: quay.io/rhoai-community/brewet-storage-backend
-    tag: "0.1.0"
+    repository: quay.io/OWNER/brewet-storage-backend
+    tag: ""
     pullPolicy: IfNotPresent

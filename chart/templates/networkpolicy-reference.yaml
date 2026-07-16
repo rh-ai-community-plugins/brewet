@@ -1,0 +1,30 @@
+{{- if and .Values.bff.enabled (.Values.networkPolicy.enabled | default false) }}
+#
+# Reference NetworkPolicy for per-project storage backend pods.
+# Deploy this in each project namespace to restrict storage backend ingress
+# to the BFF namespace only.
+#
+# Enable with: --set networkPolicy.enabled=true
+#
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: brewet-storage-backend-ingress
+  labels:
+    {{- include "brewet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: storage-backend
+spec:
+  podSelector:
+    matchLabels:
+      app: brewet-storage-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+      ports:
+        - port: 8888
+          protocol: TCP
+{{- end }}
