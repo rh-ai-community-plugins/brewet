@@ -1,0 +1,31 @@
+{{- if and .Values.bff.enabled (.Values.networkPolicy.enabled | default false) }}
+#
+# REFERENCE ONLY — this template serves as documentation of the NetworkPolicy
+# that protects per-project storage backends. It deploys into the Helm release
+# namespace, but the actual per-project NetworkPolicies are created automatically
+# by the plugin UI (see buildNetworkPolicy() in k8sResources.ts).
+#
+# Enable with: --set networkPolicy.enabled=true
+#
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: brewet-storage-backend-ingress
+  labels:
+    {{- include "brewet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: storage-backend
+spec:
+  podSelector:
+    matchLabels:
+      app: brewet-storage-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+      ports:
+        - port: 8888
+          protocol: TCP
+{{- end }}

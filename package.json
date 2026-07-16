@@ -41,7 +41,7 @@
     "lint:ts": "eslint --ext .ts,.tsx src/",
     "lint:md": "markdownlint-cli2 '**/*.md'",
     "sync-chart-version": "node scripts/sync-chart-version.js",
-    "version": "npm run sync-chart-version && git add chart/Chart.yaml bff/package.json storage-backend/package.json plugin.yaml src/app/utils/k8sResources.ts README.md docs/development/BUILD_AND_PUSH.md docs/deployment/OPENSHIFT_DEPLOY.md"
+    "version": "npm run sync-chart-version && git add chart/Chart.yaml bff/package.json storage-backend/package.json plugin.yaml src/app/utils/k8sResources.ts .env.development README.md docs/development/BUILD_AND_PUSH.md docs/deployment/OPENSHIFT_DEPLOY.md"
   },
   "dependencies": {
     "@openshift/dynamic-plugin-sdk": "^5",

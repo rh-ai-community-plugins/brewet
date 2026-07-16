@@ -24,7 +24,7 @@ Usage: $(basename "$0") [TARGET] [SEVERITY]
 Build and scan container images for vulnerabilities using Trivy.
 
 Arguments:
-  TARGET    Which image to scan: frontend, bff, or all (default: all)
+  TARGET    Which image to scan: frontend, bff, storage-backend, or all (default: all)
   SEVERITY  Trivy severity filter (default: HIGH,CRITICAL)
 
 Environment variables:
@@ -32,11 +32,12 @@ Environment variables:
   BUILDER     Container build tool (default: podman)
 
 Examples:
-  $(basename "$0")                  # Scan both frontend and BFF
-  $(basename "$0") frontend         # Scan frontend only
-  $(basename "$0") bff              # Scan BFF only
-  $(basename "$0") all MEDIUM       # Scan both with MEDIUM+ severity
-  BUILDER=docker $(basename "$0")   # Use Docker instead of Podman
+  $(basename "$0")                       # Scan all three images
+  $(basename "$0") frontend              # Scan frontend only
+  $(basename "$0") bff                   # Scan BFF only
+  $(basename "$0") storage-backend       # Scan storage backend only
+  $(basename "$0") all MEDIUM            # Scan all with MEDIUM+ severity
+  BUILDER=docker $(basename "$0")        # Use Docker instead of Podman
 EOF
 }
 
@@ -48,6 +49,10 @@ frontend_context="."
 bff_image_name="brewet-bff"
 bff_containerfile="bff/Containerfile"
 bff_context="bff/"
+
+sb_image_name="brewet-storage-backend"
+sb_containerfile="storage-backend/Containerfile"
+sb_context="storage-backend/"
 
 # Check prerequisites
 check_prerequisites() {
@@ -67,11 +72,12 @@ check_prerequisites() {
 
     for target in "${targets[@]}"; do
         local containerfile
-        if [[ "${target}" == "frontend" ]]; then
-            containerfile="${frontend_containerfile}"
-        else
-            containerfile="${bff_containerfile}"
-        fi
+        case "${target}" in
+            frontend) containerfile="${frontend_containerfile}" ;;
+            bff)      containerfile="${bff_containerfile}" ;;
+            storage-backend) containerfile="${sb_containerfile}" ;;
+            *) log_error "Unknown target: ${target}"; exit 1 ;;
+        esac
 
         if [[ ! -f "${containerfile}" ]]; then
             log_error "Containerfile not found: ${containerfile}"
@@ -104,7 +110,7 @@ scan_image() {
 
     log_info "Scanning image: ${full_image}"
 
-    trivy image --severity "${severity}" --format table "${full_image}"
+    trivy image --severity "${severity}" --exit-code 1 --format table "${full_image}"
 
     local exit_code=$?
     if [[ ${exit_code} -eq 0 ]]; then
@@ -122,15 +128,24 @@ process_target() {
     local severity="$2"
     local image_name containerfile context
 
-    if [[ "${target}" == "frontend" ]]; then
-        image_name="${frontend_image_name}"
-        containerfile="${frontend_containerfile}"
-        context="${frontend_context}"
-    else
-        image_name="${bff_image_name}"
-        containerfile="${bff_containerfile}"
-        context="${bff_context}"
-    fi
+    case "${target}" in
+        frontend)
+            image_name="${frontend_image_name}"
+            containerfile="${frontend_containerfile}"
+            context="${frontend_context}"
+            ;;
+        bff)
+            image_name="${bff_image_name}"
+            containerfile="${bff_containerfile}"
+            context="${bff_context}"
+            ;;
+        storage-backend)
+            image_name="${sb_image_name}"
+            containerfile="${sb_containerfile}"
+            context="${sb_context}"
+            ;;
+        *) log_error "Unknown target: ${target}"; exit 1 ;;
+    esac
 
     echo ""
     log_info "--- ${target} ---"
@@ -150,7 +165,7 @@ main() {
     fi
 
     case "${target}" in
-        frontend|bff|all) ;;
+        frontend|bff|storage-backend|all) ;;
         *)
             log_error "Unknown target: ${target}"
             usage
@@ -160,7 +175,7 @@ main() {
 
     local targets=()
     if [[ "${target}" == "all" ]]; then
-        targets=("frontend" "bff")
+        targets=("frontend" "bff" "storage-backend")
     else
         targets=("${target}")
     fi
