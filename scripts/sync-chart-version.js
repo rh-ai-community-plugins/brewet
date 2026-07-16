@@ -25,7 +25,7 @@ fs.writeFileSync(pluginPath, plugin);
 
 const k8sResPath = 'src/app/utils/k8sResources.ts';
 let k8sRes = fs.readFileSync(k8sResPath, 'utf8');
-k8sRes = k8sRes.replace(/(brewet-storage-backend:)\S+/, `$1${version}`);
+k8sRes = k8sRes.replace(/(brewet-storage-backend:)[^']+/, `$1${version}`);
 fs.writeFileSync(k8sResPath, k8sRes);
 
 const valuesPath = 'chart/values.yaml';
