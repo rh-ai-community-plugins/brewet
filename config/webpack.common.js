@@ -59,7 +59,7 @@ module.exports = {
     new webpack.DefinePlugin({
       'process.env.STORAGE_BACKEND_IMAGE': JSON.stringify(
         process.env.STORAGE_BACKEND_IMAGE ||
-          `quay.io/rhoai-community/brewet-storage-backend:${version}`,
+          `quay.io/OWNER/brewet-storage-backend:${version}`,
       ),
     }),
     new ModuleFederationPlugin({

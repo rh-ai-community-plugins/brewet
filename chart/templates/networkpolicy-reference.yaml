@@ -1,8 +1,9 @@
 {{- if and .Values.bff.enabled (.Values.networkPolicy.enabled | default false) }}
 #
-# Reference NetworkPolicy for per-project storage backend pods.
-# Deploy this in each project namespace to restrict storage backend ingress
-# to the BFF namespace only.
+# REFERENCE ONLY — this template serves as documentation of the NetworkPolicy
+# that protects per-project storage backends. It deploys into the Helm release
+# namespace, but the actual per-project NetworkPolicies are created automatically
+# by the plugin UI (see buildNetworkPolicy() in k8sResources.ts).
 #
 # Enable with: --set networkPolicy.enabled=true
 #
