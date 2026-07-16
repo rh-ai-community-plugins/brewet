@@ -596,8 +596,12 @@ When no Brewet container exists in the selected project, all pages show a **crea
    - **Rename existing BFF templates**: `bff-deployment.yaml` → keep as is (BFF is the proxy)
    - **Add storage backend image reference** in `values.yaml` (used by the plugin UI when creating per-project Deployments — the image tag is injected as a config value, not deployed by the chart itself)
    - **Add BFF RBAC**: ServiceAccount + ClusterRole + ClusterRoleBinding for the BFF to:
-     - `get` Services in any namespace (to discover storage backends)
-     - `proxy` Services (to verify storage backend exists before routing)
+     - `get` Services in any namespace (to verify the storage backend service exists before routing)
+     - **Note**: Only `get` is required — not `proxy`. The BFF uses direct DNS routing
+       (`http://brewet-storage-backend.{namespace}.svc.cluster.local:8888`) rather than the
+       K8s API Server's service proxy endpoint. Direct DNS is simpler, lower latency, and
+       avoids routing data-plane traffic through the API Server, following the principle of
+       least privilege.
    - **Add NetworkPolicy template** (optional, deployable as a reference for users): allows ingress to storage backend only from BFF namespace
 
 2. **BFF Containerfile update** (`bff/Containerfile`)
