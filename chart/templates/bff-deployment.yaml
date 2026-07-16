@@ -18,7 +18,7 @@ spec:
         {{- include "brewet.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: bff
     spec:
-      serviceAccountName: {{ include "brewet.fullname" . }}-bff
+      serviceAccountName: {{ include "brewet.bffServiceAccountName" . }}
       securityContext:
         {{- toYaml .Values.securityContext | nindent 8 }}
       containers:

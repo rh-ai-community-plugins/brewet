@@ -56,3 +56,14 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Create the name of the BFF service account to use
+*/}}
+{{- define "brewet.bffServiceAccountName" -}}
+{{- if .Values.bff.serviceAccount.create }}
+{{- default (printf "%s-bff" (include "brewet.fullname" .)) .Values.bff.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.bff.serviceAccount.name }}
+{{- end }}
+{{- end }}

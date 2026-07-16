@@ -54,6 +54,10 @@ affinity: {}
 # BFF (Backend For Frontend) service
 bff:
   enabled: true
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
   image:
     repository: quay.io/OWNER/brewet-bff
     tag: ""
