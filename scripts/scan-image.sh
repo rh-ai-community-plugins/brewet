@@ -104,7 +104,7 @@ scan_image() {
 
     log_info "Scanning image: ${full_image}"
 
-    trivy image --severity "${severity}" --format table "${full_image}"
+    trivy image --severity "${severity}" --exit-code 1 --format table "${full_image}"
 
     local exit_code=$?
     if [[ ${exit_code} -eq 0 ]]; then
