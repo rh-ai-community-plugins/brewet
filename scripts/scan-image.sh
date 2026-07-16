@@ -76,6 +76,7 @@ check_prerequisites() {
             frontend) containerfile="${frontend_containerfile}" ;;
             bff)      containerfile="${bff_containerfile}" ;;
             storage-backend) containerfile="${sb_containerfile}" ;;
+            *) log_error "Unknown target: ${target}"; exit 1 ;;
         esac
 
         if [[ ! -f "${containerfile}" ]]; then
@@ -143,6 +144,7 @@ process_target() {
             containerfile="${sb_containerfile}"
             context="${sb_context}"
             ;;
+        *) log_error "Unknown target: ${target}"; exit 1 ;;
     esac
 
     echo ""
