@@ -47,6 +47,18 @@ verifyReplace(before, k8sRes, `storage-backend image tag in ${k8sResPath}`);
 
 fs.writeFileSync(k8sResPath, k8sRes);
 
+const envDevPath = '.env.development';
+let envDev = fs.readFileSync(envDevPath, 'utf8');
+
+before = envDev;
+envDev = envDev.replace(
+  /(STORAGE_BACKEND_IMAGE=quay\.io\/OWNER\/brewet-storage-backend:)\S+/,
+  `$1${version}`,
+);
+verifyReplace(before, envDev, `STORAGE_BACKEND_IMAGE tag in ${envDevPath}`);
+
+fs.writeFileSync(envDevPath, envDev);
+
 const valuesPath = 'chart/values.yaml';
 let values = fs.readFileSync(valuesPath, 'utf8');
 
