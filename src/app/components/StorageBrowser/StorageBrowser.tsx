@@ -167,6 +167,12 @@ const StorageBrowser: React.FC = () => {
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
 
+  // Refs for focus management after modal close
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const bulkDeleteButtonRef = useRef<HTMLButtonElement>(null);
+  const createFolderButtonRef = useRef<HTMLButtonElement>(null);
+  const uploadButtonRef = useRef<HTMLButtonElement>(null);
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeProjectRef = useRef(selectedProject);
   activeProjectRef.current = selectedProject;
@@ -446,6 +452,8 @@ const StorageBrowser: React.FC = () => {
       await storageService.deleteFile(selectedProject, selectedLocation, filePath);
       setDeleteTarget(null);
       loadFilesRef.current?.();
+      // Restore focus to the delete button that opened the modal
+      requestAnimationFrame(() => deleteTriggerRef.current?.focus());
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Failed to delete.');
     } finally {
@@ -480,6 +488,8 @@ const StorageBrowser: React.FC = () => {
     } else {
       setIsBulkDeleteOpen(false);
       setSelectedFiles(new Set());
+      // Restore focus to the bulk delete button that opened the modal
+      requestAnimationFrame(() => bulkDeleteButtonRef.current?.focus());
     }
     setIsBulkDeleting(false);
     loadFilesRef.current?.();
@@ -508,6 +518,8 @@ const StorageBrowser: React.FC = () => {
       setIsCreateFolderOpen(false);
       setNewFolderName('');
       loadFilesRef.current?.();
+      // Restore focus to the create folder button that opened the modal
+      requestAnimationFrame(() => createFolderButtonRef.current?.focus());
     } catch (err) {
       setCreateFolderError(err instanceof Error ? err.message : 'Failed to create folder.');
     } finally {
@@ -783,6 +795,7 @@ const StorageBrowser: React.FC = () => {
             <ToolbarGroup align={{ default: 'alignEnd' }}>
               <ToolbarItem>
                 <Button
+                  ref={uploadButtonRef}
                   variant="primary"
                   icon={<UploadIcon />}
                   onClick={() => fileInputRef.current?.click()}
@@ -799,6 +812,7 @@ const StorageBrowser: React.FC = () => {
               </ToolbarItem>
               <ToolbarItem>
                 <Button
+                  ref={createFolderButtonRef}
                   variant="secondary"
                   icon={<PlusCircleIcon />}
                   onClick={() => {
@@ -852,6 +866,7 @@ const StorageBrowser: React.FC = () => {
             </ToolbarItem>
             <ToolbarItem>
               <Button
+                ref={bulkDeleteButtonRef}
                 variant="secondary"
                 isDanger
                 icon={<TrashIcon />}
@@ -926,6 +941,10 @@ const StorageBrowser: React.FC = () => {
           {isDragOver && (
             <div className="storage-browser__drop-message">Drop files here to upload</div>
           )}
+
+          <span aria-live="polite" className="storage-browser__sr-only">
+            {sortedFiles.length} {sortedFiles.length === 1 ? 'item' : 'items'} displayed{searchText ? ` for search "${searchText}"` : ''}
+          </span>
 
           <Table aria-label="File listing" variant="compact">
             <Thead>
@@ -1038,6 +1057,7 @@ const StorageBrowser: React.FC = () => {
                         aria-label={`Delete ${file.name}`}
                         onClick={(e) => {
                           e.stopPropagation();
+                          deleteTriggerRef.current = e.currentTarget as HTMLButtonElement;
                           setDeleteError(null);
                           setDeleteTarget(file);
                         }}
@@ -1070,7 +1090,10 @@ const StorageBrowser: React.FC = () => {
       {deleteTarget && (
         <Modal
           isOpen
-          onClose={() => setDeleteTarget(null)}
+          onClose={() => {
+            setDeleteTarget(null);
+            requestAnimationFrame(() => deleteTriggerRef.current?.focus());
+          }}
           aria-label={`Delete ${deleteTarget.name}`}
           variant="small"
         >
@@ -1108,7 +1131,10 @@ const StorageBrowser: React.FC = () => {
             >
               Delete
             </Button>
-            <Button variant="link" onClick={() => setDeleteTarget(null)}>
+            <Button variant="link" onClick={() => {
+              setDeleteTarget(null);
+              requestAnimationFrame(() => deleteTriggerRef.current?.focus());
+            }}>
               Cancel
             </Button>
           </ModalFooter>
@@ -1118,7 +1144,10 @@ const StorageBrowser: React.FC = () => {
       {/* Create folder modal */}
       <Modal
         isOpen={isCreateFolderOpen}
-        onClose={() => setIsCreateFolderOpen(false)}
+        onClose={() => {
+          setIsCreateFolderOpen(false);
+          requestAnimationFrame(() => createFolderButtonRef.current?.focus());
+        }}
         aria-label="Create folder"
         variant="small"
       >
@@ -1160,7 +1189,10 @@ const StorageBrowser: React.FC = () => {
           >
             Create
           </Button>
-          <Button variant="link" onClick={() => setIsCreateFolderOpen(false)}>
+          <Button variant="link" onClick={() => {
+            setIsCreateFolderOpen(false);
+            requestAnimationFrame(() => createFolderButtonRef.current?.focus());
+          }}>
             Cancel
           </Button>
         </ModalFooter>
@@ -1170,7 +1202,10 @@ const StorageBrowser: React.FC = () => {
       {isBulkDeleteOpen && (
         <Modal
           isOpen
-          onClose={() => setIsBulkDeleteOpen(false)}
+          onClose={() => {
+            setIsBulkDeleteOpen(false);
+            requestAnimationFrame(() => bulkDeleteButtonRef.current?.focus());
+          }}
           aria-label="Bulk delete confirmation"
           variant="small"
         >
@@ -1206,7 +1241,10 @@ const StorageBrowser: React.FC = () => {
             >
               Delete {selectedFiles.size} Item{selectedFiles.size !== 1 ? 's' : ''}
             </Button>
-            <Button variant="link" onClick={() => setIsBulkDeleteOpen(false)}>
+            <Button variant="link" onClick={() => {
+              setIsBulkDeleteOpen(false);
+              requestAnimationFrame(() => bulkDeleteButtonRef.current?.focus());
+            }}>
               Cancel
             </Button>
           </ModalFooter>
@@ -1235,6 +1273,7 @@ const StorageBrowser: React.FC = () => {
           if (uploads.every((u) => u.status === 'done' || u.status === 'error')) {
             setIsUploadModalOpen(false);
             setUploads([]);
+            requestAnimationFrame(() => uploadButtonRef.current?.focus());
           }
         }}
         aria-label="Upload progress"
@@ -1252,24 +1291,26 @@ const StorageBrowser: React.FC = () => {
                     ({formatBytes(upload.file.size)})
                   </span>
                 </Content>
-                {upload.status === 'uploading' && (
-                  <Spinner size="sm" aria-label={`Uploading ${upload.file.name}`} />
-                )}
-                {upload.status === 'done' && (
-                  <Label color="green" isCompact>
-                    Uploaded
-                  </Label>
-                )}
-                {upload.status === 'error' && (
-                  <Label color="red" isCompact>
-                    {upload.error ?? 'Failed'}
-                  </Label>
-                )}
-                {upload.status === 'pending' && (
-                  <Label color="grey" isCompact>
-                    Pending
-                  </Label>
-                )}
+                <span aria-live="polite">
+                  {upload.status === 'uploading' && (
+                    <Spinner size="sm" aria-label={`Uploading ${upload.file.name}`} />
+                  )}
+                  {upload.status === 'done' && (
+                    <Label color="green" isCompact>
+                      Uploaded
+                    </Label>
+                  )}
+                  {upload.status === 'error' && (
+                    <Label color="red" isCompact>
+                      {upload.error ?? 'Failed'}
+                    </Label>
+                  )}
+                  {upload.status === 'pending' && (
+                    <Label color="grey" isCompact>
+                      Pending
+                    </Label>
+                  )}
+                </span>
                 {idx < uploads.length - 1 && <Divider className="pf-v6-u-mt-sm" />}
               </div>
             ))}
@@ -1281,6 +1322,7 @@ const StorageBrowser: React.FC = () => {
             onClick={() => {
               setIsUploadModalOpen(false);
               setUploads([]);
+              requestAnimationFrame(() => uploadButtonRef.current?.focus());
             }}
             isDisabled={uploads.some((u) => u.status === 'uploading' || u.status === 'pending')}
           >

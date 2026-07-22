@@ -105,12 +105,14 @@ export const BrewetToolbar: React.FC = () => {
           {selectedProject && (
             <ToolbarGroup align={{ default: 'alignEnd' }}>
               <ToolbarItem>
-                <Label
-                  color={statusConfig.color}
-                  icon={containerStatus === 'starting' ? <Spinner size="sm" /> : undefined}
-                >
-                  {statusConfig.text}
-                </Label>
+                <span aria-live="polite">
+                  <Label
+                    color={statusConfig.color}
+                    icon={containerStatus === 'starting' ? <Spinner size="sm" /> : undefined}
+                  >
+                    {statusConfig.text}
+                  </Label>
+                </span>
               </ToolbarItem>
 
               {!hasContainer && (

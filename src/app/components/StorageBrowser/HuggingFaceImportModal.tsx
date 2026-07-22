@@ -211,7 +211,7 @@ const HuggingFaceImportModal: React.FC<HuggingFaceImportModalProps> = ({
             )}
           </Form>
         ) : (
-          <>
+          <div aria-live="polite">
             <Content component="p" className="pf-v6-u-mb-md">
               Importing <strong>{modelId}</strong>
               {progress?.totalFiles != null && ` (${progress.totalFiles} files)`}
@@ -250,7 +250,7 @@ const HuggingFaceImportModal: React.FC<HuggingFaceImportModalProps> = ({
                 {progress.error ?? 'The import encountered an error.'}
               </Alert>
             )}
-          </>
+          </div>
         )}
       </ModalBody>
       <ModalFooter>

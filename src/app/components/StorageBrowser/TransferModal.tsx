@@ -459,7 +459,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
         )}
 
         {progress && (
-          <>
+          <div aria-live="polite">
             <Content component="p" className="pf-v6-u-mb-md">
               Transferring files to{' '}
               <strong>{destLocation?.name}</strong>
@@ -513,7 +513,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
                 {progress.completedFiles} of {progress.totalFiles} files were transferred before cancellation.
               </Alert>
             )}
-          </>
+          </div>
         )}
 
         {transferError && (
