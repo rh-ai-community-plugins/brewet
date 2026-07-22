@@ -31,6 +31,17 @@ Browser ──► RHOAI Dashboard ──► /api/k8s ──► K8s API         (
 Browser ──► RHOAI Dashboard ──► /brewet/api ──► BFF ──► Storage Backend   (data plane)
 ```
 
+### Integration Patterns
+
+Each page uses a different integration pattern with the RHOAI Dashboard:
+
+| Page | Pattern | Data Flow |
+|---|---|---|
+| Storage Browser | Data plane (BFF) | Frontend → BFF → Storage Backend (streaming SSE, binary) |
+| Storage Management | Hybrid | Create/delete buckets via BFF; list Data Connections via K8s API |
+| Settings | Data plane (BFF) | Frontend → BFF → Storage Backend (JSON) |
+| Container Lifecycle | Management plane (K8s) | Frontend → Dashboard `/api/k8s` proxy → K8s API |
+
 For the full architecture and project plan, see [docs/project/PROJECT_PLAN.md](docs/project/PROJECT_PLAN.md).
 
 ## Quick Start
