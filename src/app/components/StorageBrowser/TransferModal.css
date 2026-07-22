@@ -1,0 +1,8 @@
+.transfer-modal__dest-toggle {
+  min-width: 250px;
+}
+
+.transfer-modal__conflict-list {
+  max-height: 200px;
+  overflow: auto;
+}
