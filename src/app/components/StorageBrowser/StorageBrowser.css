@@ -27,6 +27,10 @@
   color: var(--pf-t--global--color--brand--default, #0066cc);
 }
 
+.storage-browser__location-toggle {
+  min-width: 200px;
+}
+
 .storage-browser__upload-list {
   max-height: 200px;
   overflow-y: auto;

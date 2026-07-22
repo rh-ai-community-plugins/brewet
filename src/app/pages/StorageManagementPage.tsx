@@ -81,7 +81,7 @@ const StorageManagementContent: React.FC = () => {
   activeProjectRef.current = selectedProject;
 
   const loadData = useCallback(
-    async (refresh = false) => {
+    async (refresh = false, signal?: AbortSignal) => {
       if (!selectedProject) return;
       const project = selectedProject;
       try {
@@ -90,11 +90,12 @@ const StorageManagementContent: React.FC = () => {
         setError(null);
 
         const locs = refresh
-          ? await storageService.refreshLocations(project)
-          : await storageService.getLocations(project);
+          ? await storageService.refreshLocations(project, signal)
+          : await storageService.getLocations(project, signal);
         if (activeProjectRef.current !== project) return;
         setLocations(locs);
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (activeProjectRef.current !== project) return;
         setError(err instanceof Error ? err.message : 'Failed to load storage locations.');
       } finally {
@@ -108,7 +109,9 @@ const StorageManagementContent: React.FC = () => {
   );
 
   useEffect(() => {
-    loadData();
+    const controller = new AbortController();
+    loadData(false, controller.signal);
+    return () => controller.abort();
   }, [loadData]);
 
   const s3BucketNames = useMemo(

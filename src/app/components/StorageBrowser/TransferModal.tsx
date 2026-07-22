@@ -33,6 +33,7 @@ import type {
   TransferRequest,
   ConflictCheckResult,
 } from '~/app/types/storage';
+import './TransferModal.css';
 
 type ConflictResolution = 'overwrite' | 'skip' | 'rename';
 type ModalStep = 'destination' | 'conflicts' | 'progress';
@@ -317,7 +318,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
                 ref={toggleRef}
                 onClick={() => setDestLocationSelectOpen((prev) => !prev)}
                 isExpanded={destLocationSelectOpen}
-                style={{ minWidth: '250px' }}
+                className="transfer-modal__dest-toggle"
                 id="transfer-dest"
               >
                 {destLocation ? (
@@ -386,7 +387,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
               className="pf-v6-u-mb-md"
             />
 
-            <List isPlain className="pf-v6-u-mb-md" style={{ maxHeight: '200px', overflow: 'auto' }}>
+            <List isPlain className="pf-v6-u-mb-md transfer-modal__conflict-list">
               {conflictResult.conflicts.map((c) => (
                 <ListItem key={c.path}>
                   {c.path}{' '}

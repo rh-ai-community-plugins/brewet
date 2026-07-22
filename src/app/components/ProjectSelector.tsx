@@ -23,6 +23,7 @@ import {
 } from '@patternfly/react-core';
 import { useProjects } from '~/app/hooks/useProjects';
 import { useFavoriteProjects } from '~/app/hooks/useFavoriteProjects';
+import './ProjectSelector.css';
 
 const SYSTEM_NAMESPACE_PREFIXES = ['openshift-', 'kube-'];
 const SYSTEM_NAMESPACES = ['default', 'openshift'];
@@ -148,7 +149,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       onClick={() => setIsOpen(!isOpen)}
       isExpanded={isOpen}
       isDisabled={isDisabled}
-      style={{ minWidth: '300px' }}
+      className="project-selector__toggle"
       aria-label="Select a project"
     >
       {title}

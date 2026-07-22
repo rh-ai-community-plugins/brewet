@@ -213,7 +213,7 @@ describe('StorageManagementPage', () => {
 
     await userEvent.click(screen.getByLabelText('Refresh'));
     await waitFor(() => {
-      expect(mockStorageService.refreshLocations).toHaveBeenCalledWith('test-ns');
+      expect(mockStorageService.refreshLocations).toHaveBeenCalledWith('test-ns', undefined);
     });
   });
 });

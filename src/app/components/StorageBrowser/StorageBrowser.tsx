@@ -179,15 +179,17 @@ const StorageBrowser: React.FC = () => {
       setLocationsLoading(false);
       return;
     }
+    const controller = new AbortController();
     setLocationsLoading(true);
     storageService
-      .getLocations(selectedProject)
+      .getLocations(selectedProject, controller.signal)
       .then((locs) => {
         if (activeProjectRef.current === selectedProject) {
           setLocations(locs);
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (activeProjectRef.current === selectedProject) {
           setLocations([]);
         }
@@ -197,6 +199,7 @@ const StorageBrowser: React.FC = () => {
           setLocationsLoading(false);
         }
       });
+    return () => controller.abort();
   }, [selectedProject]);
 
   // Load files when location or path changes
@@ -682,7 +685,7 @@ const StorageBrowser: React.FC = () => {
                   ref={toggleRef}
                   onClick={() => setLocationSelectOpen((prev) => !prev)}
                   isExpanded={locationSelectOpen}
-                  style={{ minWidth: '200px' }}
+                  className="storage-browser__location-toggle"
                 >
                   {selectedLocation ? (
                     <>
