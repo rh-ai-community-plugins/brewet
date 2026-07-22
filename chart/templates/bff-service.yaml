@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "brewet.fullname" . }}-bff
+  name: {{ include "brewet.bffFullname" . }}
   labels:
     {{- include "brewet.labels" . | nindent 4 }}
     app.kubernetes.io/component: bff

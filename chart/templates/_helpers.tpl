@@ -47,6 +47,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Create a BFF fully qualified name that respects the 63-char K8s limit.
+Truncates the base fullname to 59 characters before appending "-bff".
+*/}}
+{{- define "brewet.bffFullname" -}}
+{{- include "brewet.fullname" . | trunc 59 | trimSuffix "-" }}-bff
+{{- end }}
+
+{{/*
 Create the name of the service account to use
 */}}
 {{- define "brewet.serviceAccountName" -}}
@@ -62,7 +70,7 @@ Create the name of the BFF service account to use
 */}}
 {{- define "brewet.bffServiceAccountName" -}}
 {{- if .Values.bff.serviceAccount.create }}
-{{- default (printf "%s-bff" (include "brewet.fullname" .)) .Values.bff.serviceAccount.name }}
+{{- default (include "brewet.bffFullname" .) .Values.bff.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.bff.serviceAccount.name }}
 {{- end }}
