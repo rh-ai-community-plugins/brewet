@@ -1,11 +1,11 @@
 import fs from 'fs';
 import { k8sRequest } from './k8sClient';
+import { K8S_NAMESPACE_RE } from './constants';
 
 const SA_TOKEN_PATH = '/var/run/secrets/kubernetes.io/serviceaccount/token';
 const SERVICE_NAME = 'brewet-storage-backend';
 const SERVICE_PORT = 8888;
 const DEFAULT_CACHE_TTL_MS = 30_000;
-const K8S_NAMESPACE_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 interface CacheEntry {
   url: string;

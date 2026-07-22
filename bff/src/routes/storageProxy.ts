@@ -6,6 +6,7 @@ import {
 } from '../utils/serviceDiscovery';
 import { K8sHttpError } from '../utils/k8sClient';
 import { rateLimiter } from '../middleware/rateLimiter';
+import { K8S_NAMESPACE_RE } from '../utils/constants';
 
 function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const auth = req.headers.authorization;
@@ -15,8 +16,6 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
   }
   next();
 }
-
-const K8S_NAMESPACE_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 const proxy = httpProxy.createProxyServer({});
 
@@ -153,4 +152,7 @@ export function createStorageProxyRouter(): Router {
   return router;
 }
 
-export { proxy };
+/** Shut down the underlying http-proxy server (for test cleanup). */
+export function closeProxy(): void {
+  proxy.close();
+}
