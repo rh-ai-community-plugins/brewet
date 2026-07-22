@@ -12,6 +12,6 @@ roleRef:
   name: {{ include "brewet.bffFullname" . }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "brewet.bffFullname" . }}
+    name: {{ include "brewet.bffServiceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 {{- end }}
