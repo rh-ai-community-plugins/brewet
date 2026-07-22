@@ -534,18 +534,16 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         return reply.send({ message: 'Object uploaded successfully' });
       } catch (e) {
         if (e instanceof S3ServiceException) {
-          return reply.code(e.$metadata?.httpStatusCode || 500).send({
-            error: e.name || 'S3ServiceException',
-            message: e.message || 'An S3 service exception occurred.',
-          });
+          return handleS3Error(e, reply);
         }
         const err = e as Error;
         if (err.name === 'AbortError') {
           return reply.code(499).send({ error: 'AbortError', message: 'Upload aborted by client' });
         }
+        console.error('Upload failed:', e);
         return reply.code(500).send({
-          error: err.name || 'Unknown error',
-          message: err.message || 'An unexpected error occurred.',
+          error: 'InternalError',
+          message: 'An unexpected error occurred.',
         });
       }
     },
@@ -875,8 +873,8 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       }
       req.log.error(err, 'HuggingFace import failed');
       return reply.code(500).send({
-        error: 'Import Error',
-        message: err instanceof Error ? err.message : 'Failed to initiate HuggingFace import',
+        error: 'ImportError',
+        message: 'Failed to initiate HuggingFace import',
       });
     }
   });
