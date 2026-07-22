@@ -43,6 +43,38 @@ export interface FileListResponse {
   totalCount?: number;
 }
 
+/**
+ * Raw S3 list objects response from the storage backend.
+ * objects = AWS SDK Contents items, prefixes = CommonPrefixes items.
+ */
+export interface RawS3ListResponse {
+  objects?: Array<{ Key?: string; Size?: number; LastModified?: string; ETag?: string }>;
+  prefixes?: Array<{ Prefix?: string }>;
+  nextContinuationToken?: string | null;
+  isTruncated?: boolean;
+}
+
+/**
+ * Raw local file entry from the storage backend.
+ */
+export interface RawLocalFileEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'directory' | 'symlink';
+  size?: number;
+  modified?: string;
+}
+
+/**
+ * Raw local file listing response from the storage backend.
+ */
+export interface RawLocalListResponse {
+  files: RawLocalFileEntry[];
+  currentPath?: string;
+  parentPath?: string | null;
+  totalCount?: number;
+}
+
 export interface TransferRequest {
   source: string;
   destination: string;

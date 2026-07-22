@@ -4,7 +4,10 @@ import type {
   StorageLocation,
   BucketsList,
   LocalStorageLocation,
+  FileInfo,
   FileListResponse,
+  RawS3ListResponse,
+  RawLocalListResponse,
   TransferRequest,
   TransferJob,
   TransferProgress,
@@ -16,6 +19,79 @@ import type {
   HuggingFaceImportRequest,
   HuggingFaceImportResponse,
 } from '~/app/types/storage';
+
+/**
+ * Transform a raw S3 list-objects response into a FileListResponse.
+ *
+ * The storage backend returns `{ objects, prefixes, nextContinuationToken, isTruncated }`
+ * where `objects` are AWS SDK Contents items (Key, Size, LastModified, ETag) and
+ * `prefixes` are CommonPrefixes items (Prefix). This maps them into FileInfo[].
+ */
+export function transformS3Response(raw: RawS3ListResponse): FileListResponse {
+  const files: FileInfo[] = [];
+
+  // Map prefixes (directories) first
+  if (raw.prefixes) {
+    for (const prefix of raw.prefixes) {
+      const fullPrefix = prefix.Prefix || '';
+      // Extract the folder name: "path/to/folder/" -> "folder"
+      const trimmed = fullPrefix.endsWith('/') ? fullPrefix.slice(0, -1) : fullPrefix;
+      const name = trimmed.split('/').pop() || trimmed;
+      if (name) {
+        files.push({
+          name,
+          isDirectory: true,
+        });
+      }
+    }
+  }
+
+  // Map objects (files)
+  if (raw.objects) {
+    for (const obj of raw.objects) {
+      const key = obj.Key || '';
+      // Skip "folder marker" objects (zero-byte keys ending with /)
+      if (key.endsWith('/')) continue;
+      const name = key.split('/').pop() || key;
+      if (name) {
+        files.push({
+          name,
+          isDirectory: false,
+          size: obj.Size,
+          lastModified: obj.LastModified,
+          etag: obj.ETag,
+        });
+      }
+    }
+  }
+
+  return {
+    files,
+    continuationToken: raw.nextContinuationToken ?? undefined,
+    isTruncated: raw.isTruncated,
+  };
+}
+
+/**
+ * Transform a raw local file listing response into a FileListResponse.
+ *
+ * The storage backend returns FileEntry objects with `{ name, path, type, size?, modified? }`
+ * where `type` is 'file' | 'directory' | 'symlink'. This maps `type` to `isDirectory`
+ * and `modified` to `lastModified`.
+ */
+export function transformLocalResponse(raw: RawLocalListResponse): FileListResponse {
+  const files: FileInfo[] = raw.files.map((entry) => ({
+    name: entry.name,
+    isDirectory: entry.type === 'directory',
+    size: entry.size,
+    lastModified: entry.modified,
+  }));
+
+  return {
+    files,
+    totalCount: raw.totalCount,
+  };
+}
 
 class StorageService {
   private locationsCache: StorageLocation[] | null = null;
@@ -114,7 +190,12 @@ class StorageService {
       }
 
       const query = params.toString();
-      return apiClient.get<FileListResponse>(namespace, query ? `${url}?${query}` : url, signal);
+      const raw = await apiClient.get<RawS3ListResponse>(
+        namespace,
+        query ? `${url}?${query}` : url,
+        signal,
+      );
+      return transformS3Response(raw);
     }
 
     const encodedPath = base64Encode(path || '/');
@@ -125,7 +206,12 @@ class StorageService {
     if (options?.offset != null) params.set('offset', String(options.offset));
 
     const query = params.toString();
-    return apiClient.get<FileListResponse>(namespace, query ? `${url}?${query}` : url, signal);
+    const raw = await apiClient.get<RawLocalListResponse>(
+      namespace,
+      query ? `${url}?${query}` : url,
+      signal,
+    );
+    return transformLocalResponse(raw);
   }
 
   async uploadFile(
