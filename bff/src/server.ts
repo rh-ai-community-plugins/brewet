@@ -6,10 +6,17 @@ import { setupGracefulShutdown } from './shutdown';
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
+// Trust the first reverse proxy (OpenShift router / ingress) so that
+// req.ip returns the real client IP instead of the proxy's address.
+app.set('trust proxy', 1);
+
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
-    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
+    // Log method + route pattern instead of the full originalUrl, which may
+    // contain base64-encoded file paths or other sensitive path segments.
+    const routePattern = req.route?.path ?? req.path;
+    console.log(`${req.method} ${routePattern} ${res.statusCode} ${Date.now() - start}ms`);
   });
   next();
 });
