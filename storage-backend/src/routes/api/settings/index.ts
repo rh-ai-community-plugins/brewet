@@ -112,8 +112,8 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       updateS3Config(accessKeyId, secretAccessKey, region, endpoint, (defaultBucket as string) || '');
       reply.send({ message: 'Settings updated successfully' });
     } catch (error) {
-      const err = error as Error;
-      reply.code(500).send({ error: err.name || 'UnknownError', message: err.message });
+      console.error('Failed to update S3 settings:', error);
+      reply.code(500).send({ error: 'InternalError', message: 'Failed to update S3 settings' });
     }
   });
 
@@ -167,13 +167,14 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       reply.send({ message: 'Connection successful' });
     } catch (error) {
       if (error instanceof S3ServiceException) {
-        return reply.code(error.$metadata?.httpStatusCode || 500).send({
-          error: error.name,
-          message: error.message,
+        const statusCode = error.$metadata?.httpStatusCode || 500;
+        return reply.code(statusCode).send({
+          error: error.name || 'S3ServiceException',
+          message: 'S3 connection test failed',
         });
       }
-      const err = error as Error;
-      reply.code(500).send({ error: err.name || 'UnknownError', message: err.message });
+      console.error('S3 connection test failed:', error);
+      reply.code(500).send({ error: 'InternalError', message: 'S3 connection test failed' });
     } finally {
       s3ClientTest?.destroy();
     }
@@ -194,8 +195,8 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       updateHFConfig((body as any).hfToken);
       reply.send({ message: 'Settings updated successfully' });
     } catch (error) {
-      const err = error as Error;
-      reply.code(500).send({ error: err.name, message: err.message });
+      console.error('Failed to update HuggingFace settings:', error);
+      reply.code(500).send({ error: 'InternalError', message: 'Failed to update HuggingFace settings' });
     }
   });
 
@@ -304,8 +305,8 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       updateProxyConfig(httpProxy || '', httpsProxy || '');
       reply.send({ message: 'Settings updated successfully' });
     } catch (error) {
-      const err = error as Error;
-      reply.code(500).send({ error: err.name || 'UnknownError', message: err.message });
+      console.error('Failed to update proxy settings:', error);
+      reply.code(500).send({ error: 'InternalError', message: 'Failed to update proxy settings' });
     }
   });
 
