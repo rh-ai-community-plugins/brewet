@@ -7,6 +7,17 @@ import { getCorsConfig } from './config/cors';
 import { getLocalStoragePaths, hasEphemeralDefaultPath, DEFAULT_EPHEMERAL_PATH } from './utils/config';
 import { getStorageLocations } from './utils/localStorage';
 
+// Global error handlers — surface unhandled rejections and uncaught exceptions
+// instead of letting the process crash silently (see #182).
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  process.exit(1);
+});
+
 const PORT = parseInt(process.env.PORT || '8888', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
