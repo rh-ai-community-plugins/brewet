@@ -115,6 +115,51 @@ describe('listDirectory', () => {
     expect(files).toHaveLength(2);
     expect(totalCount).toBe(3);
   });
+
+  it('includes symlink target when it resolves within basePath', async () => {
+    const targetFile = path.join(tempDir, 'real-file.txt');
+    const symlinkFile = path.join(tempDir, 'link-inside.txt');
+    await fs.writeFile(targetFile, 'data');
+    await fs.symlink(targetFile, symlinkFile);
+
+    const { files } = await listDirectory(tempDir, undefined, 0, tempDir);
+    const symlink = files.find((f) => f.name === 'link-inside.txt');
+    expect(symlink).toBeDefined();
+    expect(symlink!.type).toBe('symlink');
+    expect(symlink!.target).toBe(targetFile);
+  });
+
+  it('omits symlink target when it resolves outside basePath', async () => {
+    // Create a symlink pointing outside the allowed directory
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'brewet-outside-'));
+    const outsideFile = path.join(outsideDir, 'secret.txt');
+    await fs.writeFile(outsideFile, 'secret-data');
+    const symlinkFile = path.join(tempDir, 'link-outside.txt');
+    await fs.symlink(outsideFile, symlinkFile);
+
+    try {
+      const { files } = await listDirectory(tempDir, undefined, 0, tempDir);
+      const symlink = files.find((f) => f.name === 'link-outside.txt');
+      expect(symlink).toBeDefined();
+      expect(symlink!.type).toBe('symlink');
+      expect(symlink!.target).toBeUndefined();
+    } finally {
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('includes symlink target when no basePath is provided (backward compat)', async () => {
+    const targetFile = path.join(tempDir, 'real-file.txt');
+    const symlinkFile = path.join(tempDir, 'link.txt');
+    await fs.writeFile(targetFile, 'data');
+    await fs.symlink(targetFile, symlinkFile);
+
+    const { files } = await listDirectory(tempDir);
+    const symlink = files.find((f) => f.name === 'link.txt');
+    expect(symlink).toBeDefined();
+    expect(symlink!.type).toBe('symlink');
+    expect(symlink!.target).toBe(targetFile);
+  });
 });
 
 describe('createDirectory', () => {
@@ -159,5 +204,32 @@ describe('getFileMetadata', () => {
     expect(metadata.type).toBe('file');
     expect(metadata.size).toBe(11);
     expect(metadata.modified).toBeDefined();
+  });
+
+  it('omits symlink target when it resolves outside basePath', async () => {
+    const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'brewet-meta-outside-'));
+    const outsideFile = path.join(outsideDir, 'secret.txt');
+    await fs.writeFile(outsideFile, 'secret');
+    const symlinkFile = path.join(tempDir, 'meta-link.txt');
+    await fs.symlink(outsideFile, symlinkFile);
+
+    try {
+      const metadata = await getFileMetadata(symlinkFile, tempDir);
+      expect(metadata.type).toBe('symlink');
+      expect(metadata.target).toBeUndefined();
+    } finally {
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('includes symlink target when it resolves within basePath', async () => {
+    const targetFile = path.join(tempDir, 'meta-real.txt');
+    await fs.writeFile(targetFile, 'data');
+    const symlinkFile = path.join(tempDir, 'meta-link-inside.txt');
+    await fs.symlink(targetFile, symlinkFile);
+
+    const metadata = await getFileMetadata(symlinkFile, tempDir);
+    expect(metadata.type).toBe('symlink');
+    expect(metadata.target).toBe(targetFile);
   });
 });
