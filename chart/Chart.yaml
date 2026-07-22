@@ -12,3 +12,6 @@ keywords:
 home: https://github.com/rh-ai-community-plugins/brewet
 sources:
   - https://github.com/rh-ai-community-plugins/brewet
+maintainers:
+  - name: rh-ai-community-plugins
+    url: https://github.com/rh-ai-community-plugins

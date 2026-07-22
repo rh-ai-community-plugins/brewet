@@ -2,13 +2,21 @@
 # This is a YAML-formatted file.
 
 image:
+  # -- Container image registry and repository.
+  # Format: <registry>/<org>/<image> (e.g. quay.io/my-org/brewet).
   repository: quay.io/OWNER/brewet
+  # -- Image tag override. When empty (""), defaults to the chart's appVersion.
   tag: ""
   pullPolicy: IfNotPresent
 
-# Overrides .Chart.Name so deployed resources use the plugin name, not the
+# -- Overrides .Chart.Name so deployed resources use the plugin name, not the
 # chart name (which has a -chart suffix to avoid OCI registry collisions).
+# Must be a valid DNS label: lowercase alphanumeric or '-', start/end with
+# alphanumeric, max 63 characters (RFC 1123).
 nameOverride: "brewet"
+# -- Fully overrides the generated resource name prefix.
+# Must be a valid DNS label: lowercase alphanumeric or '-', start/end with
+# alphanumeric, max 63 characters (RFC 1123). Leave empty to use the default.
 fullnameOverride: ""
 
 serviceAccount:
@@ -16,11 +24,14 @@ serviceAccount:
   annotations: {}
   name: ""
 
+# -- Number of frontend pod replicas. Must be a positive integer (>= 1).
 replicaCount: 1
 
 service:
   type: ClusterIP
+  # -- Service port exposed to the cluster. Valid range: 1-65535.
   port: 8080
+  # -- Container port the service forwards to. Valid range: 1-65535.
   targetPort: 8080
 
 ingress:
@@ -59,13 +70,19 @@ bff:
     annotations: {}
     name: ""
   image:
+    # -- BFF container image registry and repository.
+    # Format: <registry>/<org>/<image>.
     repository: quay.io/OWNER/brewet-bff
+    # -- BFF image tag override. When empty (""), defaults to appVersion.
     tag: ""
     pullPolicy: IfNotPresent
+  # -- Number of BFF pod replicas. Must be a positive integer (>= 1).
   replicaCount: 1
   service:
     type: ClusterIP
+    # -- BFF service port. Valid range: 1-65535.
     port: 3000
+    # -- BFF container port. Valid range: 1-65535.
     targetPort: 3000
   resources:
     limits:
@@ -84,6 +101,9 @@ networkPolicy:
 # The tag should match the deployed plugin version.
 storageBackend:
   image:
+    # -- Storage backend container image registry and repository.
+    # Format: <registry>/<org>/<image>.
     repository: quay.io/OWNER/brewet-storage-backend
+    # -- Storage backend image tag override. When empty (""), defaults to appVersion.
     tag: ""
     pullPolicy: IfNotPresent
