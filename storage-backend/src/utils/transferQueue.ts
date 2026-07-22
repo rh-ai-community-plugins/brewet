@@ -107,7 +107,11 @@ export class TransferQueue extends EventEmitter {
     };
 
     this.jobs.set(jobId, job);
-    this.processFiles(job, executor);
+    this.processFiles(job, executor).catch((err) => {
+      console.error('Transfer processing failed:', err);
+      job.status = 'failed';
+      job.completedAt = Date.now();
+    });
     return jobId;
   }
 
