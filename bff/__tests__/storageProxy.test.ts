@@ -12,7 +12,35 @@ import { K8sHttpError } from '../src/utils/k8sClient';
 
 const mockedResolve = jest.mocked(resolveStorageBackend);
 
+const AUTH_HEADER = { Authorization: 'Bearer test-token' };
+
 function request(
+  port: number,
+  path: string,
+  options: http.RequestOptions = {},
+): Promise<{ statusCode: number; headers: http.IncomingHttpHeaders; body: string }> {
+  return new Promise((resolve, reject) => {
+    const mergedHeaders = { ...AUTH_HEADER, ...options.headers };
+    const req = http.request(
+      { hostname: '127.0.0.1', port, path, method: 'GET', ...options, headers: mergedHeaders },
+      (res) => {
+        let body = '';
+        res.on('data', (chunk) => (body += chunk));
+        res.on('end', () =>
+          resolve({ statusCode: res.statusCode!, headers: res.headers, body }),
+        );
+      },
+    );
+    req.on('error', reject);
+    if (options.method === 'POST' && (options as any)._body) {
+      req.write((options as any)._body);
+    }
+    req.end();
+  });
+}
+
+/** Like request() but without the default Authorization header. */
+function requestNoAuth(
   port: number,
   path: string,
   options: http.RequestOptions = {},
@@ -123,6 +151,39 @@ describe('Storage Proxy', () => {
       expect(res.statusCode).toBe(200);
       expect(JSON.parse(res.body)).toEqual({ status: 'ok' });
       expect(mockedResolve).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('authentication', () => {
+    it('returns 401 when no Authorization header is present', async () => {
+      const res = await requestNoAuth(bffPort, '/api/my-project/buckets');
+      expect(res.statusCode).toBe(401);
+      expect(JSON.parse(res.body).message).toBe('Authentication required');
+      expect(mockedResolve).not.toHaveBeenCalled();
+    });
+
+    it('returns 401 when Authorization header is not a Bearer token', async () => {
+      const res = await requestNoAuth(bffPort, '/api/my-project/buckets', {
+        headers: { Authorization: 'Basic dXNlcjpwYXNz' },
+      });
+      expect(res.statusCode).toBe(401);
+      expect(JSON.parse(res.body).message).toBe('Authentication required');
+      expect(mockedResolve).not.toHaveBeenCalled();
+    });
+
+    it('returns 401 when Authorization header is an empty string', async () => {
+      const res = await requestNoAuth(bffPort, '/api/my-project/buckets', {
+        headers: { Authorization: '' },
+      });
+      expect(res.statusCode).toBe(401);
+      expect(JSON.parse(res.body).message).toBe('Authentication required');
+      expect(mockedResolve).not.toHaveBeenCalled();
+    });
+
+    it('passes through when a valid Bearer token is present', async () => {
+      const res = await request(bffPort, '/api/my-project/buckets');
+      expect(res.statusCode).toBe(200);
+      expect(mockedResolve).toHaveBeenCalledWith('my-project');
     });
   });
 

@@ -1,11 +1,20 @@
 import httpProxy from 'http-proxy';
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import {
   resolveStorageBackend,
   clearCache,
 } from '../utils/serviceDiscovery';
 import { K8sHttpError } from '../utils/k8sClient';
 import { rateLimiter } from '../middleware/rateLimiter';
+
+function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) {
+    res.status(401).json({ message: 'Authentication required' });
+    return;
+  }
+  next();
+}
 
 const K8S_NAMESPACE_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
@@ -101,7 +110,7 @@ const PROXY_TIMEOUT_MS = 300_000;
 export function createStorageProxyRouter(): Router {
   const router = Router();
 
-  router.use('/:namespace', rateLimiter, (req: Request, res: Response) => {
+  router.use('/:namespace', requireAuth, rateLimiter, (req: Request, res: Response) => {
     const namespace = req.params.namespace;
     const remainingPath = req.url;
 
