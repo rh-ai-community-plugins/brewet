@@ -17,7 +17,7 @@ function request(
 ): Promise<{ statusCode: number; headers: http.IncomingHttpHeaders; body: string }> {
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { hostname: '127.0.0.1', port, path, method: 'GET' },
+      { hostname: '127.0.0.1', port, path, method: 'GET', headers: { Authorization: 'Bearer test-token' } },
       (res) => {
         let body = '';
         res.on('data', (chunk) => (body += chunk));
