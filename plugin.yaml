@@ -1,13 +1,13 @@
 # --- Plugin identity (required) ---
-name: brewet
-displayName: Brewet
+name: brewet                        # [PLUGIN-SPECIFIC] Module Federation remote name
+displayName: Brewet                 # [PLUGIN-SPECIFIC] Human-readable name in dashboard sidebar
 description: S3 and PVC storage management for Red Hat OpenShift AI — browse, upload, download, and transfer files across storage backends
-version: 0.1.0
+version: 0.1.0                     # Managed by sync-chart-version.js — do not edit manually
 
 # --- Maintainer (required) ---
 maintainer:
-  name: Your Name
-  github: your-github-handle
+  name: Your Name                   # [PLUGIN-SPECIFIC] Update with your name
+  github: your-github-handle        # [PLUGIN-SPECIFIC] Update with your GitHub handle
 
 # --- RHOAI compatibility (required) ---
 rhoai_compatibility:
@@ -18,41 +18,41 @@ rhoai_compatibility:
 deployment_model: cluster-shared
 
 image:
-  repository: quay.io/OWNER/brewet
-  tag: "0.1.0"
+  repository: quay.io/OWNER/brewet              # [PLUGIN-SPECIFIC] Frontend container image
+  tag: "0.1.0"                                  # Managed by sync-chart-version.js
 
 bff_image:
-  repository: quay.io/OWNER/brewet-bff
-  tag: "0.1.0"
+  repository: quay.io/OWNER/brewet-bff          # [PLUGIN-SPECIFIC] BFF container image
+  tag: "0.1.0"                                  # Managed by sync-chart-version.js
 
 storage_backend_image:
-  repository: quay.io/OWNER/brewet-storage-backend
-  tag: "0.1.0"
+  repository: quay.io/OWNER/brewet-storage-backend  # [PLUGIN-SPECIFIC] Storage backend container image
+  tag: "0.1.0"                                      # Managed by sync-chart-version.js
 
 # --- Installation (required) ---
 install:
   method: automatic
   helm:
     chart_path: chart/
-    registry: oci://quay.io/OWNER/brewet-chart
+    registry: oci://quay.io/OWNER/brewet-chart   # [PLUGIN-SPECIFIC] Helm chart OCI registry
   prerequisites: []
-  instructions: https://github.com/rh-ai-community-plugins/brewet/blob/main/docs/deployment
+  instructions: https://github.com/rh-ai-community-plugins/brewet/blob/main/docs/deployment  # [PLUGIN-SPECIFIC]
 
 # --- Dashboard integration (required) ---
 remote:
   type: module-federation
   spec:
-    name: brewet
-    scope: brewet
+    name: brewet                    # [PLUGIN-SPECIFIC] Must match webpack Module Federation name
+    scope: brewet                   # [PLUGIN-SPECIFIC] Must match Module Federation scope
     # Update this URL to point to your deployed OpenShift route.
     remoteEntry: https://<your-openshift-route>/remoteEntry.js
     paths:
       - type: route
-        path: /brewet
+        path: /brewet               # [PLUGIN-SPECIFIC] Plugin route prefix
         extensions:
-          - brewet/extensions
+          - brewet/extensions        # [PLUGIN-SPECIFIC] Module Federation exposed module
       - type: icon
-        path: brewet/Icon
+        path: brewet/Icon           # [PLUGIN-SPECIFIC] Module Federation exposed icon
 
 # --- RBAC (required) ---
 # The Helm chart creates a ClusterRole for the BFF ServiceAccount to get
@@ -66,6 +66,6 @@ rbac:
 
 # --- Support (optional) ---
 support:
-  repo: https://github.com/rh-ai-community-plugins/brewet
-  docs: https://github.com/rh-ai-community-plugins/brewet/tree/main/docs
-  issues: https://github.com/rh-ai-community-plugins/brewet/issues
+  repo: https://github.com/rh-ai-community-plugins/brewet       # [PLUGIN-SPECIFIC]
+  docs: https://github.com/rh-ai-community-plugins/brewet/tree/main/docs  # [PLUGIN-SPECIFIC]
+  issues: https://github.com/rh-ai-community-plugins/brewet/issues  # [PLUGIN-SPECIFIC]
