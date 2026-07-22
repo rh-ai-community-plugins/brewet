@@ -277,7 +277,7 @@ describe('Storage Proxy', () => {
   describe('error handling', () => {
     it('returns 404 when service discovery reports not found', async () => {
       mockedResolve.mockRejectedValue(
-        new K8sHttpError(404, 'K8s API returned 404: not found'),
+        new K8sHttpError(404, '{"kind":"Status","message":"services \\"brewet-storage-backend\\" not found"}'),
       );
       const res = await request(bffPort, '/api/missing-ns/buckets');
       expect(res.statusCode).toBe(404);
@@ -288,7 +288,7 @@ describe('Storage Proxy', () => {
 
     it('returns 403 when service discovery reports access denied', async () => {
       mockedResolve.mockRejectedValue(
-        new K8sHttpError(403, 'K8s API returned 403: forbidden'),
+        new K8sHttpError(403, '{"kind":"Status","message":"forbidden"}'),
       );
       const res = await request(bffPort, '/api/restricted-ns/buckets');
       expect(res.statusCode).toBe(403);

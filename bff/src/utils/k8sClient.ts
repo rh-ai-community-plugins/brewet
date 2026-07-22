@@ -2,9 +2,14 @@ import https from 'https';
 import fs from 'fs';
 
 export class K8sHttpError extends Error {
-  constructor(public readonly status: number, message: string) {
-    super(message);
+  readonly status: number;
+  readonly body: string;
+
+  constructor(status: number, body: string) {
+    super(`K8s API returned ${status}`);
     this.name = 'K8sHttpError';
+    this.status = status;
+    this.body = body;
   }
 }
 
@@ -66,7 +71,7 @@ export function k8sRequest<T = unknown>(token: string, path: string): Promise<T>
           }
         } else {
           reject(
-            new K8sHttpError(res.statusCode || 500, `K8s API returned ${res.statusCode}: ${data}`),
+            new K8sHttpError(res.statusCode || 500, data),
           );
         }
       });
