@@ -170,7 +170,7 @@ const StorageBrowser: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeProjectRef = useRef(selectedProject);
   activeProjectRef.current = selectedProject;
-  const loadFilesRef = useRef<(append?: boolean) => Promise<void>>();
+  const loadFilesRef = useRef<(append?: boolean, paginationOverrides?: { token?: string; offset?: number }) => Promise<void>>();
 
   // Load locations
   useEffect(() => {
@@ -201,7 +201,7 @@ const StorageBrowser: React.FC = () => {
 
   // Load files when location or path changes
   const loadFiles = useCallback(
-    async (append = false) => {
+    async (append = false, paginationOverrides?: { token?: string; offset?: number }) => {
       if (!selectedProject || !selectedLocation) {
         setFiles([]);
         setFilesLoading(false);
@@ -223,17 +223,20 @@ const StorageBrowser: React.FC = () => {
           setFilesError(null);
         }
 
+        const effectiveToken = paginationOverrides && 'token' in paginationOverrides ? paginationOverrides.token : continuationToken;
+        const effectiveOffset = paginationOverrides && 'offset' in paginationOverrides ? paginationOverrides.offset : localOffset;
+
         const options: Parameters<typeof storageService.listFiles>[3] = {};
         if (location.type === 's3') {
-          if (append && continuationToken) {
-            options.continuationToken = continuationToken;
+          if (append && effectiveToken) {
+            options.continuationToken = effectiveToken;
           }
           if (searchText.length >= 3 && searchMode === 'startsWith') {
             options.search = searchText;
             options.searchMode = 'startsWith';
           }
         } else {
-          options.offset = append ? localOffset : 0;
+          options.offset = append ? effectiveOffset : 0;
           // Fetch the current page limit directly so the correct value is always
           // used on initial load, avoiding a race with a concurrent settings fetch.
           if (!append) {
@@ -317,7 +320,7 @@ const StorageBrowser: React.FC = () => {
     searchTimeoutRef.current = setTimeout(() => {
       setContinuationToken(undefined);
       setLocalOffset(0);
-      loadFilesRef.current?.();
+      loadFilesRef.current?.(false, { token: undefined, offset: 0 });
     }, 300);
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
@@ -632,7 +635,7 @@ const StorageBrowser: React.FC = () => {
     }
     setContinuationToken(undefined);
     setLocalOffset(0);
-    loadFilesRef.current?.();
+    loadFilesRef.current?.(false, { token: undefined, offset: 0 });
   }, [selectedProject]);
 
   // No project or no locations loading state
