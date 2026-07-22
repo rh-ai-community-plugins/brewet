@@ -7,7 +7,7 @@ jest.mock('../src/utils/serviceDiscovery', () => ({
 }));
 
 import { resolveStorageBackend } from '../src/utils/serviceDiscovery';
-import { createStorageProxyRouter, proxy } from '../src/routes/storageProxy';
+import { createStorageProxyRouter, closeProxy } from '../src/routes/storageProxy';
 
 const mockedResolve = jest.mocked(resolveStorageBackend);
 
@@ -57,7 +57,7 @@ describe('Rate Limiter', () => {
   });
 
   afterAll((done) => {
-    proxy.close();
+    closeProxy();
     bffServer.close(() => targetServer.close(done));
   });
 

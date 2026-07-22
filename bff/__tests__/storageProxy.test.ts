@@ -7,7 +7,7 @@ jest.mock('../src/utils/serviceDiscovery', () => ({
 }));
 
 import { resolveStorageBackend } from '../src/utils/serviceDiscovery';
-import { createStorageProxyRouter, proxy } from '../src/routes/storageProxy';
+import { createStorageProxyRouter, closeProxy } from '../src/routes/storageProxy';
 import { K8sHttpError } from '../src/utils/k8sClient';
 
 const mockedResolve = jest.mocked(resolveStorageBackend);
@@ -136,7 +136,7 @@ describe('Storage Proxy', () => {
   });
 
   afterAll((done) => {
-    proxy.close();
+    closeProxy();
     bffServer.close(() => targetServer.close(done));
   });
 
