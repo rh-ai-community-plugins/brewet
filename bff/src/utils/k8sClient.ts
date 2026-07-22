@@ -51,7 +51,11 @@ export function k8sRequest<T = unknown>(token: string, path: string): Promise<T>
       },
     };
 
-    if (process.env.K8S_API_BASE) {
+    const skipTls = process.env.K8S_TLS_SKIP_VERIFY === 'true';
+    if (skipTls) {
+      console.warn(
+        'WARNING: TLS certificate verification is disabled — do not use in production',
+      );
       options.rejectUnauthorized = false;
     } else if (cachedCa) {
       options.ca = cachedCa;

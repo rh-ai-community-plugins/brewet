@@ -53,6 +53,7 @@ describe('k8sRequest', () => {
     jest.resetAllMocks();
     process.env = { ...originalEnv };
     process.env.K8S_API_BASE = 'https://my-cluster:6443';
+    delete process.env.K8S_TLS_SKIP_VERIFY;
   });
 
   afterAll(() => {
@@ -140,5 +141,59 @@ describe('k8sRequest', () => {
     await expect(k8sRequest('token', '/api/v1/pods')).rejects.toThrow(
       'ECONNREFUSED',
     );
+  });
+
+  it('does not disable TLS verification by default', async () => {
+    const mockReq = new EventEmitter() as any;
+    mockReq.end = jest.fn();
+
+    mockedHttps.request.mockImplementation((_opts: any, callback: any) => {
+      callback(createMockResponse(200, '{}'));
+      return mockReq;
+    });
+
+    await k8sRequest('token', '/api/v1/pods');
+
+    const callArgs = mockedHttps.request.mock.calls[0][0] as any;
+    expect(callArgs.rejectUnauthorized).toBeUndefined();
+  });
+
+  it('disables TLS verification when K8S_TLS_SKIP_VERIFY is true', async () => {
+    process.env.K8S_TLS_SKIP_VERIFY = 'true';
+
+    const mockReq = new EventEmitter() as any;
+    mockReq.end = jest.fn();
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    mockedHttps.request.mockImplementation((_opts: any, callback: any) => {
+      callback(createMockResponse(200, '{}'));
+      return mockReq;
+    });
+
+    await k8sRequest('token', '/api/v1/pods');
+
+    const callArgs = mockedHttps.request.mock.calls[0][0] as any;
+    expect(callArgs.rejectUnauthorized).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('TLS certificate verification is disabled'),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('does not disable TLS when K8S_TLS_SKIP_VERIFY is not "true"', async () => {
+    process.env.K8S_TLS_SKIP_VERIFY = 'false';
+
+    const mockReq = new EventEmitter() as any;
+    mockReq.end = jest.fn();
+
+    mockedHttps.request.mockImplementation((_opts: any, callback: any) => {
+      callback(createMockResponse(200, '{}'));
+      return mockReq;
+    });
+
+    await k8sRequest('token', '/api/v1/pods');
+
+    const callArgs = mockedHttps.request.mock.calls[0][0] as any;
+    expect(callArgs.rejectUnauthorized).toBeUndefined();
   });
 });
