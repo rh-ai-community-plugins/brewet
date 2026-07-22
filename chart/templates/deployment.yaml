@@ -5,7 +5,7 @@ metadata:
   labels:
     {{- include "brewet.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ .Values.replicaCount | int }}
   selector:
     matchLabels:
       {{- include "brewet.selectorLabels" . | nindent 6 }}
@@ -31,7 +31,7 @@ spec:
               type: RuntimeDefault
           ports:
             - name: http
-              containerPort: {{ .Values.service.targetPort }}
+              containerPort: {{ .Values.service.targetPort | int }}
               protocol: TCP
           livenessProbe:
             httpGet:

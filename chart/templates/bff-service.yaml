@@ -9,8 +9,8 @@ metadata:
 spec:
   type: {{ .Values.bff.service.type }}
   ports:
-    - port: {{ .Values.bff.service.port }}
-      targetPort: {{ .Values.bff.service.targetPort }}
+    - port: {{ .Values.bff.service.port | int }}
+      targetPort: {{ .Values.bff.service.targetPort | int }}
       protocol: TCP
       name: http
   selector:
