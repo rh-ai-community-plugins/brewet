@@ -40,6 +40,134 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+describe('PUT /api/settings/s3', () => {
+  const validS3Payload = {
+    accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+    secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+    region: 'us-east-1',
+    endpoint: 'https://s3.amazonaws.com',
+    defaultBucket: 'my-bucket',
+  };
+
+  it('updates S3 settings with a valid external endpoint', async () => {
+    const { updateS3Config } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/s3',
+      payload: validS3Payload,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ message: 'Settings updated successfully' });
+    expect(updateS3Config).toHaveBeenCalled();
+  });
+
+  it('rejects endpoint pointing to localhost', async () => {
+    const { updateS3Config } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/s3',
+      payload: { ...validS3Payload, endpoint: 'http://localhost:9000' },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).message).toBe('Endpoint URL points to a blocked address');
+    expect(updateS3Config).not.toHaveBeenCalled();
+  });
+
+  it('rejects endpoint pointing to private IP (10.x)', async () => {
+    const { updateS3Config } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/s3',
+      payload: { ...validS3Payload, endpoint: 'http://10.0.0.1:9000' },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).message).toBe('Endpoint URL points to a blocked address');
+    expect(updateS3Config).not.toHaveBeenCalled();
+  });
+
+  it('rejects endpoint pointing to 169.254 (link-local / metadata)', async () => {
+    const { updateS3Config } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/s3',
+      payload: { ...validS3Payload, endpoint: 'http://169.254.169.254/latest/meta-data/' },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(updateS3Config).not.toHaveBeenCalled();
+  });
+
+  it('rejects endpoint pointing to Kubernetes internal service', async () => {
+    const { updateS3Config } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/s3',
+      payload: { ...validS3Payload, endpoint: 'http://my-service.default.svc.cluster.local:9000' },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(updateS3Config).not.toHaveBeenCalled();
+  });
+});
+
+describe('PUT /api/settings/proxy', () => {
+  it('updates proxy settings with valid external URLs', async () => {
+    const { updateProxyConfig } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/proxy',
+      payload: { httpProxy: 'http://proxy.example.com:8080', httpsProxy: 'https://proxy.example.com:8443' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ message: 'Settings updated successfully' });
+    expect(updateProxyConfig).toHaveBeenCalled();
+  });
+
+  it('rejects httpProxy pointing to localhost', async () => {
+    const { updateProxyConfig } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/proxy',
+      payload: { httpProxy: 'http://localhost:8080' },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).message).toBe('httpProxy points to a blocked address');
+    expect(updateProxyConfig).not.toHaveBeenCalled();
+  });
+
+  it('rejects httpsProxy pointing to private IP (192.168.x)', async () => {
+    const { updateProxyConfig } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/proxy',
+      payload: { httpsProxy: 'https://192.168.1.1:3128' },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body).message).toBe('httpsProxy points to a blocked address');
+    expect(updateProxyConfig).not.toHaveBeenCalled();
+  });
+
+  it('rejects httpProxy pointing to Kubernetes internal service', async () => {
+    const { updateProxyConfig } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/proxy',
+      payload: { httpProxy: 'http://proxy.kube-system.svc.cluster.local:3128' },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(updateProxyConfig).not.toHaveBeenCalled();
+  });
+
+  it('allows clearing proxy settings with empty strings', async () => {
+    const { updateProxyConfig } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/proxy',
+      payload: { httpProxy: '', httpsProxy: '' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(updateProxyConfig).toHaveBeenCalledWith('', '');
+  });
+});
+
 describe('GET /api/settings/max-concurrent-transfers', () => {
   it('returns the current max concurrent transfers', async () => {
     const response = await app.inject({

@@ -102,6 +102,12 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         message: 'accessKeyId, secretAccessKey, region, and endpoint must be strings',
       });
     }
+    if (isBlockedUrl(endpoint)) {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'Endpoint URL points to a blocked address',
+      });
+    }
     try {
       updateS3Config(accessKeyId, secretAccessKey, region, endpoint, (defaultBucket as string) || '');
       reply.send({ message: 'Settings updated successfully' });
@@ -280,6 +286,18 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       return reply.code(400).send({
         error: 'BadRequest',
         message: 'httpProxy and httpsProxy must be strings',
+      });
+    }
+    if (httpProxy && isBlockedUrl(httpProxy)) {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'httpProxy points to a blocked address',
+      });
+    }
+    if (httpsProxy && isBlockedUrl(httpsProxy)) {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'httpsProxy points to a blocked address',
       });
     }
     try {
