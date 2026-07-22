@@ -7,7 +7,7 @@ metadata:
     {{- include "brewet.labels" . | nindent 4 }}
     app.kubernetes.io/component: bff
 spec:
-  replicas: {{ .Values.bff.replicaCount }}
+  replicas: {{ .Values.bff.replicaCount | int }}
   selector:
     matchLabels:
       {{- include "brewet.selectorLabels" . | nindent 6 }}
@@ -33,7 +33,7 @@ spec:
               type: RuntimeDefault
           ports:
             - name: http
-              containerPort: {{ .Values.bff.service.targetPort }}
+              containerPort: {{ .Values.bff.service.targetPort | int }}
               protocol: TCP
           livenessProbe:
             httpGet:
