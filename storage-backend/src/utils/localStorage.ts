@@ -139,6 +139,34 @@ export async function validatePath(locationId: string, relativePath = ''): Promi
   return resolvedPath;
 }
 
+/**
+ * Resolve a symlink target, redacting it if it points outside the allowed base directory.
+ * Returns the raw readlink value when the resolved target is within basePath,
+ * or undefined when it escapes (preventing information disclosure of external paths).
+ */
+async function resolveSymlinkTarget(
+  entryPath: string,
+  basePath?: string,
+): Promise<string | undefined> {
+  if (!basePath) {
+    return fs.readlink(entryPath);
+  }
+
+  try {
+    const resolvedTarget = await fs.realpath(entryPath);
+    if (
+      resolvedTarget.startsWith(basePath + path.sep) ||
+      resolvedTarget === basePath
+    ) {
+      return fs.readlink(entryPath);
+    }
+  } catch {
+    // Cannot resolve symlink target (e.g. dangling symlink) — redact
+  }
+
+  return undefined;
+}
+
 export async function getStorageLocations(logger?: any): Promise<StorageLocation[]> {
   const paths = getLocalStoragePaths();
   const locations: StorageLocation[] = [];
@@ -178,6 +206,7 @@ export async function listDirectory(
   absolutePath: string,
   limit?: number,
   offset = 0,
+  basePath?: string,
 ): Promise<{ files: FileEntry[]; totalCount: number }> {
   try {
     const entries = await fs.readdir(absolutePath, { withFileTypes: true });
@@ -198,7 +227,7 @@ export async function listDirectory(
           fileEntry.size = stats.size;
           fileEntry.modified = stats.mtime.toISOString();
           if (entry.isSymbolicLink()) {
-            fileEntry.target = await fs.readlink(entryPath);
+            fileEntry.target = await resolveSymlinkTarget(entryPath, basePath);
           }
         } catch {
           continue;
@@ -270,7 +299,7 @@ export async function deleteFileOrDirectory(absolutePath: string): Promise<numbe
   }
 }
 
-export async function getFileMetadata(absolutePath: string): Promise<FileEntry> {
+export async function getFileMetadata(absolutePath: string, basePath?: string): Promise<FileEntry> {
   try {
     const stats = await fs.lstat(absolutePath);
     const name = path.basename(absolutePath);
@@ -284,7 +313,7 @@ export async function getFileMetadata(absolutePath: string): Promise<FileEntry> 
     };
 
     if (stats.isSymbolicLink()) {
-      entry.target = await fs.readlink(absolutePath);
+      entry.target = await resolveSymlinkTarget(absolutePath, basePath);
     }
 
     return entry;

@@ -70,8 +70,9 @@ export default async (fastify: FastifyInstance): Promise<void> => {
 
     try {
       const relativePath = encodedPath ? base64Decode(encodedPath) : '';
-      const absolutePath = await validatePath(locationId, relativePath);
-      const { files, totalCount } = await listDirectory(absolutePath, limit, offset);
+      const basePath = await validatePath(locationId, '');
+      const absolutePath = relativePath ? await validatePath(locationId, relativePath) : basePath;
+      const { files, totalCount } = await listDirectory(absolutePath, limit, offset, basePath);
 
       let parentPath = null;
       if (relativePath) {
