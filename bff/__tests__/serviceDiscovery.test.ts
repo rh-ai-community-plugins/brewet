@@ -8,9 +8,11 @@ import {
 jest.mock('../src/utils/k8sClient', () => ({
   k8sRequest: jest.fn(),
   getK8sBaseUrl: jest.fn(),
+  K8sHttpError: jest.requireActual('../src/utils/k8sClient').K8sHttpError,
 }));
 
 import { k8sRequest } from '../src/utils/k8sClient';
+import { K8sHttpError } from '../src/utils/k8sClient';
 
 const mockedK8sRequest = jest.mocked(k8sRequest);
 
@@ -121,7 +123,7 @@ describe('resolveStorageBackend', () => {
 
   it('propagates K8s API 404 error', async () => {
     mockedK8sRequest.mockRejectedValue(
-      new Error('K8s API returned 404: {"message":"not found"}'),
+      new K8sHttpError(404, '{"message":"not found"}'),
     );
     await expect(resolveStorageBackend('no-such-ns')).rejects.toThrow(
       'K8s API returned 404',
@@ -130,7 +132,7 @@ describe('resolveStorageBackend', () => {
 
   it('does not cache failed lookups', async () => {
     mockedK8sRequest.mockRejectedValueOnce(
-      new Error('K8s API returned 404: not found'),
+      new K8sHttpError(404, '{"message":"not found"}'),
     );
     await expect(resolveStorageBackend('my-project')).rejects.toThrow();
 

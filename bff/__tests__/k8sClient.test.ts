@@ -1,6 +1,6 @@
 import https from 'https';
 import { EventEmitter } from 'events';
-import { k8sRequest, getK8sBaseUrl } from '../src/utils/k8sClient';
+import { k8sRequest, getK8sBaseUrl, K8sHttpError } from '../src/utils/k8sClient';
 
 jest.mock('https');
 
@@ -91,7 +91,7 @@ describe('k8sRequest', () => {
     expect(callArgs.path).toBe('/apis/project.openshift.io/v1/projects');
   });
 
-  it('rejects on non-2xx responses', async () => {
+  it('rejects on non-2xx responses with K8sHttpError', async () => {
     const mockReq = new EventEmitter() as any;
     mockReq.end = jest.fn();
 
@@ -103,6 +103,29 @@ describe('k8sRequest', () => {
     await expect(k8sRequest('bad-token', '/api/v1/pods')).rejects.toThrow(
       'K8s API returned 403',
     );
+  });
+
+  it('does not include response body in K8sHttpError message', async () => {
+    const mockReq = new EventEmitter() as any;
+    mockReq.end = jest.fn();
+
+    const sensitiveBody = '{"message":"forbidden","serviceAccount":"system:serviceaccount:brewet:bff"}';
+    mockedHttps.request.mockImplementation((_opts: any, callback: any) => {
+      callback(createMockResponse(403, sensitiveBody));
+      return mockReq;
+    });
+
+    try {
+      await k8sRequest('bad-token', '/api/v1/pods');
+      fail('Expected K8sHttpError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(K8sHttpError);
+      const httpErr = err as K8sHttpError;
+      expect(httpErr.message).toBe('K8s API returned 403');
+      expect(httpErr.message).not.toContain('serviceAccount');
+      expect(httpErr.status).toBe(403);
+      expect(httpErr.body).toBe(sensitiveBody);
+    }
   });
 
   it('rejects on request error', async () => {
