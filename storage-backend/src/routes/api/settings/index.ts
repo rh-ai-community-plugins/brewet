@@ -18,73 +18,19 @@ import {
   updateProxyConfig,
 } from '../../../utils/config';
 import { updateTransferQueueConcurrency } from '../../../utils/transferQueue';
-
-function maskSecret(value: string): string {
-  if (!value || value.length <= 4) return '****';
-  return value.slice(0, 4) + '****';
-}
-
-function isPrivateIpv4(ip: string): boolean {
-  const parts = ip.split('.').map(Number);
-  if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) return false;
-  if (parts[0] === 10) return true;
-  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-  if (parts[0] === 192 && parts[1] === 168) return true;
-  if (parts[0] === 169 && parts[1] === 254) return true;
-  if (parts[0] === 127) return true;
-  if (parts[0] === 0) return true;
-  return false;
-}
-
-function isBlockedUrl(urlStr: string): boolean {
-  try {
-    const url = new URL(urlStr);
-    let hostname = url.hostname.toLowerCase();
-
-    // Strip brackets from IPv6 addresses (URL parser wraps them: [::1])
-    if (hostname.startsWith('[') && hostname.endsWith(']')) {
-      hostname = hostname.slice(1, -1);
-    }
-
-    // IPv6 loopback
-    if (hostname === '::1' || hostname === '0:0:0:0:0:0:0:1') return true;
-    // IPv6 unspecified
-    if (hostname === '::' || hostname === '0:0:0:0:0:0:0:0') return true;
-    // IPv6 ULA (fd00::/8)
-    if (hostname.startsWith('fd')) return true;
-    // IPv4-mapped IPv6 (::ffff:x.x.x.x or normalized hex form)
-    const v4mapped = hostname.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (v4mapped && isPrivateIpv4(v4mapped[1])) return true;
-    // Normalized hex form of IPv4-mapped (e.g. ::ffff:7f00:1 for 127.0.0.1)
-    if (hostname.startsWith('::ffff:') && !v4mapped) return true;
-
-    // Standard hostname checks
-    if (hostname === 'localhost' || hostname === '0.0.0.0') return true;
-    if (hostname === 'metadata.google.internal') return true;
-    if (hostname === 'kubernetes' || hostname === 'kubernetes.default' ||
-        hostname.endsWith('.svc.cluster.local')) return true;
-
-    // IPv4 private ranges
-    if (isPrivateIpv4(hostname)) return true;
-
-    return false;
-  } catch {
-    return true;
-  }
-}
+import {
+  getAllowedExtensions,
+  updateAllowedExtensions,
+  getBlockedExtensions,
+  updateBlockedExtensions,
+} from '../../../utils/fileValidation';
 
 export default async (fastify: FastifyInstance): Promise<void> => {
-  // Get S3 settings (mask secret key)
+  // Get S3 settings
   fastify.get('/s3', async (_req: FastifyRequest, reply: FastifyReply) => {
     const { accessKeyId, secretAccessKey, region, endpoint, defaultBucket } = getS3Config();
     reply.send({
-      settings: {
-        accessKeyId,
-        secretAccessKey: maskSecret(secretAccessKey),
-        region,
-        endpoint,
-        defaultBucket,
-      },
+      settings: { accessKeyId, secretAccessKey, region, endpoint, defaultBucket },
     });
   });
 
@@ -106,8 +52,8 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       updateS3Config(accessKeyId, secretAccessKey, region, endpoint, (defaultBucket as string) || '');
       reply.send({ message: 'Settings updated successfully' });
     } catch (error) {
-      const err = error as Error;
-      reply.code(500).send({ error: err.name || 'UnknownError', message: err.message });
+      console.error('Failed to update S3 settings:', error);
+      reply.code(500).send({ error: 'InternalError', message: 'Failed to update S3 settings' });
     }
   });
 
@@ -125,13 +71,6 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         message: 'accessKeyId, secretAccessKey, region, and endpoint must be strings',
       });
     }
-    if (isBlockedUrl(endpoint)) {
-      return reply.code(400).send({
-        error: 'BadRequest',
-        message: 'Endpoint URL points to a blocked address',
-      });
-    }
-
     let s3ClientTest: S3Client | undefined;
     try {
       const { httpProxy, httpsProxy } = getProxyConfig();
@@ -161,21 +100,22 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       reply.send({ message: 'Connection successful' });
     } catch (error) {
       if (error instanceof S3ServiceException) {
-        return reply.code(error.$metadata?.httpStatusCode || 500).send({
-          error: error.name,
-          message: error.message,
+        const statusCode = error.$metadata?.httpStatusCode || 500;
+        return reply.code(statusCode).send({
+          error: error.name || 'S3ServiceException',
+          message: 'S3 connection test failed',
         });
       }
-      const err = error as Error;
-      reply.code(500).send({ error: err.name || 'UnknownError', message: err.message });
+      console.error('S3 connection test failed:', error);
+      reply.code(500).send({ error: 'InternalError', message: 'S3 connection test failed' });
     } finally {
       s3ClientTest?.destroy();
     }
   });
 
-  // Get HuggingFace settings (mask token)
+  // Get HuggingFace settings
   fastify.get('/huggingface', async (_req: FastifyRequest, reply: FastifyReply) => {
-    reply.send({ settings: { hfToken: maskSecret(getHFConfig()) } });
+    reply.send({ settings: { hfToken: getHFConfig() } });
   });
 
   // Update HuggingFace settings
@@ -188,8 +128,8 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       updateHFConfig((body as any).hfToken);
       reply.send({ message: 'Settings updated successfully' });
     } catch (error) {
-      const err = error as Error;
-      reply.code(500).send({ error: err.name, message: err.message });
+      console.error('Failed to update HuggingFace settings:', error);
+      reply.code(500).send({ error: 'InternalError', message: 'Failed to update HuggingFace settings' });
     }
   });
 
@@ -286,8 +226,46 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       updateProxyConfig(httpProxy || '', httpsProxy || '');
       reply.send({ message: 'Settings updated successfully' });
     } catch (error) {
-      const err = error as Error;
-      reply.code(500).send({ error: err.name || 'UnknownError', message: err.message });
+      console.error('Failed to update proxy settings:', error);
+      reply.code(500).send({ error: 'InternalError', message: 'Failed to update proxy settings' });
+    }
+  });
+
+  // Get file extension settings
+  fastify.get('/file-extensions', async (_req: FastifyRequest, reply: FastifyReply) => {
+    reply.send({
+      allowedExtensions: getAllowedExtensions(),
+      blockedExtensions: getBlockedExtensions(),
+    });
+  });
+
+  // Update file extension settings
+  fastify.put('/file-extensions', async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as Record<string, unknown> | null;
+    if (!body || typeof body !== 'object') {
+      return reply.code(400).send({ error: 'BadRequest', message: 'Request body is required' });
+    }
+    const { allowedExtensions, blockedExtensions } = body as any;
+    if (!Array.isArray(allowedExtensions) || !Array.isArray(blockedExtensions)) {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'allowedExtensions and blockedExtensions must be arrays of strings',
+      });
+    }
+    if (!allowedExtensions.every((e: unknown) => typeof e === 'string') ||
+        !blockedExtensions.every((e: unknown) => typeof e === 'string')) {
+      return reply.code(400).send({
+        error: 'BadRequest',
+        message: 'All extension entries must be strings',
+      });
+    }
+    try {
+      updateAllowedExtensions(allowedExtensions);
+      updateBlockedExtensions(blockedExtensions);
+      reply.send({ message: 'Settings updated successfully' });
+    } catch (error) {
+      console.error('Failed to update file extension settings:', error);
+      reply.code(500).send({ error: 'InternalError', message: 'Failed to update file extension settings' });
     }
   });
 
@@ -298,26 +276,6 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       return reply.code(400).send({ error: 'BadRequest', message: 'testUrl must be a string' });
     }
     const { httpProxy, httpsProxy, testUrl } = body as any;
-
-    if (isBlockedUrl(testUrl)) {
-      return reply.code(400).send({
-        error: 'BadRequest',
-        message: 'testUrl points to a blocked address (internal/metadata endpoints are not allowed)',
-      });
-    }
-
-    if (httpProxy && typeof httpProxy === 'string' && isBlockedUrl(httpProxy)) {
-      return reply.code(400).send({
-        error: 'BadRequest',
-        message: 'httpProxy points to a blocked address',
-      });
-    }
-    if (httpsProxy && typeof httpsProxy === 'string' && isBlockedUrl(httpsProxy)) {
-      return reply.code(400).send({
-        error: 'BadRequest',
-        message: 'httpsProxy points to a blocked address',
-      });
-    }
 
     try {
       const url = new URL(testUrl);

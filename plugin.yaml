@@ -6,8 +6,8 @@ version: 0.1.0                     # Managed by sync-chart-version.js — do not
 
 # --- Maintainer (required) ---
 maintainer:
-  name: Your Name                   # [PLUGIN-SPECIFIC] Update with your name
-  github: your-github-handle        # [PLUGIN-SPECIFIC] Update with your GitHub handle
+  name: Guillaume Moutier                   # [PLUGIN-SPECIFIC] Update with your name
+  github: guimou        # [PLUGIN-SPECIFIC] Update with your GitHub handle
 
 # --- RHOAI compatibility (required) ---
 rhoai_compatibility:
@@ -18,15 +18,15 @@ rhoai_compatibility:
 deployment_model: cluster-shared
 
 image:
-  repository: quay.io/OWNER/brewet              # [PLUGIN-SPECIFIC] Frontend container image
+  repository: quay.io/rh-ai-community-plugins/brewet              # [PLUGIN-SPECIFIC] Frontend container image
   tag: "0.1.0"                                  # Managed by sync-chart-version.js
 
 bff_image:
-  repository: quay.io/OWNER/brewet-bff          # [PLUGIN-SPECIFIC] BFF container image
+  repository: quay.io/rh-ai-community-plugins/brewet-bff          # [PLUGIN-SPECIFIC] BFF container image
   tag: "0.1.0"                                  # Managed by sync-chart-version.js
 
 storage_backend_image:
-  repository: quay.io/OWNER/brewet-storage-backend  # [PLUGIN-SPECIFIC] Storage backend container image
+  repository: quay.io/rh-ai-community-plugins/brewet-storage-backend  # [PLUGIN-SPECIFIC] Storage backend container image
   tag: "0.1.0"                                      # Managed by sync-chart-version.js
 
 # --- Installation (required) ---
@@ -34,7 +34,7 @@ install:
   method: automatic
   helm:
     chart_path: chart/
-    registry: oci://quay.io/OWNER/brewet-chart   # [PLUGIN-SPECIFIC] Helm chart OCI registry
+    registry: oci://quay.io/rh-ai-community-plugins/brewet-chart   # [PLUGIN-SPECIFIC] Helm chart OCI registry
   prerequisites: []
   instructions: https://github.com/rh-ai-community-plugins/brewet/blob/main/docs/deployment  # [PLUGIN-SPECIFIC]
 

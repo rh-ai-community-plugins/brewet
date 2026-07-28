@@ -1,3 +1,8 @@
+<!-- markdownlint-disable-next-line MD033 MD041 -->
+<div align="center"> <!-- markdownlint-disable-next-line MD033 -->
+  <img src="img/brewet.svg" alt="Brewet" width="128" />
+</div>
+
 # Brewet
 
 A community plugin for the **Red Hat OpenShift AI (RHOAI) Dashboard** that brings S3 and PVC storage management directly into the dashboard. Users can deploy a per-project storage backend, browse and manage files across S3 buckets and PVC-mounted volumes, transfer data between storage locations, import models from HuggingFace, and configure storage settings — all without leaving the RHOAI dashboard.
@@ -13,6 +18,8 @@ Brewet reimplements the storage features of [ODH-TEC](https://github.com/rh-aise
 - **Settings** — Configure S3 connection, HuggingFace token, HTTP proxy, transfer concurrency, and pagination. Runtime overrides (ephemeral per container restart).
 - **Per-Project Container Lifecycle** — Deploy, start, stop, edit, and delete the storage backend in any project. Select a Data Connection (S3 credentials) and PVCs to mount during creation.
 - **Project Selector** — Persistent project selector across all pages. Switch projects without losing navigation context.
+
+For detailed usage instructions, see the **[User Guide](docs/user/USER_GUIDE.md)**.
 
 ## Architecture
 
@@ -55,9 +62,9 @@ For the full architecture and project plan, see [docs/project/PROJECT_PLAN.md](d
 Install directly from the OCI registry:
 
 ```bash
-helm install brewet oci://quay.io/OWNER/brewet-chart \
+helm install brewet oci://quay.io/rh-ai-community-plugins/brewet-chart \
   --version 0.1.0 \
-  --namespace brewet \
+  --namespace cp-brewet \
   --create-namespace
 ```
 
@@ -65,7 +72,7 @@ Or from a local checkout:
 
 ```bash
 helm install brewet chart/ \
-  --namespace brewet \
+  --namespace cp-brewet \
   --create-namespace
 ```
 
@@ -90,7 +97,7 @@ config.append({
     'tls': False,
     'service': {
       'name': 'brewet',
-      'namespace': 'brewet',
+      'namespace': 'cp-brewet',
       'port': 8080
     }
   },
@@ -101,7 +108,7 @@ config.append({
     'tls': False,
     'service': {
       'name': 'brewet-bff',
-      'namespace': 'brewet',
+      'namespace': 'cp-brewet',
       'port': 3000
     }
   }]

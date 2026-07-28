@@ -620,7 +620,7 @@ When no Brewet container exists in the selected project, all pages show a **crea
 5. **CI/CD workflows**
    - Update `.github/workflows/ci.yml`: add storage-backend test and lint jobs
    - Update `.github/workflows/build-push.yml`: build and push storage-backend image
-   - Add `quay.io/OWNER/brewet-storage-backend` image target
+   - Add `quay.io/rh-ai-community-plugins/brewet-storage-backend` image target
 
 6. **Environment configuration**
    - Update `.env.development` with storage backend dev settings

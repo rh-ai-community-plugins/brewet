@@ -1,0 +1,16 @@
+.transfer-modal__dest-toggle {
+  min-width: 250px;
+}
+
+.transfer-modal__conflict-list {
+  max-height: 200px;
+  overflow: auto;
+}
+
+.transfer-modal__folder-list {
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  padding: var(--pf-t--global--spacer--sm);
+}

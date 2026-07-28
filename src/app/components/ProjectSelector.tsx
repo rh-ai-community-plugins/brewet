@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import {
   Alert,
   Button,
@@ -10,6 +10,7 @@ import {
   Menu,
   MenuContainer,
   MenuContent,
+  MenuFooter,
   MenuGroup,
   MenuItem,
   MenuItemAction,
@@ -21,8 +22,10 @@ import {
   Switch,
   TextInput,
 } from '@patternfly/react-core';
-import { useProjects } from '~/app/hooks/useProjects';
 import { useFavoriteProjects } from '~/app/hooks/useFavoriteProjects';
+import { useBrewetContext } from '~/app/context/BrewetContext';
+import { CreateProjectModal } from '~/app/components/CreateProjectModal';
+import './ProjectSelector.css';
 
 const SYSTEM_NAMESPACE_PREFIXES = ['openshift-', 'kube-'];
 const SYSTEM_NAMESPACES = ['default', 'openshift'];
@@ -57,8 +60,9 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   onSelect,
   isDisabled = false,
 }) => {
-  const { projects, loading, error } = useProjects();
+  const { projects, projectsLoading: loading, projectsError: error, addProject } = useBrewetContext();
   const { isFavorite, toggleFavorite } = useFavoriteProjects();
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -66,6 +70,16 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [filterText, setFilterText] = useState('');
   const [showSystemNamespaces, setShowSystemNamespaces] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const close = () => {
+      setIsOpen(false);
+      setFilterText('');
+    };
+    window.addEventListener('blur', close);
+    return () => window.removeEventListener('blur', close);
+  }, [isOpen]);
 
   const sortedProjectNames = useMemo(
     () =>
@@ -126,6 +140,15 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     [],
   );
 
+  const handleProjectCreated = useCallback(
+    (projectName: string) => {
+      setIsCreateModalOpen(false);
+      addProject({ metadata: { name: projectName, uid: '' } });
+      onSelect(projectName);
+    },
+    [onSelect, addProject],
+  );
+
   if (loading) {
     return <Spinner size="md" aria-label="Loading projects" />;
   }
@@ -148,7 +171,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       onClick={() => setIsOpen(!isOpen)}
       isExpanded={isOpen}
       isDisabled={isDisabled}
-      style={{ minWidth: '300px' }}
+      className="project-selector__toggle"
       aria-label="Select a project"
     >
       {title}
@@ -247,17 +270,36 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
           </>
         )}
       </MenuContent>
+      <MenuFooter>
+        <Button
+          variant="secondary"
+          isBlock
+          onClick={() => {
+            setIsOpen(false);
+            setIsCreateModalOpen(true);
+          }}
+        >
+          Create Project
+        </Button>
+      </MenuFooter>
     </Menu>
   );
 
   return (
-    <MenuContainer
-      isOpen={isOpen}
-      onOpenChange={handleOpenChange}
-      menu={menu}
-      menuRef={menuRef}
-      toggle={toggle}
-      toggleRef={toggleRef}
-    />
+    <>
+      <MenuContainer
+        isOpen={isOpen}
+        onOpenChange={handleOpenChange}
+        menu={menu}
+        menuRef={menuRef}
+        toggle={toggle}
+        toggleRef={toggleRef}
+      />
+      <CreateProjectModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onCreated={handleProjectCreated}
+      />
+    </>
   );
 };

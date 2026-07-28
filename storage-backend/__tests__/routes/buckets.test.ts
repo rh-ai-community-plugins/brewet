@@ -44,7 +44,7 @@ beforeEach(() => {
 });
 
 describe('GET /api/buckets', () => {
-  it('lists accessible buckets', async () => {
+  it('lists accessible buckets with s3Connected flag', async () => {
     s3Mock.on(ListBucketsCommand).resolves({
       Owner: { DisplayName: 'testuser' },
       Buckets: [
@@ -58,8 +58,41 @@ describe('GET /api/buckets', () => {
     expect(response.statusCode).toBe(200);
 
     const body = JSON.parse(response.body);
+    expect(body.s3Connected).toBe(true);
     expect(body.buckets).toHaveLength(2);
     expect(body.defaultBucket).toBe('default');
+  });
+
+  it('returns s3Connected true with empty buckets when none exist', async () => {
+    s3Mock.on(ListBucketsCommand).resolves({
+      Owner: { DisplayName: 'testuser' },
+      Buckets: [],
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/api/buckets' });
+    expect(response.statusCode).toBe(200);
+
+    const body = JSON.parse(response.body);
+    expect(body.s3Connected).toBe(true);
+    expect(body.buckets).toHaveLength(0);
+  });
+
+  it('returns s3Connected false when S3 is not configured', async () => {
+    const { getS3Config } = require('../../src/utils/config');
+    const originalConfig = getS3Config();
+
+    jest.spyOn(require('../../src/utils/config'), 'getS3Config').mockReturnValueOnce({
+      ...originalConfig,
+      endpoint: '',
+      accessKeyId: '',
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/api/buckets' });
+    expect(response.statusCode).toBe(200);
+
+    const body = JSON.parse(response.body);
+    expect(body.s3Connected).toBe(false);
+    expect(body.buckets).toHaveLength(0);
   });
 
   it('filters out inaccessible buckets', async () => {

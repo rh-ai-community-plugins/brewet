@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   PageSection,
-  Title,
   Button,
   Toolbar,
   ToolbarContent,
@@ -59,6 +58,7 @@ const StorageManagementContent: React.FC = () => {
   const navigate = useNavigate();
 
   const [locations, setLocations] = useState<StorageLocation[]>([]);
+  const [s3Connected, setS3Connected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -81,7 +81,7 @@ const StorageManagementContent: React.FC = () => {
   activeProjectRef.current = selectedProject;
 
   const loadData = useCallback(
-    async (refresh = false) => {
+    async (refresh = false, signal?: AbortSignal) => {
       if (!selectedProject) return;
       const project = selectedProject;
       try {
@@ -89,12 +89,14 @@ const StorageManagementContent: React.FC = () => {
         else setLoading(true);
         setError(null);
 
-        const locs = refresh
-          ? await storageService.refreshLocations(project)
-          : await storageService.getLocations(project);
+        const result = refresh
+          ? await storageService.refreshLocations(project, signal)
+          : await storageService.getLocations(project, signal);
         if (activeProjectRef.current !== project) return;
-        setLocations(locs);
+        setLocations(result.locations);
+        setS3Connected(result.s3Connected);
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         if (activeProjectRef.current !== project) return;
         setError(err instanceof Error ? err.message : 'Failed to load storage locations.');
       } finally {
@@ -108,7 +110,9 @@ const StorageManagementContent: React.FC = () => {
   );
 
   useEffect(() => {
-    loadData();
+    const controller = new AbortController();
+    loadData(false, controller.signal);
+    return () => controller.abort();
   }, [loadData]);
 
   const s3BucketNames = useMemo(
@@ -264,7 +268,11 @@ const StorageManagementContent: React.FC = () => {
           {filteredLocations.length === 0 ? (
             <Tr>
               <Td colSpan={5}>
-                <Bullseye>No storage locations found.</Bullseye>
+                <Bullseye>
+                  {s3Connected && !searchText
+                    ? 'Your S3 connection is active but no buckets exist yet. Use Create Bucket to get started.'
+                    : 'No storage locations found.'}
+                </Bullseye>
               </Td>
             </Tr>
           ) : (
@@ -420,10 +428,7 @@ const StorageManagementContent: React.FC = () => {
 };
 
 const StorageManagementPage: React.FC = () => (
-  <PageSection>
-    <Title headingLevel="h1" size="lg">
-      Storage Management
-    </Title>
+  <PageSection padding={{ default: 'noPadding' }} className="pf-v6-u-px-lg pf-v6-u-pb-md">
     <ContainerRequired>
       <StorageManagementContent />
     </ContainerRequired>

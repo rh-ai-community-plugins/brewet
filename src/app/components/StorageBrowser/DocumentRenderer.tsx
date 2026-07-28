@@ -19,6 +19,7 @@ import { storageService } from '~/app/services/storageService';
 import { apiClient } from '~/app/services/apiClient';
 import { base64Encode } from '~/app/utils/encoding';
 import type { StorageLocation, FileInfo } from '~/app/types/storage';
+import './DocumentRenderer.css';
 
 const TEXT_EXTENSIONS = new Set([
   'txt', 'log', 'csv', 'tsv', 'ini', 'cfg', 'conf',
@@ -175,7 +176,7 @@ const DocumentRenderer: React.FC<DocumentRendererProps> = ({
           <img
             src={typeof imageUrl === 'string' ? imageUrl : ''}
             alt={file.name}
-            style={{ maxWidth: '100%', maxHeight: '70vh' }}
+            className="document-renderer__preview-image"
             data-testid="preview-image"
           />
         </Bullseye>

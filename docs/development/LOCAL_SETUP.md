@@ -93,6 +93,8 @@ podman run --rm --network=host \
   bash -c "npm install pino-pretty && npm run start"
 ```
 
+> **Tip:** The dashboard listens on port 8080 by default. If that port is already in use, add `-e PORT=8081` (or any free port) to the `podman run` command.
+
 ### Step 3: Start the storage backend
 
 The storage backend handles S3 and local filesystem (PVC) operations. In production it runs per-project inside the cluster; for local dev you run a single instance on your machine. See [Local Storage Setup](#optional-local-storage-setup) above for MinIO and PVC directory setup.
@@ -130,6 +132,14 @@ npm run start:dev
 
 You should see `BFF listening on port 3000`. Without `STORAGE_BACKEND_URL`, the BFF tries K8s service discovery (which won't work locally). Without `K8S_API_BASE`, cluster API calls will fail with 502 errors.
 
+> **Tip:** If your cluster uses a self-signed certificate (common in dev/lab environments), add `K8S_TLS_SKIP_VERIFY=true` to skip TLS verification for K8s API calls:
+>
+> ```bash
+> K8S_TLS_SKIP_VERIFY=true STORAGE_BACKEND_URL=http://localhost:8888 K8S_API_BASE=$(oc whoami --show-server) npm run start:dev
+> ```
+>
+> This is not needed in production — the in-cluster CA bundle mounted from the `kube-root-ca.crt` ConfigMap handles TLS automatically.
+>
 > **Note:** The `proxyService` entry in the `MODULE_FEDERATION_CONFIG` (Step 2) is what tells the dashboard to forward `/brewet/api/*` requests to the BFF at `localhost:3000`. If you omit the `proxyService` block, those requests will hit the dashboard's SPA fallback and return HTML instead of JSON.
 
 ### Step 5: Start the plugin dev server
@@ -267,6 +277,8 @@ cd backend
 npm run start:dev
 ```
 
+> **Tip:** The backend listens on port 8080 by default. If that port is already in use, set `PORT=8081` (or any free port) before running the command.
+
 **Terminal 2 -- Frontend:**
 
 ```bash
@@ -309,6 +321,14 @@ npm run start:dev
 
 You should see `BFF listening on port 3000`. `STORAGE_BACKEND_URL` bypasses K8s service discovery for local dev. `K8S_API_BASE` is required for cluster API calls.
 
+> **Tip:** If your cluster uses a self-signed certificate (common in dev/lab environments), add `K8S_TLS_SKIP_VERIFY=true` to skip TLS verification for K8s API calls:
+>
+> ```bash
+> K8S_TLS_SKIP_VERIFY=true STORAGE_BACKEND_URL=http://localhost:8888 K8S_API_BASE=$(oc whoami --show-server) npm run start:dev
+> ```
+>
+> This is not needed in production — the in-cluster CA bundle mounted from the `kube-root-ca.crt` ConfigMap handles TLS automatically.
+>
 > **Note:** The `proxyService` entry in `env.local` (Step 6) tells the dashboard to forward `/brewet/api/*` requests to the BFF. Without it, those requests return HTML instead of JSON.
 
 ### Step 10: Start the plugin dev server
@@ -415,14 +435,14 @@ This project defaults to port **9500**. The port only matters if you run multipl
 - Ensure the plugin dev server is running (not just built)
 - Try a hard refresh (Ctrl+Shift+R) if the module cache is stale
 
-### BFF: "Failed to load namespace summary" with HTML parse error
+### BFF: API requests return HTML instead of JSON
 
 The frontend receives HTML instead of JSON. This means the request to `/brewet/api/*` is not being proxied to the BFF and is hitting the SPA fallback instead.
 
 - Ensure your `MODULE_FEDERATION_CONFIG` includes the `proxyService` block (see the config examples above)
 - Restart the dashboard after changing `MODULE_FEDERATION_CONFIG`
 
-### BFF: "Failed to fetch namespace summary: 502"
+### BFF: 502 errors on API calls
 
 The dashboard is correctly proxying to the BFF, but the BFF is returning an error.
 

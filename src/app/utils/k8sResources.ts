@@ -1,10 +1,11 @@
-import { ContainerConfig } from '~/app/types/k8s';
+import { ContainerConfig, ContainerSettings } from '~/app/types/k8s';
 
 export const DEPLOYMENT_NAME = 'brewet-storage-backend';
+export const SETTINGS_SECRET_NAME = 'brewet-storage-backend-settings';
 const SERVICE_PORT = 8888;
 const CONTAINER_IMAGE_DEFAULT =
   process.env.STORAGE_BACKEND_IMAGE ||
-  'quay.io/OWNER/brewet-storage-backend:0.1.0';
+  'quay.io/rh-ai-community-plugins/brewet-storage-backend:0.1.0';
 const DEFAULT_MOUNT_PREFIX = '/opt/app-root/src';
 
 const DANGEROUS_PATHS = ['/', '/etc', '/proc', '/sys', '/dev', '/var', '/tmp', '/root', '/home'];
@@ -45,6 +46,7 @@ export function buildDeployment(
   if (config.dataConnection) {
     envFrom.push({ secretRef: { name: config.dataConnection.metadata.name } });
   }
+  envFrom.push({ secretRef: { name: SETTINGS_SECRET_NAME } });
 
   return {
     apiVersion: 'apps/v1',
@@ -167,4 +169,29 @@ export function buildNetworkPolicy(namespace: string, bffNamespace: string) {
 
 export function defaultMountPath(pvcName: string): string {
   return `${DEFAULT_MOUNT_PREFIX}/${pvcName}`;
+}
+
+export function buildSettingsSecret(namespace: string, settings: ContainerSettings = {}) {
+  return {
+    apiVersion: 'v1',
+    kind: 'Secret',
+    metadata: {
+      name: SETTINGS_SECRET_NAME,
+      namespace,
+      labels: {
+        app: DEPLOYMENT_NAME,
+        'app.kubernetes.io/part-of': 'brewet',
+        'app.kubernetes.io/component': 'storage-backend',
+      },
+    },
+    stringData: {
+      HF_TOKEN: settings.hfToken ?? '',
+      HTTP_PROXY: settings.httpProxy ?? '',
+      HTTPS_PROXY: settings.httpsProxy ?? '',
+      MAX_CONCURRENT_TRANSFERS: String(settings.maxConcurrentTransfers ?? 2),
+      MAX_FILES_PER_PAGE: String(settings.maxFilesPerPage ?? 100),
+      ALLOWED_FILE_EXTENSIONS: settings.allowedFileExtensions ?? '',
+      BLOCKED_FILE_EXTENSIONS: settings.blockedFileExtensions ?? '',
+    },
+  };
 }

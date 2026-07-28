@@ -18,6 +18,11 @@ function mockContext(overrides: Partial<ReturnType<typeof useBrewetContext>> = {
   mockUseBrewetContext.mockReturnValue({
     selectedProject: 'test-ns',
     setSelectedProject: jest.fn(),
+    projects: [],
+    projectsLoading: false,
+    projectsError: null,
+    refreshProjects: jest.fn(),
+    addProject: jest.fn(),
     containerStatus: 'running',
     containerInfo: null,
     refreshContainerStatus: jest.fn(),
@@ -60,16 +65,16 @@ describe('ContainerRequired', () => {
     mockContext({ containerStatus: 'none' });
     mockContainer();
     render(<ContainerRequired><div>content</div></ContainerRequired>);
-    expect(screen.getByText('No storage container')).toBeInTheDocument();
-    expect(screen.getByText('Create Container')).toBeInTheDocument();
+    expect(screen.getByText('Brewet not set up')).toBeInTheDocument();
+    expect(screen.getByText('Set Up Brewet')).toBeInTheDocument();
   });
 
-  it('should open wizard when Create Container is clicked', async () => {
+  it('should open wizard when Set Up Brewet is clicked', async () => {
     mockContext({ containerStatus: 'none' });
     mockContainer();
     render(<ContainerRequired><div>content</div></ContainerRequired>);
 
-    await userEvent.click(screen.getByText('Create Container'));
+    await userEvent.click(screen.getByText('Set Up Brewet'));
     expect(screen.getByTestId('container-wizard')).toBeInTheDocument();
   });
 
@@ -77,8 +82,8 @@ describe('ContainerRequired', () => {
     mockContext({ containerStatus: 'stopped' });
     mockContainer();
     render(<ContainerRequired><div>content</div></ContainerRequired>);
-    expect(screen.getByText('Container stopped')).toBeInTheDocument();
-    expect(screen.getByText('Start Container')).toBeInTheDocument();
+    expect(screen.getByText('Brewet stopped')).toBeInTheDocument();
+    expect(screen.getByText('Start Brewet')).toBeInTheDocument();
   });
 
   it('should call startContainer on start click', async () => {
@@ -87,7 +92,7 @@ describe('ContainerRequired', () => {
     mockContainer({ startContainer });
     render(<ContainerRequired><div>content</div></ContainerRequired>);
 
-    await userEvent.click(screen.getByText('Start Container'));
+    await userEvent.click(screen.getByText('Start Brewet'));
     expect(startContainer).toHaveBeenCalled();
   });
 
@@ -102,7 +107,7 @@ describe('ContainerRequired', () => {
     mockContext({ containerStatus: 'starting' });
     mockContainer();
     render(<ContainerRequired><div>content</div></ContainerRequired>);
-    expect(screen.getByText('Container starting')).toBeInTheDocument();
+    expect(screen.getByText('Brewet starting')).toBeInTheDocument();
     expect(screen.queryByText('content')).not.toBeInTheDocument();
   });
 
@@ -111,8 +116,8 @@ describe('ContainerRequired', () => {
     mockContext({ containerStatus: 'error' });
     mockContainer({ stopContainer });
     render(<ContainerRequired><div>content</div></ContainerRequired>);
-    expect(screen.getByText('Container error')).toBeInTheDocument();
-    expect(screen.getByText('Stop Container')).toBeInTheDocument();
+    expect(screen.getByText('Brewet error')).toBeInTheDocument();
+    expect(screen.getByText('Stop Brewet')).toBeInTheDocument();
     expect(screen.queryByText('content')).not.toBeInTheDocument();
   });
 });

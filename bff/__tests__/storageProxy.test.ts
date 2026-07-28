@@ -7,7 +7,7 @@ jest.mock('../src/utils/serviceDiscovery', () => ({
 }));
 
 import { resolveStorageBackend } from '../src/utils/serviceDiscovery';
-import { createStorageProxyRouter, proxy } from '../src/routes/storageProxy';
+import { createStorageProxyRouter, closeProxy } from '../src/routes/storageProxy';
 import { K8sHttpError } from '../src/utils/k8sClient';
 
 const mockedResolve = jest.mocked(resolveStorageBackend);
@@ -19,7 +19,7 @@ function request(
 ): Promise<{ statusCode: number; headers: http.IncomingHttpHeaders; body: string }> {
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { hostname: '127.0.0.1', port, path, method: 'GET', ...options },
+      { hostname: '127.0.0.1', port, path, method: 'GET', ...options, headers: { ...options.headers } },
       (res) => {
         let body = '';
         res.on('data', (chunk) => (body += chunk));
@@ -108,7 +108,7 @@ describe('Storage Proxy', () => {
   });
 
   afterAll((done) => {
-    proxy.close();
+    closeProxy();
     bffServer.close(() => targetServer.close(done));
   });
 
@@ -277,7 +277,7 @@ describe('Storage Proxy', () => {
   describe('error handling', () => {
     it('returns 404 when service discovery reports not found', async () => {
       mockedResolve.mockRejectedValue(
-        new K8sHttpError(404, 'K8s API returned 404: not found'),
+        new K8sHttpError(404, '{"kind":"Status","message":"services \\"brewet-storage-backend\\" not found"}'),
       );
       const res = await request(bffPort, '/api/missing-ns/buckets');
       expect(res.statusCode).toBe(404);
@@ -288,7 +288,7 @@ describe('Storage Proxy', () => {
 
     it('returns 403 when service discovery reports access denied', async () => {
       mockedResolve.mockRejectedValue(
-        new K8sHttpError(403, 'K8s API returned 403: forbidden'),
+        new K8sHttpError(403, '{"kind":"Status","message":"forbidden"}'),
       );
       const res = await request(bffPort, '/api/restricted-ns/buckets');
       expect(res.statusCode).toBe(403);

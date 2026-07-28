@@ -67,15 +67,15 @@ export const PvcSelectionStep: React.FC<PvcSelectionStepProps> = ({
     <Stack hasGutter>
       <StackItem>
         <Content component="p">
-          Select PVCs to mount in the storage backend container. Each PVC will be
+          Select PVCs to mount in Brewet. Each PVC will be
           accessible for file browsing.
         </Content>
       </StackItem>
       <StackItem>
         {pvcs.length === 0 ? (
           <Alert variant="info" isInline title="No PVCs found">
-            No PersistentVolumeClaims were found in this project. You can still create a
-            container with S3 storage only.
+            No PersistentVolumeClaims were found in this project. You can still set up
+            Brewet with S3 storage only.
           </Alert>
         ) : (
           <Table aria-label="PVC selection" variant="compact">

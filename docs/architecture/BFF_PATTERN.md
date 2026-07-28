@@ -10,7 +10,7 @@ The BFF (Backend For Frontend) pattern gives a plugin its own backend service. I
 
 ### When to Use a BFF
 
-- **Server-side aggregation** -- Combine multiple API calls into a single response (as the Namespace Summary page does)
+- **Data-plane proxying** -- Route requests to per-project backend services with service discovery, streaming support, and structured error handling (as the Brewet BFF does for storage backends)
 - **External service integration** -- Call third-party APIs using credentials stored server-side (API keys never reach the browser)
 - **Complex business logic** -- Processing that would be too expensive or impractical in the browser
 - **Data transformation** -- Heavy filtering, sorting, or enrichment before sending data to the frontend
@@ -28,26 +28,23 @@ The BFF (Backend For Frontend) pattern gives a plugin its own backend service. I
 ### Token Flow
 
 ```text
-Browser                    Dashboard Backend              Plugin BFF              K8s API
+Browser                    Dashboard Backend              Plugin BFF           Storage Backend
   |                              |                            |                     |
-  |-- fetch('/brewet/api/namespace-summary') ----------->|                     |
+  |-- fetch('/brewet/api/my-ns/buckets/list') ---------->|                     |
   |                              |                            |                     |
   |                    [matches proxyService path]             |                     |
   |                    [authorize: true]                       |                     |
   |                              |                            |                     |
-  |                              |-- GET /api/namespace-summary                     |
+  |                              |-- GET /api/my-ns/buckets/list                    |
   |                              |   Authorization: Bearer <user-token>             |
   |                              |--------------------------->|                     |
   |                              |                            |                     |
-  |                              |                            |-- GET /apis/...     |
-  |                              |                            |   Bearer <user-token>|
-  |                              |                            |------------------->|
-  |                              |                            |<-- projects list ---|
+  |                              |               [resolve storage backend URL]      |
+  |                              |               [via K8s service discovery]        |
   |                              |                            |                     |
-  |                              |                            |-- GET /api/v1/...   |
-  |                              |                            |   Bearer <user-token>|
+  |                              |                            |-- GET /api/buckets/list
   |                              |                            |------------------->|
-  |                              |                            |<-- pods list -------|
+  |                              |                            |<-- bucket list -----|
   |                              |                            |                     |
   |                              |<-- aggregated response ----|                     |
   |<-- JSON response ------------|                            |                     |
@@ -55,10 +52,11 @@ Browser                    Dashboard Backend              Plugin BFF            
 
 Key points:
 
-1. The frontend calls a path like `/brewet/api/namespace-summary` at the same origin
+1. The frontend calls a path like `/brewet/api/{namespace}/buckets/list` at the same origin
 2. The dashboard backend matches this against `proxyService` entries in the federation ConfigMap
 3. When `authorize: true`, the dashboard converts the user's `x-forwarded-access-token` into an `Authorization: Bearer <token>` header
-4. The BFF receives the user's actual OpenShift token and uses it for K8s API calls -- all RBAC permissions are the user's own
+4. The BFF extracts the namespace from the path and resolves the per-project storage backend URL via K8s service discovery
+5. The request is proxied to the storage backend with the path rewritten from `/api/{namespace}/{path}` to `/api/{path}`
 
 ### Dashboard Proxy Configuration
 
@@ -69,14 +67,14 @@ The dashboard discovers BFF services via the `proxyService` field in the federat
   "name": "brewet",
   "backend": {
     "remoteEntry": "/remoteEntry.js",
-    "service": { "name": "brewet", "namespace": "brewet", "port": 8080 }
+    "service": { "name": "brewet", "namespace": "cp-brewet", "port": 8080 }
   },
   "proxyService": [{
     "path": "/brewet/api",
     "pathRewrite": "/api",
     "authorize": true,
     "tls": false,
-    "service": { "name": "brewet-bff", "namespace": "brewet", "port": 3000 }
+    "service": { "name": "brewet-bff", "namespace": "cp-brewet", "port": 3000 }
   }]
 }
 ```
@@ -100,24 +98,37 @@ bff/
   tsconfig.json
   Containerfile             # UBI9 Node 22, runs on port 3000
   src/
-    server.ts               # Express app with health check + namespace summary route
-    types.ts                # Shared types (PodCounts, NamespaceInfo)
+    server.ts               # Express app with health, CORS, logging, and storage proxy
+    shutdown.ts             # Graceful SIGTERM shutdown handler
     routes/
-      namespaceSummary.ts   # GET /api/namespace-summary handler
+      storageProxy.ts       # Proxy: /api/:namespace/* → storage backend
+    middleware/
+      rateLimiter.ts        # Per-client-IP rate limiting
     utils/
-      k8sClient.ts          # Authenticated K8s API caller
+      k8sClient.ts          # K8s API caller with typed K8sHttpError
+      serviceDiscovery.ts   # Resolve namespace → storage backend URL with TTL cache
+      constants.ts          # Shared constants (K8S_NAMESPACE_RE)
   __tests__/
-    namespaceSummary.test.ts
+    storageProxy.test.ts
+    serviceDiscovery.test.ts
+    rateLimiter.test.ts
+    shutdown.test.ts
     k8sClient.test.ts
 ```
 
-### Endpoint: `GET /api/namespace-summary`
+### Storage Proxy: `/api/:namespace/*`
 
-1. Extracts the Bearer token from the `Authorization` header
-2. Lists the user's projects via the OpenShift projects API (RBAC-scoped -- returns only projects the user can access)
-3. For each project, fetches pods and counts them by phase (Running, Pending, Succeeded, Failed, Unknown)
-4. Uses `Promise.allSettled` so one namespace failure doesn't break the entire response
-5. Returns an aggregated summary
+The BFF's primary role is proxying data-plane requests from the frontend to per-project storage backends:
+
+1. Validates the namespace against K8s naming rules
+2. Checks the path for traversal attacks (decodes URL-encoded segments, rejects `..`)
+3. Resolves the storage backend URL via K8s service discovery (with in-flight deduplication and TTL cache)
+4. Proxies the request with `http-proxy`, rewriting the path to `/api/{remainingPath}`
+5. Supports streaming responses (SSE for transfers/imports, binary for downloads), multipart uploads
+6. Sanitizes proxy headers (strips and rewrites `x-forwarded-*`)
+7. Returns structured errors for missing/unreachable backends (404, 503) and access denied (403)
+
+For local development, setting `STORAGE_BACKEND_URL` bypasses service discovery and proxies all namespaces to a single local instance.
 
 ### K8s Client
 
@@ -125,8 +136,9 @@ The `k8sClient.ts` utility makes authenticated requests to the K8s API server:
 
 - **In-cluster**: Uses `KUBERNETES_SERVICE_HOST` and `KUBERNETES_SERVICE_PORT` env vars, reads the CA cert from the service account mount
 - **Local dev**: Uses the `K8S_API_BASE` env var to point at the cluster API
+- Throws typed `K8sHttpError` for structured error classification (404, 403, etc.)
 
-The BFF always uses the user's forwarded token, never a service account token. This ensures all actions respect the user's RBAC permissions.
+The BFF uses its ServiceAccount token for service discovery and the user's forwarded Bearer token for proxied requests.
 
 ---
 
@@ -147,12 +159,13 @@ The BFF Service name in `values.yaml` must match the `proxyService.service.name`
 
 The BFF runs as a separate Node.js process alongside the plugin dev server and the dashboard. See [LOCAL_SETUP.md](../development/LOCAL_SETUP.md) for full step-by-step instructions.
 
-### Three-process setup
+### Four-process setup
 
 | Process | Port | What it does |
 |---|---|---|
-| Dashboard (container or source) | 8443 | Host app; proxies frontend and BFF requests |
-| BFF service | 3000 | Plugin backend; makes K8s API calls server-side |
+| Dashboard (container or source) | 8080 | Host app; proxies frontend and BFF requests |
+| Storage backend | 8888 | Data-plane server for S3 and local filesystem operations |
+| BFF service | 3000 | Proxy routing data-plane requests to the storage backend |
 | Plugin dev server | 9500 | Plugin frontend; serves webpack bundles with HMR |
 
 ### Starting the BFF
@@ -160,10 +173,21 @@ The BFF runs as a separate Node.js process alongside the plugin dev server and t
 ```bash
 cd bff
 npm install                                              # first time only
-K8S_API_BASE=$(oc whoami --show-server) npm run start:dev # must set K8S_API_BASE
+STORAGE_BACKEND_URL=http://localhost:8888 \
+K8S_API_BASE=$(oc whoami --show-server) npm run start:dev
 ```
 
-**`K8S_API_BASE` is required.** When the BFF runs locally (not in-cluster), it doesn't have access to the `KUBERNETES_SERVICE_HOST` and `KUBERNETES_SERVICE_PORT` env vars that Kubernetes provides to pods. `K8S_API_BASE` tells the BFF where to find the cluster API server. Without it, all K8s API calls will fail and the endpoint returns 502.
+**`STORAGE_BACKEND_URL` is required for local dev.** It bypasses K8s service discovery and proxies all namespaces to the local storage backend instance. Without it, the BFF tries K8s service discovery, which won't work outside the cluster.
+
+**`K8S_API_BASE` is required.** When the BFF runs locally (not in-cluster), it doesn't have access to the `KUBERNETES_SERVICE_HOST` and `KUBERNETES_SERVICE_PORT` env vars that Kubernetes provides to pods. `K8S_API_BASE` tells the BFF where to find the cluster API server.
+
+> **Tip:** If your cluster uses a self-signed certificate (common in dev/lab environments), add `K8S_TLS_SKIP_VERIFY=true` to skip TLS verification for K8s API calls:
+>
+> ```bash
+> K8S_TLS_SKIP_VERIFY=true K8S_API_BASE=$(oc whoami --show-server) npm run start:dev
+> ```
+>
+> This is not needed in production — the in-cluster CA bundle mounted from the `kube-root-ca.crt` ConfigMap handles TLS automatically.
 
 ### Dashboard proxy configuration
 

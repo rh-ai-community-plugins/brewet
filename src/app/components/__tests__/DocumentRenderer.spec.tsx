@@ -184,9 +184,9 @@ describe('DocumentRenderer', () => {
 
     // First fetch: connected to signal so abort causes rejection with AbortError
     mockStorageService.viewFile.mockImplementationOnce(
-      (_ns: string, _loc: StorageLocation, _path: string, signal: AbortSignal) =>
+      (_ns: string, _loc: StorageLocation, _path: string, signal?: AbortSignal) =>
         new Promise<string>((_resolve, reject) => {
-          signal.addEventListener('abort', () =>
+          signal?.addEventListener('abort', () =>
             reject(new DOMException('Aborted', 'AbortError'))
           );
         })

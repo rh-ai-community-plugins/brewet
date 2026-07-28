@@ -108,23 +108,44 @@ export async function validatePath(locationId: string, relativePath = ''): Promi
     resolvedPath = await fs.realpath(joinedPath);
   } catch (error: any) {
     if (error.code === 'ENOENT') {
-      const parentPath = path.dirname(joinedPath);
-      try {
-        const resolvedParent = await fs.realpath(parentPath);
-        if (
-          !resolvedParent.startsWith(normalizedBase + path.sep) &&
-          resolvedParent !== normalizedBase
-        ) {
-          throw new SecurityError(`Path escapes allowed directory: ${relativePath}`);
+      // Walk up the directory tree to find the nearest existing ancestor
+      let current = joinedPath;
+      const pendingSegments: string[] = [];
+      let resolvedAncestor: string | null = null;
+
+      while (current !== normalizedBase) {
+        pendingSegments.unshift(path.basename(current));
+        current = path.dirname(current);
+        try {
+          resolvedAncestor = await fs.realpath(current);
+          break;
+        } catch (ancestorError: any) {
+          if (ancestorError.code !== 'ENOENT') {
+            if (ancestorError.code === 'EACCES') {
+              throw new PermissionError(`Permission denied: ${current}`);
+            }
+            throw new StorageError(`Failed to resolve path: ${ancestorError.message}`);
+          }
         }
-        return path.join(resolvedParent, path.basename(joinedPath));
-      } catch (parentError: any) {
-        if (parentError instanceof SecurityError) throw parentError;
-        if (!parentPath.startsWith(normalizedBase + path.sep) && parentPath !== normalizedBase) {
-          throw new SecurityError(`Path escapes allowed directory: ${relativePath}`);
-        }
-        throw new NotFoundError(`Parent directory not found: ${parentPath}`);
       }
+
+      if (!resolvedAncestor) {
+        resolvedAncestor = normalizedBase;
+        try {
+          resolvedAncestor = await fs.realpath(normalizedBase);
+        } catch {
+          throw new NotFoundError(`Base storage path not found: ${normalizedBase}`);
+        }
+      }
+
+      if (
+        !resolvedAncestor.startsWith(normalizedBase + path.sep) &&
+        resolvedAncestor !== normalizedBase
+      ) {
+        throw new SecurityError(`Path escapes allowed directory: ${relativePath}`);
+      }
+
+      return path.join(resolvedAncestor, ...pendingSegments);
     }
     if (error.code === 'EACCES') {
       throw new PermissionError(`Permission denied: ${joinedPath}`);
@@ -137,6 +158,34 @@ export async function validatePath(locationId: string, relativePath = ''): Promi
   }
 
   return resolvedPath;
+}
+
+/**
+ * Resolve a symlink target, redacting it if it points outside the allowed base directory.
+ * Returns the raw readlink value when the resolved target is within basePath,
+ * or undefined when it escapes (preventing information disclosure of external paths).
+ */
+async function resolveSymlinkTarget(
+  entryPath: string,
+  basePath?: string,
+): Promise<string | undefined> {
+  if (!basePath) {
+    return fs.readlink(entryPath);
+  }
+
+  try {
+    const resolvedTarget = await fs.realpath(entryPath);
+    if (
+      resolvedTarget.startsWith(basePath + path.sep) ||
+      resolvedTarget === basePath
+    ) {
+      return fs.readlink(entryPath);
+    }
+  } catch {
+    // Cannot resolve symlink target (e.g. dangling symlink) — redact
+  }
+
+  return undefined;
 }
 
 export async function getStorageLocations(logger?: any): Promise<StorageLocation[]> {
@@ -178,6 +227,7 @@ export async function listDirectory(
   absolutePath: string,
   limit?: number,
   offset = 0,
+  basePath?: string,
 ): Promise<{ files: FileEntry[]; totalCount: number }> {
   try {
     const entries = await fs.readdir(absolutePath, { withFileTypes: true });
@@ -198,7 +248,7 @@ export async function listDirectory(
           fileEntry.size = stats.size;
           fileEntry.modified = stats.mtime.toISOString();
           if (entry.isSymbolicLink()) {
-            fileEntry.target = await fs.readlink(entryPath);
+            fileEntry.target = await resolveSymlinkTarget(entryPath, basePath);
           }
         } catch {
           continue;
@@ -270,7 +320,7 @@ export async function deleteFileOrDirectory(absolutePath: string): Promise<numbe
   }
 }
 
-export async function getFileMetadata(absolutePath: string): Promise<FileEntry> {
+export async function getFileMetadata(absolutePath: string, basePath?: string): Promise<FileEntry> {
   try {
     const stats = await fs.lstat(absolutePath);
     const name = path.basename(absolutePath);
@@ -284,7 +334,7 @@ export async function getFileMetadata(absolutePath: string): Promise<FileEntry> 
     };
 
     if (stats.isSymbolicLink()) {
-      entry.target = await fs.readlink(absolutePath);
+      entry.target = await resolveSymlinkTarget(absolutePath, basePath);
     }
 
     return entry;

@@ -1,9 +1,20 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { BrewetProvider, useBrewetContext } from '../BrewetContext';
+import { useProjects } from '~/app/hooks/useProjects';
+
+jest.mock('~/app/hooks/useProjects');
 
 beforeEach(() => {
   localStorage.clear();
   jest.restoreAllMocks();
+  (useProjects as jest.Mock).mockReturnValue({
+    projects: [],
+    loading: false,
+    error: null,
+    refresh: jest.fn().mockResolvedValue([]),
+    addProject: jest.fn(),
+  });
   global.fetch = jest.fn().mockResolvedValue({
     ok: false,
     status: 404,
@@ -12,7 +23,7 @@ beforeEach(() => {
 });
 
 function wrapper({ children }: { children: React.ReactNode }) {
-  return <BrewetProvider>{children}</BrewetProvider>;
+  return <MemoryRouter><BrewetProvider>{children}</BrewetProvider></MemoryRouter>;
 }
 
 describe('BrewetContext', () => {
@@ -451,5 +462,60 @@ describe('BrewetContext', () => {
         volumeMounts: [],
       });
     });
+  });
+
+  it('should fall back to first available project when selected project no longer exists', async () => {
+    localStorage.setItem('brewet.selected-project', 'deleted-project');
+
+    const mockRefresh = jest.fn().mockResolvedValue([
+      { metadata: { name: 'alpha', uid: 'uid-1' } },
+      { metadata: { name: 'bravo', uid: 'uid-2' } },
+    ]);
+
+    (useProjects as jest.Mock).mockReturnValue({
+      projects: [
+        { metadata: { name: 'alpha', uid: 'uid-1' } },
+        { metadata: { name: 'bravo', uid: 'uid-2' } },
+      ],
+      loading: false,
+      error: null,
+      refresh: mockRefresh,
+      addProject: jest.fn(),
+    });
+
+    const { result } = renderHook(() => useBrewetContext(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.selectedProject).toBe('alpha');
+    });
+    expect(localStorage.getItem('brewet.selected-project')).toBe('alpha');
+  });
+
+  it('should fall back to favorite project when selected project no longer exists', async () => {
+    localStorage.setItem('brewet.selected-project', 'deleted-project');
+    localStorage.setItem('rhoai.project-favorites', JSON.stringify(['bravo']));
+
+    const mockRefresh = jest.fn().mockResolvedValue([
+      { metadata: { name: 'alpha', uid: 'uid-1' } },
+      { metadata: { name: 'bravo', uid: 'uid-2' } },
+    ]);
+
+    (useProjects as jest.Mock).mockReturnValue({
+      projects: [
+        { metadata: { name: 'alpha', uid: 'uid-1' } },
+        { metadata: { name: 'bravo', uid: 'uid-2' } },
+      ],
+      loading: false,
+      error: null,
+      refresh: mockRefresh,
+      addProject: jest.fn(),
+    });
+
+    const { result } = renderHook(() => useBrewetContext(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.selectedProject).toBe('bravo');
+    });
+    expect(localStorage.getItem('brewet.selected-project')).toBe('bravo');
   });
 });

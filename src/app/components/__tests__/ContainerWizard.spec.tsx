@@ -1,20 +1,22 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
-import React from 'react';
 import { ContainerWizard } from '../ContainerWizard/ContainerWizard';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { useDataConnections } from '~/app/hooks/useDataConnections';
 import { usePVCs } from '~/app/hooks/usePVCs';
 import { useBrewetContainer } from '~/app/hooks/useBrewetContainer';
+import { storageService } from '~/app/services/storageService';
 
 jest.mock('~/app/context/BrewetContext');
 jest.mock('~/app/hooks/useDataConnections');
 jest.mock('~/app/hooks/usePVCs');
 jest.mock('~/app/hooks/useBrewetContainer');
+jest.mock('~/app/services/storageService');
 
 const mockUseBrewetContext = useBrewetContext as jest.MockedFunction<typeof useBrewetContext>;
 const mockUseDataConnections = useDataConnections as jest.MockedFunction<typeof useDataConnections>;
 const mockUsePVCs = usePVCs as jest.MockedFunction<typeof usePVCs>;
 const mockUseBrewetContainer = useBrewetContainer as jest.MockedFunction<typeof useBrewetContainer>;
+const mockStorageService = storageService as jest.Mocked<typeof storageService>;
 
 const dcFixture = {
   metadata: { name: 'my-dc-secret', namespace: 'test-ns' },
@@ -31,6 +33,11 @@ function setupMocks(contextOverrides = {}) {
     containerStatus: 'running',
     containerInfo: null,
     refreshContainerStatus: jest.fn(),
+    projects: [],
+    projectsLoading: false,
+    projectsError: null,
+    refreshProjects: jest.fn(),
+    addProject: jest.fn(),
     isActioning: false,
     setIsActioning: jest.fn(),
     ...contextOverrides,
@@ -62,6 +69,8 @@ function setupMocks(contextOverrides = {}) {
     updateContainer: jest.fn().mockResolvedValue([{ resource: 'Deployment', success: true }]),
     refreshContainerStatus: jest.fn(),
   });
+
+  mockStorageService.readSettingsSecret.mockResolvedValue({});
 }
 
 beforeEach(() => {
@@ -79,6 +88,58 @@ describe('ContainerWizard', () => {
 
       const dcRadio = screen.getByRole('radio', { name: 'my-dc-secret' });
       expect(dcRadio).not.toBeChecked();
+    });
+  });
+
+  describe('deployment status', () => {
+    it('should show deployment status after successful creation', async () => {
+      const onClose = jest.fn();
+      const mockCreate = jest.fn().mockResolvedValue([
+        { resource: 'Deployment', success: true },
+        { resource: 'Service', success: true },
+        { resource: 'NetworkPolicy', success: true },
+      ]);
+
+      setupMocks({ containerStatus: 'none' });
+      mockUseBrewetContainer.mockReturnValue({
+        selectedProject: 'test-ns',
+        containerStatus: 'none',
+        containerInfo: null,
+        isActioning: false,
+        startContainer: jest.fn(),
+        stopContainer: jest.fn(),
+        deleteContainer: jest.fn().mockResolvedValue(undefined),
+        createContainer: mockCreate,
+        updateContainer: jest.fn().mockResolvedValue([]),
+        refreshContainerStatus: jest.fn(),
+      });
+
+      render(<ContainerWizard onClose={onClose} />);
+
+      // Navigate to PVC Selection, Configuration, then Review
+      for (let i = 0; i < 3; i++) {
+        const nextBtns = screen.getAllByRole('button', { name: /Next/i });
+        await act(async () => { nextBtns[0].click(); });
+      }
+
+      // Click Create
+      const createButton = screen.getByRole('button', { name: /Create/i });
+      await act(async () => { createButton.click(); });
+
+      // Wizard should not close
+      expect(onClose).not.toHaveBeenCalled();
+
+      // Should show deployment status
+      await waitFor(() => {
+        expect(screen.getByText('Resources created')).toBeInTheDocument();
+        expect(screen.getByText('Deployment')).toBeInTheDocument();
+        expect(screen.getByText('Service')).toBeInTheDocument();
+        expect(screen.getByText('NetworkPolicy')).toBeInTheDocument();
+      });
+
+      // Close button should be present in the modal footer
+      const closeButtons = screen.getAllByRole('button', { name: /Close/i });
+      expect(closeButtons.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -133,6 +194,11 @@ describe('ContainerWizard', () => {
       mockUseBrewetContext.mockReturnValue({
         selectedProject: 'test-ns',
         setSelectedProject: jest.fn(),
+        projects: [],
+        projectsLoading: false,
+        projectsError: null,
+        refreshProjects: jest.fn(),
+        addProject: jest.fn(),
         containerStatus: 'running',
         containerInfo: {
           name: 'brewet-storage-backend',
@@ -169,6 +235,8 @@ describe('ContainerWizard', () => {
         updateContainer: jest.fn().mockResolvedValue([]),
         refreshContainerStatus: jest.fn(),
       });
+
+      mockStorageService.readSettingsSecret.mockResolvedValue({});
 
       const { rerender } = render(<ContainerWizard isEditMode onClose={jest.fn()} />);
 

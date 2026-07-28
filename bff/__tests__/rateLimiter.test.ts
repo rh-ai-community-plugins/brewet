@@ -7,7 +7,7 @@ jest.mock('../src/utils/serviceDiscovery', () => ({
 }));
 
 import { resolveStorageBackend } from '../src/utils/serviceDiscovery';
-import { createStorageProxyRouter, proxy } from '../src/routes/storageProxy';
+import { createStorageProxyRouter, closeProxy } from '../src/routes/storageProxy';
 
 const mockedResolve = jest.mocked(resolveStorageBackend);
 
@@ -17,7 +17,7 @@ function request(
 ): Promise<{ statusCode: number; headers: http.IncomingHttpHeaders; body: string }> {
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { hostname: '127.0.0.1', port, path, method: 'GET' },
+      { hostname: '127.0.0.1', port, path, method: 'GET', headers: { Authorization: 'Bearer test-token' } },
       (res) => {
         let body = '';
         res.on('data', (chunk) => (body += chunk));
@@ -57,7 +57,7 @@ describe('Rate Limiter', () => {
   });
 
   afterAll((done) => {
-    proxy.close();
+    closeProxy();
     bffServer.close(() => targetServer.close(done));
   });
 

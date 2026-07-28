@@ -6,13 +6,37 @@ import { setupGracefulShutdown } from './shutdown';
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
+// Trust the first reverse proxy (OpenShift router / ingress) so that
+// req.ip returns the real client IP instead of the proxy's address.
+app.set('trust proxy', 1);
+
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
-    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
+    // Log method + route pattern instead of the full originalUrl, which may
+    // contain base64-encoded file paths or other sensitive path segments.
+    const routePattern = req.route?.path ?? req.path;
+    console.log(`${req.method} ${routePattern} ${res.statusCode} ${Date.now() - start}ms`);
   });
   next();
 });
+
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    }
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
+}
 
 app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
 

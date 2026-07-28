@@ -59,7 +59,13 @@ module.exports = {
     new webpack.DefinePlugin({
       'process.env.STORAGE_BACKEND_IMAGE': JSON.stringify(
         process.env.STORAGE_BACKEND_IMAGE ||
-          `quay.io/OWNER/brewet-storage-backend:${version}`,
+          `quay.io/rh-ai-community-plugins/brewet-storage-backend:${version}`,
+      ),
+      'process.env.BFF_NAMESPACE': JSON.stringify(
+        process.env.BFF_NAMESPACE || 'cp-brewet',
+      ),
+      'process.env.BFF_BASE_URL': JSON.stringify(
+        process.env.BFF_BASE_URL || '',
       ),
     }),
     new ModuleFederationPlugin({
@@ -80,7 +86,7 @@ module.exports = {
         },
         'react-router-dom': {
           singleton: true,
-          requiredVersion: '^7',
+          requiredVersion: '^6',
         },
         '@patternfly/react-core': {
           singleton: true,

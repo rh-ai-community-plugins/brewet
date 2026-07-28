@@ -280,13 +280,19 @@ describe('POST /api/objects/huggingface-import', () => {
       expect(response.statusCode).toBe(500);
     });
 
-    it('fetchJSON calls res.resume() on a 4xx error response before rejecting', async () => {
-      const errorResumeSpy = jest.fn();
-
+    it('fetchJSON reads the error body from a 4xx response and surfaces the message', async () => {
       const mockImpl = (_opts: any, responseCallback: any) => {
         const errorRes = makeMockResponse(403);
-        errorRes.resume = errorResumeSpy;
-        return makeMockRequest(responseCallback, errorRes);
+        const req = makeMockRequest(responseCallback, errorRes);
+        const origEnd = req.end.getMockImplementation?.() ?? (() => {});
+        req.end = jest.fn(() => {
+          origEnd();
+          process.nextTick(() => {
+            errorRes.emit('data', Buffer.from(JSON.stringify({ error: 'Access to model is restricted' })));
+            errorRes.emit('end');
+          });
+        });
+        return req;
       };
       httpsRequestSpy = jest.spyOn(https, 'request').mockImplementation(mockImpl as any);
 
@@ -296,8 +302,9 @@ describe('POST /api/objects/huggingface-import', () => {
         payload: { modelId: 'test/model', destinationType: 's3', bucketName: 'my-bucket' },
       });
 
-      expect(errorResumeSpy).toHaveBeenCalledTimes(1);
       expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.message).toContain('Access to model is restricted');
     });
 
     it('downloadFile calls res.resume() on a redirect response before following it', async () => {

@@ -1,4 +1,4 @@
-import { buildDeployment, buildService, buildNetworkPolicy, defaultMountPath, validateMountPath } from '../k8sResources';
+import { buildDeployment, buildService, buildNetworkPolicy, buildSettingsSecret, defaultMountPath, validateMountPath, SETTINGS_SECRET_NAME } from '../k8sResources';
 import { ContainerConfig } from '~/app/types/k8s';
 
 describe('k8sResources', () => {
@@ -13,7 +13,7 @@ describe('k8sResources', () => {
       expect(deployment.spec.replicas).toBe(1);
 
       const container = deployment.spec.template.spec.containers[0];
-      expect(container.envFrom).toEqual([]);
+      expect(container.envFrom).toEqual([{ secretRef: { name: SETTINGS_SECRET_NAME } }]);
       expect(container.volumeMounts).toEqual([]);
       expect(container.env).toEqual([]);
     });
@@ -42,7 +42,10 @@ describe('k8sResources', () => {
       const deployment = buildDeployment('test-ns', config);
       const container = deployment.spec.template.spec.containers[0];
 
-      expect(container.envFrom).toEqual([{ secretRef: { name: 'my-dc' } }]);
+      expect(container.envFrom).toEqual([
+        { secretRef: { name: 'my-dc' } },
+        { secretRef: { name: SETTINGS_SECRET_NAME } },
+      ]);
     });
 
     it('should include volume mounts and LOCAL_STORAGE_PATHS when PVCs are provided', () => {
@@ -99,13 +102,13 @@ describe('k8sResources', () => {
 
   describe('buildNetworkPolicy', () => {
     it('should build a network policy restricting ingress to BFF namespace', () => {
-      const np = buildNetworkPolicy('test-ns', 'brewet');
+      const np = buildNetworkPolicy('test-ns', 'cp-brewet');
 
       expect(np.kind).toBe('NetworkPolicy');
       expect(np.metadata.name).toBe('brewet-storage-backend-ingress');
       expect(np.spec.policyTypes).toEqual(['Ingress']);
       expect(np.spec.ingress[0].from[0].namespaceSelector.matchLabels).toEqual({
-        'kubernetes.io/metadata.name': 'brewet',
+        'kubernetes.io/metadata.name': 'cp-brewet',
       });
       expect(np.spec.ingress[0].ports[0].port).toBe(8888);
     });
@@ -150,6 +153,52 @@ describe('k8sResources', () => {
 
     it('should accept unique valid paths', () => {
       expect(validateMountPath('/mnt/models', ['/mnt/data'])).toBeNull();
+    });
+  });
+
+  describe('buildSettingsSecret', () => {
+    it('should build a secret with default values when no settings provided', () => {
+      const secret = buildSettingsSecret('test-ns');
+
+      expect(secret.kind).toBe('Secret');
+      expect(secret.metadata.name).toBe(SETTINGS_SECRET_NAME);
+      expect(secret.metadata.namespace).toBe('test-ns');
+      expect(secret.metadata.labels).toEqual({
+        app: 'brewet-storage-backend',
+        'app.kubernetes.io/part-of': 'brewet',
+        'app.kubernetes.io/component': 'storage-backend',
+      });
+      expect(secret.stringData).toEqual({
+        HF_TOKEN: '',
+        HTTP_PROXY: '',
+        HTTPS_PROXY: '',
+        MAX_CONCURRENT_TRANSFERS: '2',
+        MAX_FILES_PER_PAGE: '100',
+        ALLOWED_FILE_EXTENSIONS: '',
+        BLOCKED_FILE_EXTENSIONS: '',
+      });
+    });
+
+    it('should build a secret with provided settings', () => {
+      const secret = buildSettingsSecret('test-ns', {
+        hfToken: 'hf_abc123',
+        httpProxy: 'http://proxy:8080',
+        httpsProxy: 'https://proxy:8443',
+        maxConcurrentTransfers: 5,
+        maxFilesPerPage: 50,
+        allowedFileExtensions: '.py,.csv',
+        blockedFileExtensions: '.exe,.dll',
+      });
+
+      expect(secret.stringData).toEqual({
+        HF_TOKEN: 'hf_abc123',
+        HTTP_PROXY: 'http://proxy:8080',
+        HTTPS_PROXY: 'https://proxy:8443',
+        MAX_CONCURRENT_TRANSFERS: '5',
+        MAX_FILES_PER_PAGE: '50',
+        ALLOWED_FILE_EXTENSIONS: '.py,.csv',
+        BLOCKED_FILE_EXTENSIONS: '.exe,.dll',
+      });
     });
   });
 });

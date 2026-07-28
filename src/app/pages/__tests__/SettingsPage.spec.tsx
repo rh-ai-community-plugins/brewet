@@ -21,6 +21,11 @@ function setupMocks() {
   mockUseBrewetContext.mockReturnValue({
     selectedProject: 'test-ns',
     setSelectedProject: jest.fn(),
+    projects: [],
+    projectsLoading: false,
+    projectsError: null,
+    refreshProjects: jest.fn(),
+    addProject: jest.fn(),
     containerStatus: 'running',
     containerInfo: null,
     refreshContainerStatus: jest.fn(),
@@ -42,20 +47,19 @@ function setupMocks() {
 
   mockStorageService.getS3Settings.mockResolvedValue({
     endpoint: 'https://s3.example.com',
-    accessKeyId: 'AKIA****',
-    secretAccessKey: 'wJal****',
+    accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+    secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
     region: 'us-east-1',
     defaultBucket: 'my-bucket',
   });
-  mockStorageService.getHuggingFaceSettings.mockResolvedValue({
-    hfToken: 'hf_t****',
-  });
-  mockStorageService.getProxySettings.mockResolvedValue({
+  mockStorageService.readSettingsSecret.mockResolvedValue({
+    hfToken: 'hf_testtoken123',
     httpProxy: '',
     httpsProxy: '',
+    maxConcurrentTransfers: 2,
+    maxFilesPerPage: 100,
   });
-  mockStorageService.getMaxConcurrentTransfers.mockResolvedValue(2);
-  mockStorageService.getMaxFilesPerPage.mockResolvedValue(100);
+  mockStorageService.patchSettingsSecret.mockResolvedValue(undefined);
 
   mockStorageService.updateS3Settings.mockResolvedValue(undefined);
   mockStorageService.updateHuggingFaceSettings.mockResolvedValue(undefined);
@@ -71,22 +75,27 @@ function setupMocks() {
   mockStorageService.testProxyConnection.mockResolvedValue({ message: 'Connection successful' });
 }
 
+async function renderSettingsPage() {
+  render(<SettingsPage />);
+  await waitFor(() => {
+    expect(screen.getByDisplayValue('https://s3.example.com')).toBeInTheDocument();
+  });
+}
+
 describe('SettingsPage', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     setupMocks();
   });
 
-  it('should render the page title', async () => {
-    render(<SettingsPage />);
-    expect(screen.getByText('Settings')).toBeInTheDocument();
+  it('should render page content', async () => {
+    await renderSettingsPage();
+    expect(screen.getByRole('tab', { name: /S3 Storage/i })).toBeInTheDocument();
   });
 
   it('should render all five tabs', async () => {
-    render(<SettingsPage />);
-    await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /S3 Storage/i })).toBeInTheDocument();
-    });
+    await renderSettingsPage();
+    expect(screen.getByRole('tab', { name: /S3 Storage/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /HuggingFace/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Proxy/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Transfer Controls/i })).toBeInTheDocument();
@@ -95,11 +104,8 @@ describe('SettingsPage', () => {
 
   describe('S3 Storage tab', () => {
     it('should load and display S3 settings', async () => {
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByDisplayValue('https://s3.example.com')).toBeInTheDocument();
-      });
-      expect(screen.getByDisplayValue('AKIA****')).toBeInTheDocument();
+      await renderSettingsPage();
+      expect(screen.getByDisplayValue('AKIAIOSFODNN7EXAMPLE')).toBeInTheDocument();
       expect(screen.getByDisplayValue('us-east-1')).toBeInTheDocument();
       expect(screen.getByDisplayValue('my-bucket')).toBeInTheDocument();
       expect(mockStorageService.getS3Settings).toHaveBeenCalledWith('test-ns', expect.any(AbortSignal));
@@ -107,10 +113,7 @@ describe('SettingsPage', () => {
 
     it('should save S3 settings', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByDisplayValue('https://s3.example.com')).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       const saveButtons = screen.getAllByRole('button', { name: /^Save$/i });
       await user.click(saveButtons[0]);
@@ -126,10 +129,7 @@ describe('SettingsPage', () => {
 
     it('should test S3 connection', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByDisplayValue('https://s3.example.com')).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       const testButton = screen.getByRole('button', { name: /Test Connection/i });
       await user.click(testButton);
@@ -139,8 +139,8 @@ describe('SettingsPage', () => {
           'test-ns',
           {
             endpoint: 'https://s3.example.com',
-            accessKeyId: 'AKIA****',
-            secretAccessKey: 'wJal****',
+            accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+            secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
             region: 'us-east-1',
           },
         );
@@ -151,10 +151,7 @@ describe('SettingsPage', () => {
     it('should show error alert on S3 test failure', async () => {
       mockStorageService.testS3Connection.mockRejectedValue(new Error('Connection refused'));
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByDisplayValue('https://s3.example.com')).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       const testButton = screen.getByRole('button', { name: /Test Connection/i });
       await user.click(testButton);
@@ -175,30 +172,24 @@ describe('SettingsPage', () => {
   });
 
   describe('HuggingFace tab', () => {
-    it('should load and display HuggingFace settings', async () => {
+    it('should load and display HuggingFace settings from secret', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /HuggingFace/i })).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /HuggingFace/i }));
       await waitFor(() => {
-        expect(screen.getByDisplayValue('hf_t****')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('hf_testtoken123')).toBeInTheDocument();
       });
-      expect(mockStorageService.getHuggingFaceSettings).toHaveBeenCalledWith('test-ns', expect.any(AbortSignal));
+      expect(mockStorageService.readSettingsSecret).toHaveBeenCalledWith('test-ns', expect.any(AbortSignal));
     });
 
     it('should test HuggingFace connection and show token name', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /HuggingFace/i })).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /HuggingFace/i }));
       await waitFor(() => {
-        expect(screen.getByDisplayValue('hf_t****')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('hf_testtoken123')).toBeInTheDocument();
       });
 
       const testButton = screen.getByRole('button', { name: /Test Connection/i });
@@ -210,41 +201,42 @@ describe('SettingsPage', () => {
       expect(screen.getByText(/my-token/)).toBeInTheDocument();
     });
 
-    it('should save HuggingFace settings', async () => {
+    it('should dual-write HuggingFace settings to secret and backend', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /HuggingFace/i })).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /HuggingFace/i }));
       await waitFor(() => {
-        expect(screen.getByDisplayValue('hf_t****')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('hf_testtoken123')).toBeInTheDocument();
       });
 
       const saveButton = screen.getByRole('button', { name: /^Save$/i });
       await user.click(saveButton);
 
       await waitFor(() => {
+        expect(mockStorageService.patchSettingsSecret).toHaveBeenCalledWith(
+          'test-ns',
+          { HF_TOKEN: 'hf_testtoken123' },
+        );
         expect(mockStorageService.updateHuggingFaceSettings).toHaveBeenCalledWith(
           'test-ns',
-          { hfToken: 'hf_t****' },
+          { hfToken: 'hf_testtoken123' },
         );
       });
     });
   });
 
   describe('Proxy tab', () => {
-    it('should load and display proxy settings', async () => {
-      mockStorageService.getProxySettings.mockResolvedValue({
+    it('should load and display proxy settings from secret', async () => {
+      mockStorageService.readSettingsSecret.mockResolvedValue({
+        hfToken: '',
         httpProxy: 'http://proxy:8080',
         httpsProxy: 'https://proxy:8443',
+        maxConcurrentTransfers: 2,
+        maxFilesPerPage: 100,
       });
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /^Proxy/i })).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /^Proxy/i }));
       await waitFor(() => {
@@ -253,12 +245,10 @@ describe('SettingsPage', () => {
       expect(screen.getByDisplayValue('https://proxy:8443')).toBeInTheDocument();
     });
 
+
     it('should test proxy connection', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /^Proxy/i })).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /^Proxy/i }));
       await waitFor(() => {
@@ -282,10 +272,7 @@ describe('SettingsPage', () => {
 
     it('should require test URL for proxy test', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /^Proxy/i })).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /^Proxy/i }));
       await waitFor(() => {
@@ -301,10 +288,7 @@ describe('SettingsPage', () => {
 
     it('should reject invalid URL format for proxy test', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /^Proxy/i })).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /^Proxy/i }));
       await waitFor(() => {
@@ -321,12 +305,9 @@ describe('SettingsPage', () => {
       expect(mockStorageService.testProxyConnection).not.toHaveBeenCalled();
     });
 
-    it('should save proxy settings', async () => {
+    it('should dual-write proxy settings to secret and backend', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /^Proxy/i })).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /^Proxy/i }));
       await waitFor(() => {
@@ -340,6 +321,10 @@ describe('SettingsPage', () => {
       await user.click(saveButton);
 
       await waitFor(() => {
+        expect(mockStorageService.patchSettingsSecret).toHaveBeenCalledWith(
+          'test-ns',
+          expect.objectContaining({ HTTP_PROXY: 'http://proxy:3128' }),
+        );
         expect(mockStorageService.updateProxySettings).toHaveBeenCalledWith(
           'test-ns',
           expect.objectContaining({ httpProxy: 'http://proxy:3128' }),
@@ -349,25 +334,19 @@ describe('SettingsPage', () => {
   });
 
   describe('Transfer Controls tab', () => {
-    it('should load and display transfer settings', async () => {
+    it('should load transfer settings from secret', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /Transfer Controls/i })).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /Transfer Controls/i }));
       await waitFor(() => {
-        expect(mockStorageService.getMaxConcurrentTransfers).toHaveBeenCalledWith('test-ns', expect.any(AbortSignal));
+        expect(mockStorageService.readSettingsSecret).toHaveBeenCalledWith('test-ns', expect.any(AbortSignal));
       });
     });
 
-    it('should save transfer concurrency setting', async () => {
+    it('should dual-write transfer concurrency to secret and backend', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /Transfer Controls/i })).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /Transfer Controls/i }));
       await waitFor(() => {
@@ -378,6 +357,10 @@ describe('SettingsPage', () => {
       await user.click(saveButton);
 
       await waitFor(() => {
+        expect(mockStorageService.patchSettingsSecret).toHaveBeenCalledWith(
+          'test-ns',
+          { MAX_CONCURRENT_TRANSFERS: '2' },
+        );
         expect(mockStorageService.updateMaxConcurrentTransfers).toHaveBeenCalledWith(
           'test-ns',
           2,
@@ -387,25 +370,19 @@ describe('SettingsPage', () => {
   });
 
   describe('Pagination tab', () => {
-    it('should load and display pagination settings', async () => {
+    it('should load pagination settings from secret', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /Pagination/i })).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /Pagination/i }));
       await waitFor(() => {
-        expect(mockStorageService.getMaxFilesPerPage).toHaveBeenCalledWith('test-ns', expect.any(AbortSignal));
+        expect(mockStorageService.readSettingsSecret).toHaveBeenCalledWith('test-ns', expect.any(AbortSignal));
       });
     });
 
-    it('should save pagination setting', async () => {
+    it('should dual-write pagination setting to secret and backend', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: /Pagination/i })).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /Pagination/i }));
       await waitFor(() => {
@@ -416,6 +393,10 @@ describe('SettingsPage', () => {
       await user.click(saveButton);
 
       await waitFor(() => {
+        expect(mockStorageService.patchSettingsSecret).toHaveBeenCalledWith(
+          'test-ns',
+          { MAX_FILES_PER_PAGE: '100' },
+        );
         expect(mockStorageService.updateMaxFilesPerPage).toHaveBeenCalledWith(
           'test-ns',
           100,
@@ -427,15 +408,11 @@ describe('SettingsPage', () => {
   describe('tab switching', () => {
     it('should switch between tabs', async () => {
       const user = userEvent.setup();
-      render(<SettingsPage />);
-
-      await waitFor(() => {
-        expect(screen.getByDisplayValue('https://s3.example.com')).toBeInTheDocument();
-      });
+      await renderSettingsPage();
 
       await user.click(screen.getByRole('tab', { name: /HuggingFace/i }));
       await waitFor(() => {
-        expect(screen.getByDisplayValue('hf_t****')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('hf_testtoken123')).toBeInTheDocument();
       });
 
       await user.click(screen.getByRole('tab', { name: /^Proxy/i }));

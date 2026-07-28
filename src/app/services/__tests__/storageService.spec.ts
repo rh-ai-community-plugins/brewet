@@ -1,6 +1,11 @@
-import { storageService } from '../storageService';
+import { storageService, transformS3Response, transformLocalResponse } from '../storageService';
 import { apiClient } from '../apiClient';
-import type { BucketsList, LocalStorageLocation } from '~/app/types/storage';
+import type {
+  BucketsList,
+  LocalStorageLocation,
+  RawS3ListResponse,
+  RawLocalListResponse,
+} from '~/app/types/storage';
 
 jest.mock('../apiClient', () => ({
   apiClient: {
@@ -20,6 +25,7 @@ const mockBuckets: BucketsList = {
     { Name: 'bucket-1', CreationDate: '2024-01-01T00:00:00Z' },
     { Name: 'bucket-2', CreationDate: '2024-02-01T00:00:00Z' },
   ],
+  s3Connected: true,
 };
 
 const mockLocalLocations: LocalStorageLocation[] = [
@@ -37,7 +43,7 @@ function setupDefaultMocks() {
 
 async function clearCache() {
   mockApiClient.get.mockImplementation((_ns, path) => {
-    if (path === '/buckets') return Promise.resolve({ buckets: [] });
+    if (path === '/buckets') return Promise.resolve({ buckets: [], s3Connected: false });
     if (path === '/local/locations') return Promise.resolve({ locations: [] });
     return Promise.resolve({});
   });
@@ -55,23 +61,24 @@ describe('storageService', () => {
     it('should merge S3 buckets and local locations', async () => {
       setupDefaultMocks();
 
-      const locations = await storageService.refreshLocations('test-ns');
+      const result = await storageService.refreshLocations('test-ns');
 
-      expect(locations).toHaveLength(4);
-      expect(locations[0]).toMatchObject({
+      expect(result.s3Connected).toBe(true);
+      expect(result.locations).toHaveLength(4);
+      expect(result.locations[0]).toMatchObject({
         id: 'bucket-1',
         name: 'bucket-1',
         type: 's3',
         status: 'available',
       });
-      expect(locations[2]).toEqual({
+      expect(result.locations[2]).toEqual({
         id: 'local-0',
         name: 'pvc-data',
         type: 'pvc',
         status: 'available',
         error: undefined,
       });
-      expect(locations[3].status).toBe('unavailable');
+      expect(result.locations[3].status).toBe('unavailable');
     });
 
     it('should cache results after first call', async () => {
@@ -81,7 +88,8 @@ describe('storageService', () => {
       jest.resetAllMocks();
 
       const cached = await storageService.getLocations('test-ns');
-      expect(cached).toHaveLength(4);
+      expect(cached.locations).toHaveLength(4);
+      expect(cached.s3Connected).toBe(true);
       expect(mockApiClient.get).not.toHaveBeenCalled();
     });
 
@@ -92,9 +100,10 @@ describe('storageService', () => {
         return Promise.reject(new Error('unexpected'));
       });
 
-      const locations = await storageService.refreshLocations('test-ns');
-      expect(locations).toHaveLength(2);
-      expect(locations[0].type).toBe('pvc');
+      const result = await storageService.refreshLocations('test-ns');
+      expect(result.s3Connected).toBe(false);
+      expect(result.locations).toHaveLength(2);
+      expect(result.locations[0].type).toBe('pvc');
     });
 
     it('should gracefully handle local storage failure', async () => {
@@ -104,9 +113,22 @@ describe('storageService', () => {
         return Promise.reject(new Error('unexpected'));
       });
 
-      const locations = await storageService.refreshLocations('test-ns');
-      expect(locations).toHaveLength(2);
-      expect(locations[0].type).toBe('s3');
+      const result = await storageService.refreshLocations('test-ns');
+      expect(result.s3Connected).toBe(true);
+      expect(result.locations).toHaveLength(2);
+      expect(result.locations[0].type).toBe('s3');
+    });
+
+    it('should return s3Connected true when S3 is configured but has no buckets', async () => {
+      mockApiClient.get.mockImplementation((_ns, path) => {
+        if (path === '/buckets') return Promise.resolve({ buckets: [], s3Connected: true });
+        if (path === '/local/locations') return Promise.resolve({ locations: [] });
+        return Promise.reject(new Error('unexpected'));
+      });
+
+      const result = await storageService.refreshLocations('test-ns');
+      expect(result.s3Connected).toBe(true);
+      expect(result.locations).toHaveLength(0);
     });
   });
 
@@ -143,36 +165,76 @@ describe('storageService', () => {
   });
 
   describe('listFiles', () => {
-    it('should list S3 objects with encoded path', async () => {
-      const mockResponse = { files: [], isTruncated: false };
-      mockApiClient.get.mockResolvedValue(mockResponse);
+    it('should list S3 objects with encoded path and transform response', async () => {
+      const rawS3Response: RawS3ListResponse = {
+        objects: [
+          { Key: 'some/path/file.txt', Size: 1024, LastModified: '2024-01-01T00:00:00Z', ETag: '"abc123"' },
+        ],
+        prefixes: [
+          { Prefix: 'some/path/subdir/' },
+        ],
+        nextContinuationToken: null,
+        isTruncated: false,
+      };
+      mockApiClient.get.mockResolvedValue(rawS3Response);
 
       const location = { id: 'my-bucket', name: 'my-bucket', type: 's3' as const, status: 'available' as const };
-      await storageService.listFiles('ns', location, 'some/path');
+      const result = await storageService.listFiles('ns', location, 'some/path');
 
       expect(mockApiClient.get).toHaveBeenCalledWith(
         'ns',
         expect.stringContaining('/objects/my-bucket/'),
         undefined,
       );
+      expect(result.files).toHaveLength(2);
+      expect(result.files[0]).toEqual({ name: 'subdir', isDirectory: true });
+      expect(result.files[1]).toEqual({
+        name: 'file.txt',
+        isDirectory: false,
+        size: 1024,
+        lastModified: '2024-01-01T00:00:00Z',
+        etag: '"abc123"',
+      });
     });
 
-    it('should list local files with encoded path', async () => {
-      const mockResponse = { files: [], totalCount: 0 };
-      mockApiClient.get.mockResolvedValue(mockResponse);
+    it('should list local files with encoded path and transform response', async () => {
+      const rawLocalResponse: RawLocalListResponse = {
+        files: [
+          { name: 'docs', path: 'docs', type: 'directory', size: 4096, modified: '2024-03-01T00:00:00Z' },
+          { name: 'readme.txt', path: 'readme.txt', type: 'file', size: 512, modified: '2024-02-15T00:00:00Z' },
+        ],
+        currentPath: '',
+        parentPath: null,
+        totalCount: 2,
+      };
+      mockApiClient.get.mockResolvedValue(rawLocalResponse);
 
       const location = { id: 'local-0', name: 'pvc-data', type: 'pvc' as const, status: 'available' as const };
-      await storageService.listFiles('ns', location, '/data');
+      const result = await storageService.listFiles('ns', location, '/data');
 
       expect(mockApiClient.get).toHaveBeenCalledWith(
         'ns',
         expect.stringContaining('/local/files/local-0/'),
         undefined,
       );
+      expect(result.files).toHaveLength(2);
+      expect(result.files[0]).toEqual({
+        name: 'docs',
+        isDirectory: true,
+        size: 4096,
+        lastModified: '2024-03-01T00:00:00Z',
+      });
+      expect(result.files[1]).toEqual({
+        name: 'readme.txt',
+        isDirectory: false,
+        size: 512,
+        lastModified: '2024-02-15T00:00:00Z',
+      });
+      expect(result.totalCount).toBe(2);
     });
 
     it('should pass S3 pagination params', async () => {
-      mockApiClient.get.mockResolvedValue({ files: [] });
+      mockApiClient.get.mockResolvedValue({ objects: [], prefixes: [], isTruncated: false });
 
       const location = { id: 'bucket', name: 'bucket', type: 's3' as const, status: 'available' as const };
       await storageService.listFiles('ns', location, '', {
@@ -193,7 +255,7 @@ describe('storageService', () => {
     });
 
     it('should not drop maxKeys=0', async () => {
-      mockApiClient.get.mockResolvedValue({ files: [] });
+      mockApiClient.get.mockResolvedValue({ objects: [], prefixes: [], isTruncated: false });
 
       const location = { id: 'bucket', name: 'bucket', type: 's3' as const, status: 'available' as const };
       await storageService.listFiles('ns', location, '', { maxKeys: 0 });
@@ -214,7 +276,7 @@ describe('storageService', () => {
     });
 
     it('should send search as q param with mode', async () => {
-      mockApiClient.get.mockResolvedValue({ files: [] });
+      mockApiClient.get.mockResolvedValue({ objects: [], prefixes: [], isTruncated: false });
 
       const location = { id: 'bucket', name: 'bucket', type: 's3' as const, status: 'available' as const };
       await storageService.listFiles('ns', location, '', {
@@ -299,5 +361,241 @@ describe('storageService', () => {
       expect(mockApiClient.getDownloadUrl).toHaveBeenCalledWith('ns', '/transfer/progress/j4');
       expect(url).toBe('/brewet/api/ns/transfer/progress/j4');
     });
+  });
+});
+
+describe('transformS3Response', () => {
+  it('should map objects to FileInfo with isDirectory: false', () => {
+    const raw: RawS3ListResponse = {
+      objects: [
+        { Key: 'prefix/file1.txt', Size: 100, LastModified: '2024-01-01T00:00:00Z', ETag: '"etag1"' },
+        { Key: 'prefix/file2.json', Size: 200 },
+      ],
+      prefixes: [],
+      nextContinuationToken: null,
+      isTruncated: false,
+    };
+
+    const result = transformS3Response(raw);
+
+    expect(result.files).toHaveLength(2);
+    expect(result.files[0]).toEqual({
+      name: 'file1.txt',
+      isDirectory: false,
+      size: 100,
+      lastModified: '2024-01-01T00:00:00Z',
+      etag: '"etag1"',
+    });
+    expect(result.files[1]).toEqual({
+      name: 'file2.json',
+      isDirectory: false,
+      size: 200,
+      lastModified: undefined,
+      etag: undefined,
+    });
+  });
+
+  it('should map prefixes to FileInfo with isDirectory: true', () => {
+    const raw: RawS3ListResponse = {
+      objects: [],
+      prefixes: [
+        { Prefix: 'data/models/' },
+        { Prefix: 'data/configs/' },
+      ],
+      nextContinuationToken: null,
+      isTruncated: false,
+    };
+
+    const result = transformS3Response(raw);
+
+    expect(result.files).toHaveLength(2);
+    expect(result.files[0]).toEqual({ name: 'models', isDirectory: true });
+    expect(result.files[1]).toEqual({ name: 'configs', isDirectory: true });
+  });
+
+  it('should skip folder marker objects (keys ending with /)', () => {
+    const raw: RawS3ListResponse = {
+      objects: [
+        { Key: 'data/', Size: 0 },
+        { Key: 'data/real-file.txt', Size: 50 },
+      ],
+      prefixes: [],
+      nextContinuationToken: null,
+      isTruncated: false,
+    };
+
+    const result = transformS3Response(raw);
+
+    expect(result.files).toHaveLength(1);
+    expect(result.files[0].name).toBe('real-file.txt');
+  });
+
+  it('should map nextContinuationToken to continuationToken', () => {
+    const raw: RawS3ListResponse = {
+      objects: [],
+      prefixes: [],
+      nextContinuationToken: 'abc123',
+      isTruncated: true,
+    };
+
+    const result = transformS3Response(raw);
+
+    expect(result.continuationToken).toBe('abc123');
+    expect(result.isTruncated).toBe(true);
+  });
+
+  it('should set continuationToken to undefined when nextContinuationToken is null', () => {
+    const raw: RawS3ListResponse = {
+      objects: [],
+      prefixes: [],
+      nextContinuationToken: null,
+      isTruncated: false,
+    };
+
+    const result = transformS3Response(raw);
+
+    expect(result.continuationToken).toBeUndefined();
+    expect(result.isTruncated).toBe(false);
+  });
+
+  it('should handle undefined objects and prefixes', () => {
+    const raw: RawS3ListResponse = {
+      nextContinuationToken: null,
+      isTruncated: false,
+    };
+
+    const result = transformS3Response(raw);
+
+    expect(result.files).toHaveLength(0);
+  });
+
+  it('should place directories before files', () => {
+    const raw: RawS3ListResponse = {
+      objects: [
+        { Key: 'a-file.txt', Size: 10 },
+      ],
+      prefixes: [
+        { Prefix: 'z-folder/' },
+      ],
+      nextContinuationToken: null,
+      isTruncated: false,
+    };
+
+    const result = transformS3Response(raw);
+
+    expect(result.files).toHaveLength(2);
+    expect(result.files[0]).toEqual({ name: 'z-folder', isDirectory: true });
+    expect(result.files[1].name).toBe('a-file.txt');
+    expect(result.files[1].isDirectory).toBe(false);
+  });
+
+  it('should extract leaf name from nested keys', () => {
+    const raw: RawS3ListResponse = {
+      objects: [
+        { Key: 'a/b/c/deep-file.txt', Size: 5 },
+      ],
+      prefixes: [
+        { Prefix: 'a/b/c/deep-folder/' },
+      ],
+      nextContinuationToken: null,
+      isTruncated: false,
+    };
+
+    const result = transformS3Response(raw);
+
+    expect(result.files[0].name).toBe('deep-folder');
+    expect(result.files[1].name).toBe('deep-file.txt');
+  });
+});
+
+describe('transformLocalResponse', () => {
+  it('should map type=directory to isDirectory: true', () => {
+    const raw: RawLocalListResponse = {
+      files: [
+        { name: 'models', path: 'models', type: 'directory', size: 4096, modified: '2024-06-01T12:00:00Z' },
+      ],
+      totalCount: 1,
+    };
+
+    const result = transformLocalResponse(raw);
+
+    expect(result.files).toHaveLength(1);
+    expect(result.files[0]).toEqual({
+      name: 'models',
+      isDirectory: true,
+      size: 4096,
+      lastModified: '2024-06-01T12:00:00Z',
+    });
+  });
+
+  it('should map type=file to isDirectory: false', () => {
+    const raw: RawLocalListResponse = {
+      files: [
+        { name: 'data.csv', path: 'data.csv', type: 'file', size: 2048, modified: '2024-05-15T08:30:00Z' },
+      ],
+      totalCount: 1,
+    };
+
+    const result = transformLocalResponse(raw);
+
+    expect(result.files[0]).toEqual({
+      name: 'data.csv',
+      isDirectory: false,
+      size: 2048,
+      lastModified: '2024-05-15T08:30:00Z',
+    });
+  });
+
+  it('should map type=symlink to isDirectory: false', () => {
+    const raw: RawLocalListResponse = {
+      files: [
+        { name: 'link.txt', path: 'link.txt', type: 'symlink', size: 100 },
+      ],
+      totalCount: 1,
+    };
+
+    const result = transformLocalResponse(raw);
+
+    expect(result.files[0].isDirectory).toBe(false);
+    expect(result.files[0].lastModified).toBeUndefined();
+  });
+
+  it('should preserve totalCount from the raw response', () => {
+    const raw: RawLocalListResponse = {
+      files: [
+        { name: 'a.txt', path: 'a.txt', type: 'file', size: 10 },
+      ],
+      totalCount: 50,
+    };
+
+    const result = transformLocalResponse(raw);
+
+    expect(result.totalCount).toBe(50);
+    expect(result.files).toHaveLength(1);
+  });
+
+  it('should handle empty file list', () => {
+    const raw: RawLocalListResponse = {
+      files: [],
+      totalCount: 0,
+    };
+
+    const result = transformLocalResponse(raw);
+
+    expect(result.files).toHaveLength(0);
+    expect(result.totalCount).toBe(0);
+  });
+
+  it('should map modified to lastModified', () => {
+    const raw: RawLocalListResponse = {
+      files: [
+        { name: 'test.txt', path: 'test.txt', type: 'file', modified: '2024-12-25T00:00:00Z' },
+      ],
+      totalCount: 1,
+    };
+
+    const result = transformLocalResponse(raw);
+
+    expect(result.files[0].lastModified).toBe('2024-12-25T00:00:00Z');
   });
 });

@@ -1,11 +1,18 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { ContainerConfig } from '~/app/types/k8s';
-import { buildDeployment, buildService, buildNetworkPolicy, DEPLOYMENT_NAME } from '~/app/utils/k8sResources';
+import {
+  buildDeployment,
+  buildService,
+  buildNetworkPolicy,
+  buildSettingsSecret,
+  DEPLOYMENT_NAME,
+  SETTINGS_SECRET_NAME,
+} from '~/app/utils/k8sResources';
 
-const BFF_NAMESPACE = process.env.BFF_NAMESPACE ?? 'brewet';
+const BFF_NAMESPACE = process.env.BFF_NAMESPACE ?? 'cp-brewet';
 
-interface CreateResourceResult {
+export interface CreateResourceResult {
   resource: string;
   success: boolean;
   error?: string;
@@ -89,6 +96,7 @@ export function useBrewetContainer() {
       { name: 'NetworkPolicy', url: `/api/k8s/apis/networking.k8s.io/v1/namespaces/${ns}/networkpolicies/${DEPLOYMENT_NAME}-ingress` },
       { name: 'Service', url: `/api/k8s/api/v1/namespaces/${ns}/services/${DEPLOYMENT_NAME}` },
       { name: 'Deployment', url: `/api/k8s/apis/apps/v1/namespaces/${ns}/deployments/${DEPLOYMENT_NAME}` },
+      { name: 'Secret', url: `/api/k8s/api/v1/namespaces/${ns}/secrets/${SETTINGS_SECRET_NAME}` },
     ];
 
     try {
@@ -128,6 +136,12 @@ export function useBrewetContainer() {
 
       const resourceSpecs = [
         {
+          name: 'Secret',
+          createUrl: `/api/k8s/api/v1/namespaces/${ns}/secrets`,
+          deleteUrl: `/api/k8s/api/v1/namespaces/${ns}/secrets/${SETTINGS_SECRET_NAME}`,
+          body: buildSettingsSecret(selectedProject, config.settings),
+        },
+        {
           name: 'Deployment',
           createUrl: `/api/k8s/apis/apps/v1/namespaces/${ns}/deployments`,
           deleteUrl: `/api/k8s/apis/apps/v1/namespaces/${ns}/deployments/${DEPLOYMENT_NAME}`,
@@ -149,12 +163,20 @@ export function useBrewetContainer() {
 
       try {
         for (const { name, createUrl, deleteUrl, body } of resourceSpecs) {
-          const res = await fetch(createUrl, {
+          let res = await fetch(createUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
             signal: controller.signal,
           });
+          if (res.status === 409) {
+            res = await fetch(deleteUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+              signal: controller.signal,
+            });
+          }
           if (!res.ok) {
             const text = await res.text().catch(() => '');
             results.push({ resource: name, success: false, error: `${res.status}: ${text}` });
@@ -206,25 +228,52 @@ export function useBrewetContainer() {
       const results: CreateResourceResult[] = [];
 
       const deployment = buildDeployment(selectedProject, config);
+      const settingsSecret = buildSettingsSecret(selectedProject, config.settings);
 
       try {
-        const res = await fetch(
-          `/api/k8s/apis/apps/v1/namespaces/${ns}/deployments/${DEPLOYMENT_NAME}`,
+        const secretRes = await fetch(
+          `/api/k8s/api/v1/namespaces/${ns}/secrets/${SETTINGS_SECRET_NAME}`,
           {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/strategic-merge-patch+json' },
-            body: JSON.stringify({
-              spec: deployment.spec,
-            }),
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settingsSecret),
             signal: controller.signal,
           },
         );
-        if (!res.ok) {
-          const text = await res.text().catch(() => '');
-          results.push({ resource: 'Deployment', success: false, error: `${res.status}: ${text}` });
+        if (!secretRes.ok) {
+          const text = await secretRes.text().catch(() => '');
+          results.push({ resource: 'Secret', success: false, error: `${secretRes.status}: ${text}` });
         } else {
-          results.push({ resource: 'Deployment', success: true });
+          results.push({ resource: 'Secret', success: true });
         }
+
+        if (results.every((r) => r.success)) {
+          const deployUrl = `/api/k8s/apis/apps/v1/namespaces/${ns}/deployments/${DEPLOYMENT_NAME}`;
+          const getRes = await fetch(deployUrl, { signal: controller.signal });
+          if (!getRes.ok) {
+            const text = await getRes.text().catch(() => '');
+            results.push({ resource: 'Deployment', success: false, error: `${getRes.status}: ${text}` });
+          } else {
+            const current = await getRes.json();
+            const updated = {
+              ...deployment,
+              metadata: { ...deployment.metadata, resourceVersion: current.metadata.resourceVersion as string },
+            };
+            const res = await fetch(deployUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(updated),
+              signal: controller.signal,
+            });
+            if (!res.ok) {
+              const text = await res.text().catch(() => '');
+              results.push({ resource: 'Deployment', success: false, error: `${res.status}: ${text}` });
+            } else {
+              results.push({ resource: 'Deployment', success: true });
+            }
+          }
+        }
+
         if (results.every((r) => r.success)) {
           scheduleRefresh();
         }

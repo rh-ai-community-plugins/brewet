@@ -21,6 +21,11 @@ beforeEach(() => {
   mockUseBrewetContext.mockReturnValue({
     selectedProject: 'test-ns',
     setSelectedProject: jest.fn(),
+    projects: [],
+    projectsLoading: false,
+    projectsError: null,
+    refreshProjects: jest.fn(),
+    addProject: jest.fn(),
     containerStatus: 'running',
     containerInfo: null,
     refreshContainerStatus: jest.fn(),
@@ -39,13 +44,12 @@ beforeEach(() => {
     updateContainer: jest.fn().mockResolvedValue([]),
     refreshContainerStatus: jest.fn(),
   });
-  mockStorageService.getLocations.mockResolvedValue([]);
+  mockStorageService.getLocations.mockResolvedValue({ locations: [], s3Connected: false });
 });
 
 describe('StorageBrowserPage', () => {
-  it('should render the page title', async () => {
+  it('should render page content', async () => {
     render(<StorageBrowserPage />);
-    expect(screen.getByText('Storage Browser')).toBeInTheDocument();
     await waitFor(() => {
       expect(mockStorageService.getLocations).toHaveBeenCalled();
     });
@@ -58,6 +62,11 @@ describe('StorageBrowserPage', () => {
       containerStatus: 'none',
       containerInfo: null,
       refreshContainerStatus: jest.fn(),
+      projects: [],
+      projectsLoading: false,
+      projectsError: null,
+      refreshProjects: jest.fn(),
+      addProject: jest.fn(),
       isActioning: false,
       setIsActioning: jest.fn(),
     });

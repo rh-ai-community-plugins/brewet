@@ -11,7 +11,11 @@ import { handleS3Error } from '../../../utils/s3-errors';
 
 export default async (fastify: FastifyInstance): Promise<void> => {
   fastify.get('/', async (_req: FastifyRequest, reply: FastifyReply) => {
-    const { s3Client, defaultBucket } = getS3Config();
+    const { s3Client, endpoint, accessKeyId, defaultBucket } = getS3Config();
+
+    if (!endpoint || !accessKeyId) {
+      return reply.send({ s3Connected: false, owner: null, defaultBucket: '', buckets: [] });
+    }
 
     try {
       const { Owner, Buckets } = await s3Client.send(new ListBucketsCommand({}));
@@ -28,7 +32,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         }
       }
 
-      reply.send({ owner: Owner, defaultBucket, buckets: accessibleBuckets });
+      reply.send({ s3Connected: true, owner: Owner, defaultBucket, buckets: accessibleBuckets });
     } catch (error) {
       return handleS3Error(error, reply);
     }

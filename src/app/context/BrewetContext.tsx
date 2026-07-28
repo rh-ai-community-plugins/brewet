@@ -1,4 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useProjects, Project } from '~/app/hooks/useProjects';
+import { useFavoriteProjects } from '~/app/hooks/useFavoriteProjects';
+import { storageService } from '~/app/services/storageService';
 
 export type ContainerStatus = 'none' | 'stopped' | 'running' | 'starting' | 'error';
 
@@ -8,6 +12,7 @@ export interface ContainerInfo {
   replicas: number;
   readyReplicas: number;
   creationTimestamp?: string;
+  env?: Array<{ name: string; value: string }>;
   envFrom?: Array<{ secretRef: { name: string } }>;
   volumes?: Array<{ name: string; persistentVolumeClaim?: { claimName: string } }>;
   volumeMounts?: Array<{ name: string; mountPath: string }>;
@@ -16,6 +21,11 @@ export interface ContainerInfo {
 export interface BrewetContextValue {
   selectedProject: string | null;
   setSelectedProject: (project: string | null) => void;
+  projects: Project[];
+  projectsLoading: boolean;
+  projectsError: string | null;
+  refreshProjects: () => void;
+  addProject: (project: Project) => void;
   containerStatus: ContainerStatus;
   containerInfo: ContainerInfo | null;
   refreshContainerStatus: () => void;
@@ -38,6 +48,45 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return null;
     }
   });
+
+  const { projects, loading: projectsLoading, error: projectsError, refresh: refreshProjects, addProject } = useProjects();
+  const { favorites } = useFavoriteProjects();
+  const location = useLocation();
+  const selectedProjectRef = useRef(selectedProject);
+  selectedProjectRef.current = selectedProject;
+  const favoritesRef = useRef(favorites);
+  favoritesRef.current = favorites;
+
+  const refreshAndValidate = useCallback(() => {
+    refreshProjects().then((freshProjects) => {
+      if (freshProjects.length === 0) return;
+      const projectNames = freshProjects.map((p) => p.metadata.name);
+      if (selectedProjectRef.current && projectNames.includes(selectedProjectRef.current)) return;
+
+      const favoriteMatch = favoritesRef.current.find((f) => projectNames.includes(f));
+      const fallback = favoriteMatch ?? projectNames.sort((a, b) => a.localeCompare(b))[0] ?? null;
+      setSelectedProjectState(fallback);
+      try {
+        if (fallback) {
+          localStorage.setItem(STORAGE_KEY, fallback);
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      } catch {
+        // localStorage unavailable
+      }
+    });
+  }, [refreshProjects]);
+
+  useEffect(() => {
+    refreshAndValidate();
+  }, [location.pathname, refreshAndValidate]);
+
+  useEffect(() => {
+    const onFocus = () => refreshAndValidate();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refreshAndValidate]);
 
   const [containerStatus, setContainerStatus] = useState<ContainerStatus>('none');
   const [containerInfo, setContainerInfo] = useState<ContainerInfo | null>(null);
@@ -80,7 +129,7 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setContainerInfo(null);
           return null;
         }
-        if (!res.ok) throw new Error(`Failed to fetch container status: ${res.status}`);
+        if (!res.ok) throw new Error(`Failed to fetch Brewet status: ${res.status}`);
         return res.json();
       })
       .then((deployment) => {
@@ -96,6 +145,7 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const readyReplicas = deployment.status?.readyReplicas ?? 0;
 
         const containers: Array<{
+          env?: Array<{ name: string; value: string }>;
           envFrom?: Array<{ secretRef: { name: string } }>;
           volumeMounts?: Array<{ name: string; mountPath: string }>;
         }> = deployment.spec?.template?.spec?.containers ?? [];
@@ -107,6 +157,7 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           replicas,
           readyReplicas,
           creationTimestamp: deployment.metadata?.creationTimestamp,
+          env: primaryContainer.env ?? [],
           envFrom: primaryContainer.envFrom ?? [],
           volumes: deployment.spec?.template?.spec?.volumes ?? [],
           volumeMounts: primaryContainer.volumeMounts ?? [],
@@ -157,17 +208,66 @@ export const BrewetProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => clearInterval(intervalId);
   }, [containerStatus, refreshContainerStatus]);
 
+  const prevStatusRef = useRef<ContainerStatus>('none');
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = containerStatus;
+    if (containerStatus !== 'running' || prev === 'running' || !selectedProject) return;
+
+    storageService.readSettingsSecret(selectedProject).then((s) => {
+      const promises: Promise<unknown>[] = [
+        storageService.updateProxySettings(selectedProject, {
+          httpProxy: s.httpProxy ?? '',
+          httpsProxy: s.httpsProxy ?? '',
+        }),
+        storageService.updateHuggingFaceSettings(selectedProject, {
+          hfToken: s.hfToken ?? '',
+        }),
+        storageService.updateMaxConcurrentTransfers(
+          selectedProject,
+          s.maxConcurrentTransfers ?? 2,
+        ),
+        storageService.updateMaxFilesPerPage(
+          selectedProject,
+          s.maxFilesPerPage ?? 100,
+        ),
+      ];
+      if (s.allowedFileExtensions || s.blockedFileExtensions) {
+        const allowed = s.allowedFileExtensions
+          ? s.allowedFileExtensions.split(',').map((e) => e.trim()).filter(Boolean)
+          : [];
+        const blocked = s.blockedFileExtensions
+          ? s.blockedFileExtensions.split(',').map((e) => e.trim()).filter(Boolean)
+          : [];
+        if (allowed.length > 0 || blocked.length > 0) {
+          promises.push(
+            storageService.updateFileExtensions(selectedProject, {
+              allowedExtensions: allowed,
+              blockedExtensions: blocked,
+            }),
+          );
+        }
+      }
+      Promise.all(promises).catch(() => {});
+    }).catch(() => {});
+  }, [containerStatus, selectedProject]);
+
   const contextValue = useMemo(
     () => ({
       selectedProject,
       setSelectedProject,
+      projects,
+      projectsLoading,
+      projectsError,
+      refreshProjects: refreshAndValidate,
+      addProject,
       containerStatus,
       containerInfo,
       refreshContainerStatus,
       isActioning,
       setIsActioning,
     }),
-    [selectedProject, setSelectedProject, containerStatus, containerInfo, refreshContainerStatus, isActioning],
+    [selectedProject, setSelectedProject, projects, projectsLoading, projectsError, refreshAndValidate, addProject, containerStatus, containerInfo, refreshContainerStatus, isActioning],
   );
 
   return <BrewetContext.Provider value={contextValue}>{children}</BrewetContext.Provider>;

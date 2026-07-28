@@ -52,7 +52,7 @@ let envDev = fs.readFileSync(envDevPath, 'utf8');
 
 before = envDev;
 envDev = envDev.replace(
-  /(STORAGE_BACKEND_IMAGE=quay\.io\/OWNER\/brewet-storage-backend:)\S+/,
+  /(STORAGE_BACKEND_IMAGE=quay\.io\/rh-ai-community-plugins\/brewet-storage-backend:)\S+/,
   `$1${version}`,
 );
 verifyReplace(before, envDev, `STORAGE_BACKEND_IMAGE tag in ${envDevPath}`);

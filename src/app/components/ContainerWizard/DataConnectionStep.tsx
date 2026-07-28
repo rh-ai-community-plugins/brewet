@@ -76,8 +76,8 @@ export const DataConnectionStep: React.FC<DataConnectionStepProps> = ({
       {dataConnections.length === 0 && (
         <StackItem>
           <Alert variant="info" isInline title="No Data Connections found">
-            No S3 Data Connections were found in this project. You can still create a
-            container with PVC storage only, or create a Data Connection in the RHOAI
+            No S3 Data Connections were found in this project. You can still set up
+            Brewet with PVC storage only, or create a Data Connection in the RHOAI
             dashboard first.
           </Alert>
         </StackItem>

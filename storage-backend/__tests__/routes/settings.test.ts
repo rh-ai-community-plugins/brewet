@@ -40,6 +40,90 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+describe('PUT /api/settings/s3', () => {
+  const validS3Payload = {
+    accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+    secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+    region: 'us-east-1',
+    endpoint: 'https://s3.amazonaws.com',
+    defaultBucket: 'my-bucket',
+  };
+
+  it('updates S3 settings with a valid external endpoint', async () => {
+    const { updateS3Config } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/s3',
+      payload: validS3Payload,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ message: 'Settings updated successfully' });
+    expect(updateS3Config).toHaveBeenCalled();
+  });
+
+  it('accepts endpoint pointing to internal addresses (storage backend is cluster-internal)', async () => {
+    const { updateS3Config } = require('../../src/utils/config');
+    for (const endpoint of [
+      'http://localhost:9000',
+      'http://10.0.0.1:9000',
+      'http://169.254.169.254/latest/meta-data/',
+      'http://my-service.default.svc.cluster.local:9000',
+    ]) {
+      jest.clearAllMocks();
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/api/settings/s3',
+        payload: { ...validS3Payload, endpoint },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(updateS3Config).toHaveBeenCalled();
+    }
+  });
+});
+
+describe('PUT /api/settings/proxy', () => {
+  it('updates proxy settings with valid external URLs', async () => {
+    const { updateProxyConfig } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/proxy',
+      payload: { httpProxy: 'http://proxy.example.com:8080', httpsProxy: 'https://proxy.example.com:8443' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ message: 'Settings updated successfully' });
+    expect(updateProxyConfig).toHaveBeenCalled();
+  });
+
+  it('accepts proxy pointing to internal addresses (storage backend is cluster-internal)', async () => {
+    const { updateProxyConfig } = require('../../src/utils/config');
+    for (const payload of [
+      { httpProxy: 'http://localhost:8080' },
+      { httpsProxy: 'https://192.168.1.1:3128' },
+      { httpProxy: 'http://proxy.kube-system.svc.cluster.local:3128' },
+    ]) {
+      jest.clearAllMocks();
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/api/settings/proxy',
+        payload,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(updateProxyConfig).toHaveBeenCalled();
+    }
+  });
+
+  it('allows clearing proxy settings with empty strings', async () => {
+    const { updateProxyConfig } = require('../../src/utils/config');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/settings/proxy',
+      payload: { httpProxy: '', httpsProxy: '' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(updateProxyConfig).toHaveBeenCalledWith('', '');
+  });
+});
+
 describe('GET /api/settings/max-concurrent-transfers', () => {
   it('returns the current max concurrent transfers', async () => {
     const response = await app.inject({

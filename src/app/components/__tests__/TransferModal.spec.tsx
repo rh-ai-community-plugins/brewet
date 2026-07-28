@@ -57,6 +57,7 @@ function cleanupEventSourceMock() {
 describe('TransferModal', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockService.listFiles.mockResolvedValue({ files: [] });
   });
 
   afterEach(() => {

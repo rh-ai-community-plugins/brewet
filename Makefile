@@ -4,6 +4,7 @@
 REGISTRY       ?= quay.io/rh-ai-community-plugins
 FRONTEND_IMAGE ?= brewet
 BFF_IMAGE      ?= brewet-bff
+SB_IMAGE       ?= brewet-storage-backend
 CHART_NAME     ?= brewet-chart  # used by help display only; chart-package/chart-push use chart/ directly
 VERSION        ?=
 BUILDER        ?= podman
@@ -131,10 +132,10 @@ dev-storage-backend: ## Start storage backend dev server (port 8888)
 # Container images
 # ──────────────────────────────────────────────
 
-.PHONY: image-build image-build-frontend image-build-bff
-.PHONY: image-push image-push-frontend image-push-bff image-scan
+.PHONY: image-build image-build-frontend image-build-bff image-build-storage-backend
+.PHONY: image-push image-push-frontend image-push-bff image-push-storage-backend image-scan
 
-image-build: image-build-frontend image-build-bff ## Build container images
+image-build: image-build-frontend image-build-bff image-build-storage-backend ## Build container images
 
 image-build-frontend:
 	$(BUILDER) build -t $(REGISTRY)/$(FRONTEND_IMAGE):$(IMAGE_TAG) -f Containerfile .
@@ -142,7 +143,10 @@ image-build-frontend:
 image-build-bff:
 	$(BUILDER) build -t $(REGISTRY)/$(BFF_IMAGE):$(IMAGE_TAG) -f bff/Containerfile bff/
 
-image-push: ## Build and push container images (frontend + BFF)
+image-build-storage-backend:
+	$(BUILDER) build -t $(REGISTRY)/$(SB_IMAGE):$(IMAGE_TAG) -f storage-backend/Containerfile storage-backend/
+
+image-push: ## Build and push container images (frontend + BFF + storage-backend)
 	./scripts/build-push.sh all $(VERSION)
 
 image-push-frontend: ## Build and push frontend container image only
@@ -150,6 +154,9 @@ image-push-frontend: ## Build and push frontend container image only
 
 image-push-bff: ## Build and push BFF container image only
 	./scripts/build-push.sh bff $(VERSION)
+
+image-push-storage-backend: ## Build and push storage-backend container image only
+	./scripts/build-push.sh storage-backend $(VERSION)
 
 image-scan: ## Build and scan images for vulnerabilities
 	BUILDER=$(BUILDER) IMAGE_TAG=$(IMAGE_TAG) ./scripts/scan-image.sh all $(SEVERITY)
@@ -191,6 +198,7 @@ help: ## Show this help
 	@printf "  \033[33m%-20s\033[0m %s (default: %s)\n" "REGISTRY"       "Container image registry"             "$(REGISTRY)"
 	@printf "  \033[33m%-20s\033[0m %s (default: %s)\n" "FRONTEND_IMAGE" "Frontend image name"                  "$(FRONTEND_IMAGE)"
 	@printf "  \033[33m%-20s\033[0m %s (default: %s)\n" "BFF_IMAGE"      "BFF image name"                       "$(BFF_IMAGE)"
+	@printf "  \033[33m%-20s\033[0m %s (default: %s)\n" "SB_IMAGE"       "Storage backend image name"            "$(SB_IMAGE)"
 	@printf "  \033[33m%-20s\033[0m %s (default: %s)\n" "CHART_NAME"     "Helm chart name"                      "$(CHART_NAME)"
 	@printf "  \033[33m%-20s\033[0m %s (default: %s)\n" "VERSION"        "Release version for image-push"       "auto-computed from git tags"
 	@printf "  \033[33m%-20s\033[0m %s (default: %s)\n" "BUILDER"        "Container build tool"                 "$(BUILDER)"

@@ -21,7 +21,7 @@ const mockSecrets = [
     metadata: {
       name: 'another-s3',
       namespace: 'test-ns',
-      annotations: { 'opendatahub.io/connection-type': 's3' },
+      annotations: { 'opendatahub.io/connection-type-ref': 's3' },
     },
   },
 ];

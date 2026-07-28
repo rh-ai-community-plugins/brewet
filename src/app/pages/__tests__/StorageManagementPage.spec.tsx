@@ -41,6 +41,11 @@ function setupMocks(overrides?: { containerStatus?: string }) {
   mockUseBrewetContext.mockReturnValue({
     selectedProject: 'test-ns',
     setSelectedProject: jest.fn(),
+    projects: [],
+    projectsLoading: false,
+    projectsError: null,
+    refreshProjects: jest.fn(),
+    addProject: jest.fn(),
     containerStatus: (overrides?.containerStatus ?? 'running') as 'running',
     containerInfo: null,
     refreshContainerStatus: jest.fn(),
@@ -59,8 +64,8 @@ function setupMocks(overrides?: { containerStatus?: string }) {
     updateContainer: jest.fn().mockResolvedValue([]),
     refreshContainerStatus: jest.fn(),
   });
-  mockStorageService.getLocations.mockResolvedValue(mockLocations);
-  mockStorageService.refreshLocations.mockResolvedValue(mockLocations);
+  mockStorageService.getLocations.mockResolvedValue({ locations: mockLocations, s3Connected: true });
+  mockStorageService.refreshLocations.mockResolvedValue({ locations: mockLocations, s3Connected: true });
   mockStorageService.getBucketsList.mockResolvedValue(mockBucketsList);
 }
 
@@ -71,12 +76,11 @@ describe('StorageManagementPage', () => {
     setupMocks();
   });
 
-  it('should render the page title', async () => {
+  it('should render page content', async () => {
     render(<StorageManagementPage />);
     await waitFor(() => {
       expect(screen.getByText('bucket-1')).toBeInTheDocument();
     });
-    expect(screen.getByText('Storage Management')).toBeInTheDocument();
   });
 
   it('should show loading spinner initially', () => {
@@ -213,7 +217,7 @@ describe('StorageManagementPage', () => {
 
     await userEvent.click(screen.getByLabelText('Refresh'));
     await waitFor(() => {
-      expect(mockStorageService.refreshLocations).toHaveBeenCalledWith('test-ns');
+      expect(mockStorageService.refreshLocations).toHaveBeenCalledWith('test-ns', undefined);
     });
   });
 });

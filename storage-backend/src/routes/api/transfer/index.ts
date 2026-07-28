@@ -49,6 +49,7 @@ interface TransferRequest {
   destination: string;
   items: TransferItem[];
   conflictResolution?: 'overwrite' | 'skip' | 'rename';
+  deleteSource?: boolean;
 }
 
 interface ConflictCheckRequest {
@@ -632,6 +633,19 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         await transferLocalToS3(file, signal, onProgress, sourceLocationId, destLocationId, destPath);
       } else {
         await transferLocalToLocal(file, signal, onProgress, sourceLocationId, destLocationId, destPath);
+      }
+
+      if (body.deleteSource) {
+        if (sourceType === 's3') {
+          const { s3Client } = getS3Config();
+          await s3Client.send(new DeleteObjectCommand({
+            Bucket: sourceLocationId,
+            Key: file.sourcePath,
+          }));
+        } else {
+          const absPath = await resolveLocalPath(sourceLocationId, file.sourcePath);
+          await fs.unlink(absPath);
+        }
       }
     };
 

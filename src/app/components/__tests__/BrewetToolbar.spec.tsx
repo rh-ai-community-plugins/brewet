@@ -4,6 +4,11 @@ import { BrewetToolbar } from '../BrewetToolbar';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { useBrewetContainer } from '~/app/hooks/useBrewetContainer';
 
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useLocation: () => ({ pathname: '/storage/browse' }),
+}));
+
 jest.mock('~/app/context/BrewetContext');
 jest.mock('~/app/hooks/useBrewetContainer');
 
@@ -24,6 +29,11 @@ function mockContext(overrides: Partial<ReturnType<typeof useBrewetContext>> = {
   mockUseBrewetContext.mockReturnValue({
     selectedProject: null,
     setSelectedProject: jest.fn(),
+    projects: [],
+    projectsLoading: false,
+    projectsError: null,
+    refreshProjects: jest.fn(),
+    addProject: jest.fn(),
     containerStatus: 'none',
     containerInfo: null,
     refreshContainerStatus: jest.fn(),
@@ -65,7 +75,7 @@ describe('BrewetToolbar', () => {
     mockContext();
     mockContainer();
     render(<BrewetToolbar />);
-    expect(screen.queryByText('No Container')).not.toBeInTheDocument();
+    expect(screen.queryByText('Not Set Up')).not.toBeInTheDocument();
   });
 
   it('should show container status when a project is selected', () => {
@@ -79,14 +89,14 @@ describe('BrewetToolbar', () => {
     mockContext({ selectedProject: 'test-ns', containerStatus: 'running' });
     mockContainer();
     render(<BrewetToolbar />);
-    expect(screen.getByLabelText('Stop container')).toBeInTheDocument();
+    expect(screen.getByLabelText('Stop Brewet')).toBeInTheDocument();
   });
 
   it('should show start button when container is stopped', () => {
     mockContext({ selectedProject: 'test-ns', containerStatus: 'stopped' });
     mockContainer();
     render(<BrewetToolbar />);
-    expect(screen.getByLabelText('Start container')).toBeInTheDocument();
+    expect(screen.getByLabelText('Start Brewet')).toBeInTheDocument();
   });
 
   it('should call startContainer on start click', async () => {
@@ -95,7 +105,7 @@ describe('BrewetToolbar', () => {
     mockContainer({ startContainer });
     render(<BrewetToolbar />);
 
-    await userEvent.click(screen.getByLabelText('Start container'));
+    await userEvent.click(screen.getByLabelText('Start Brewet'));
     expect(startContainer).toHaveBeenCalled();
   });
 
@@ -105,23 +115,23 @@ describe('BrewetToolbar', () => {
     mockContainer({ stopContainer });
     render(<BrewetToolbar />);
 
-    await userEvent.click(screen.getByLabelText('Stop container'));
+    await userEvent.click(screen.getByLabelText('Stop Brewet'));
     expect(stopContainer).toHaveBeenCalled();
   });
 
-  it('should show Create Container button when no container exists', () => {
+  it('should show Set Up Brewet button when no container exists', () => {
     mockContext({ selectedProject: 'test-ns', containerStatus: 'none' });
     mockContainer();
     render(<BrewetToolbar />);
-    expect(screen.getByText('Create Container')).toBeInTheDocument();
+    expect(screen.getByText('Set Up Brewet')).toBeInTheDocument();
   });
 
-  it('should open wizard when Create Container is clicked', async () => {
+  it('should open wizard when Set Up Brewet is clicked', async () => {
     mockContext({ selectedProject: 'test-ns', containerStatus: 'none' });
     mockContainer();
     render(<BrewetToolbar />);
 
-    await userEvent.click(screen.getByText('Create Container'));
+    await userEvent.click(screen.getByText('Set Up Brewet'));
     expect(screen.getByTestId('container-wizard')).toBeInTheDocument();
   });
 
@@ -129,8 +139,8 @@ describe('BrewetToolbar', () => {
     mockContext({ selectedProject: 'test-ns', containerStatus: 'running' });
     mockContainer();
     render(<BrewetToolbar />);
-    expect(screen.getByLabelText('Edit container configuration')).toBeInTheDocument();
-    expect(screen.getByLabelText('Delete container')).toBeInTheDocument();
+    expect(screen.getByLabelText('Edit Brewet configuration')).toBeInTheDocument();
+    expect(screen.getByLabelText('Delete Brewet')).toBeInTheDocument();
   });
 
   it('should show delete confirmation modal', async () => {
@@ -138,8 +148,8 @@ describe('BrewetToolbar', () => {
     mockContainer();
     render(<BrewetToolbar />);
 
-    await userEvent.click(screen.getByLabelText('Delete container'));
-    expect(screen.getByText('Delete storage container?')).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText('Delete Brewet'));
+    expect(screen.getByText('Delete Brewet?')).toBeInTheDocument();
   });
 
   it('should call deleteContainer on confirm delete', async () => {
@@ -148,7 +158,7 @@ describe('BrewetToolbar', () => {
     mockContainer({ deleteContainer });
     render(<BrewetToolbar />);
 
-    await userEvent.click(screen.getByLabelText('Delete container'));
+    await userEvent.click(screen.getByLabelText('Delete Brewet'));
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
@@ -162,13 +172,13 @@ describe('BrewetToolbar', () => {
     mockContainer({ deleteContainer });
     render(<BrewetToolbar />);
 
-    await userEvent.click(screen.getByLabelText('Delete container'));
-    expect(screen.getByText('Delete storage container?')).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText('Delete Brewet'));
+    expect(screen.getByText('Delete Brewet?')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
-      expect(screen.queryByText('Delete storage container?')).not.toBeInTheDocument();
+      expect(screen.queryByText('Delete Brewet?')).not.toBeInTheDocument();
     });
   });
 
@@ -178,12 +188,12 @@ describe('BrewetToolbar', () => {
     mockContainer({ deleteContainer });
     render(<BrewetToolbar />);
 
-    await userEvent.click(screen.getByLabelText('Delete container'));
+    await userEvent.click(screen.getByLabelText('Delete Brewet'));
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Delete storage container?')).toBeInTheDocument();
-      expect(screen.getByText('Failed to delete the storage container. Check your permissions and try again.')).toBeInTheDocument();
+      expect(screen.getByText('Delete Brewet?')).toBeInTheDocument();
+      expect(screen.getByText('Failed to delete Brewet. Check your permissions and try again.')).toBeInTheDocument();
     });
   });
 
@@ -193,17 +203,17 @@ describe('BrewetToolbar', () => {
     mockContainer({ deleteContainer });
     render(<BrewetToolbar />);
 
-    await userEvent.click(screen.getByLabelText('Delete container'));
+    await userEvent.click(screen.getByLabelText('Delete Brewet'));
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to delete the storage container. Check your permissions and try again.')).toBeInTheDocument();
+      expect(screen.getByText('Failed to delete Brewet. Check your permissions and try again.')).toBeInTheDocument();
     });
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    await userEvent.click(screen.getByLabelText('Delete container'));
-    expect(screen.queryByText('Failed to delete the storage container. Check your permissions and try again.')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText('Delete Brewet'));
+    expect(screen.queryByText('Failed to delete Brewet. Check your permissions and try again.')).not.toBeInTheDocument();
   });
 
   it('should disable buttons when isActioning is true', () => {
@@ -211,8 +221,8 @@ describe('BrewetToolbar', () => {
     mockContainer({ isActioning: true });
     render(<BrewetToolbar />);
 
-    expect(screen.getByLabelText('Stop container')).toBeDisabled();
-    expect(screen.getByLabelText('Edit container configuration')).toBeDisabled();
-    expect(screen.getByLabelText('Delete container')).toBeDisabled();
+    expect(screen.getByLabelText('Stop Brewet')).toBeDisabled();
+    expect(screen.getByLabelText('Edit Brewet configuration')).toBeDisabled();
+    expect(screen.getByLabelText('Delete Brewet')).toBeDisabled();
   });
 });

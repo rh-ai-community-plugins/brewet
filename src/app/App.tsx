@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import CommunityBanner from './components/CommunityBanner';
+import ErrorBoundary from './components/ErrorBoundary';
 import { BrewetProvider } from './context/BrewetContext';
 import { BrewetToolbar } from './components/BrewetToolbar';
 import StorageBrowserPage from './pages/StorageBrowserPage';
@@ -14,12 +15,14 @@ const App: React.FC = () => (
       <CommunityBanner />
       <div className="community-plugin-content">
         <BrewetToolbar />
-        <Routes>
-          <Route path="/" element={<Navigate to="storage/browse" replace />} />
-          <Route path="storage/browse/*" element={<StorageBrowserPage />} />
-          <Route path="storage/manage/*" element={<StorageManagementPage />} />
-          <Route path="settings/*" element={<SettingsPage />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<Navigate to="storage/browse" replace />} />
+            <Route path="storage/browse/*" element={<StorageBrowserPage />} />
+            <Route path="storage/manage/*" element={<StorageManagementPage />} />
+            <Route path="settings/*" element={<SettingsPage />} />
+          </Routes>
+        </ErrorBoundary>
       </div>
     </div>
   </BrewetProvider>

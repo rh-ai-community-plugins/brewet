@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Toolbar,
   ToolbarContent,
@@ -12,6 +13,7 @@ import {
   ModalHeader,
   Spinner,
   Alert,
+  Title,
 } from '@patternfly/react-core';
 import {
   PlayIcon,
@@ -25,8 +27,15 @@ import { useBrewetContext, ContainerStatus } from '~/app/context/BrewetContext';
 import { useBrewetContainer } from '~/app/hooks/useBrewetContainer';
 import { ContainerWizard } from '~/app/components/ContainerWizard';
 
+function getPageTitle(pathname: string): string {
+  if (pathname.includes('/storage/browse')) return 'Storage Browser';
+  if (pathname.includes('/storage/manage')) return 'Storage Management';
+  if (pathname.includes('/settings')) return 'Settings';
+  return 'Storage Browser';
+}
+
 const STATUS_CONFIG: Record<ContainerStatus, { text: string; color: 'grey' | 'green' | 'blue' | 'red' }> = {
-  none: { text: 'No Container', color: 'grey' },
+  none: { text: 'Not Set Up', color: 'grey' },
   stopped: { text: 'Stopped', color: 'grey' },
   running: { text: 'Running', color: 'green' },
   starting: { text: 'Starting', color: 'blue' },
@@ -72,7 +81,7 @@ export const BrewetToolbar: React.FC = () => {
       setIsDeleteModalOpen(false);
       setDeleteError(null);
     } else {
-      setDeleteError('Failed to delete the storage container. Check your permissions and try again.');
+      setDeleteError('Failed to delete Brewet. Check your permissions and try again.');
     }
   }, [deleteContainer]);
 
@@ -91,11 +100,19 @@ export const BrewetToolbar: React.FC = () => {
     setIsWizardOpen(true);
   }, []);
 
+  const location = useLocation();
+  const pageTitle = getPageTitle(location.pathname);
+
   return (
     <>
-      <Toolbar>
-        <ToolbarContent>
+      <Toolbar className="pf-v6-u-pl-md pf-v6-u-pt-sm pf-v6-u-pb-sm">
+        <ToolbarContent alignItems="center">
           <ToolbarItem>
+            <Title headingLevel="h1" size="lg">
+              {pageTitle}
+            </Title>
+          </ToolbarItem>
+          <ToolbarItem className="pf-v6-u-ml-lg">
             <ProjectSelector
               selectedProject={selectedProject}
               onSelect={setSelectedProject}
@@ -105,12 +122,14 @@ export const BrewetToolbar: React.FC = () => {
           {selectedProject && (
             <ToolbarGroup align={{ default: 'alignEnd' }}>
               <ToolbarItem>
-                <Label
-                  color={statusConfig.color}
-                  icon={containerStatus === 'starting' ? <Spinner size="sm" /> : undefined}
-                >
-                  {statusConfig.text}
-                </Label>
+                <span aria-live="polite">
+                  <Label
+                    color={statusConfig.color}
+                    icon={containerStatus === 'starting' ? <Spinner size="sm" /> : undefined}
+                  >
+                    {statusConfig.text}
+                  </Label>
+                </span>
               </ToolbarItem>
 
               {!hasContainer && (
@@ -121,7 +140,7 @@ export const BrewetToolbar: React.FC = () => {
                     onClick={openCreateWizard}
                     isDisabled={isActioning}
                   >
-                    Create Container
+                    Set Up Brewet
                   </Button>
                 </ToolbarItem>
               )}
@@ -130,7 +149,7 @@ export const BrewetToolbar: React.FC = () => {
                 <ToolbarItem>
                   <Button
                     variant="plain"
-                    aria-label={canStart ? 'Start container' : 'Stop container'}
+                    aria-label={canStart ? 'Start Brewet' : 'Stop Brewet'}
                     onClick={handleStartStop}
                     isDisabled={isActioning}
                     icon={canStart ? <PlayIcon /> : <StopIcon />}
@@ -142,7 +161,7 @@ export const BrewetToolbar: React.FC = () => {
                 <ToolbarItem>
                   <Button
                     variant="plain"
-                    aria-label="Edit container configuration"
+                    aria-label="Edit Brewet configuration"
                     onClick={openEditWizard}
                     isDisabled={isActioning}
                     icon={<PencilAltIcon />}
@@ -154,7 +173,7 @@ export const BrewetToolbar: React.FC = () => {
                 <ToolbarItem>
                   <Button
                     variant="plain"
-                    aria-label="Delete container"
+                    aria-label="Delete Brewet"
                     onClick={() => setIsDeleteModalOpen(true)}
                     isDisabled={isActioning}
                     icon={<TrashIcon />}
@@ -165,6 +184,7 @@ export const BrewetToolbar: React.FC = () => {
           )}
         </ToolbarContent>
       </Toolbar>
+      <hr style={{ width: '80%', margin: '0 auto', border: 'none', borderTop: '1px solid var(--pf-t--global--border--color--default)' }} className="pf-v6-u-mb-md" />
 
       {isWizardOpen && (
         <ContainerWizard
@@ -177,9 +197,9 @@ export const BrewetToolbar: React.FC = () => {
         variant="small"
         isOpen={isDeleteModalOpen}
         onClose={handleCloseDeleteModal}
-        aria-label="Delete container confirmation"
+        aria-label="Delete Brewet confirmation"
       >
-        <ModalHeader title="Delete storage container?" />
+        <ModalHeader title="Delete Brewet?" />
         <ModalBody>
           {deleteError && (
             <Alert variant="danger" isInline title={deleteError} className="pf-v6-u-mb-md" />

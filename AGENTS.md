@@ -10,7 +10,7 @@ The plugin uses Webpack 5 Module Federation to expose remote modules that the RH
 
 ### Project Status
 
-The project is being built from a seed scaffold. The implementation plan is at `docs/project/PROJECT_PLAN.md`. Example pages from the seed (UserInfo, ClusterResources, NamespaceSummary) are to be removed and replaced with the storage features described below.
+All planned phases (1–12) from `docs/project/PROJECT_PLAN.md` are implemented. The seed example pages (UserInfo, ClusterResources, NamespaceSummary) have been removed and replaced with the storage features described below.
 
 ### Three-Container Architecture
 
@@ -44,14 +44,14 @@ RHOAI Dashboard Sidebar
         └── Settings               → /brewet/settings
 ```
 
-All pages share a persistent **toolbar** with: Project Selector, Container Status + Start/Stop button, Edit Config button. The selected project persists across page navigation via React Context (`BrewetContext`).
+All pages share a persistent **toolbar** with: Project Selector (with Create Project modal), Brewet Status + Start/Stop button, Edit Config button. The selected project persists across page navigation via React Context (`BrewetContext`) backed by localStorage.
 
 ### Feature Summary
 
-- **Storage Browser**: Unified S3 + PVC file browser with upload, download, delete, create folder, file preview, HuggingFace import, search, pagination, multi-select, and cross-storage transfers.
+- **Storage Browser**: Unified S3 + PVC file browser with multi-file/folder upload modal, download, type-to-confirm delete, create folder, file preview with clipboard copy, HuggingFace import (with cancel support), search, pagination, multi-select, cross-storage transfers (with subfolder browser and move semantics), breadcrumb navigation with copy-to-clipboard, and location persistence via localStorage.
 - **Storage Management**: Table of all storage locations (S3 buckets + PVC locations) with create/delete bucket operations.
-- **Settings**: Tabbed config for S3, HuggingFace, proxy, transfer concurrency, and pagination. Runtime overrides, ephemeral per container restart.
-- **Container Lifecycle**: Creation wizard (select Data Connection + PVCs), start/stop/edit/delete per-project storage backend.
+- **Settings**: Tabbed config for S3, HuggingFace, proxy, transfer concurrency, pagination, and file type validation. Settings persist in a dedicated K8s Secret (`brewet-storage-backend-settings`) per project, synced on create/edit and on backend startup.
+- **Brewet Lifecycle**: Creation wizard (select Data Connection + PVCs) with deployment progress feedback and 409 conflict handling, start/stop/edit/delete per-project storage backend. Create Project modal available from the project selector.
 
 ## Branching Strategy
 
@@ -122,8 +122,8 @@ The storage backend in `storage-backend/` is a Fastify 4 server ported from [ODH
 - **Local/PVC operations**: Node.js `fs` with 11 security checks (path traversal prevention, null bytes, symlinks, etc.). Routes under `/api/local`.
 - **Transfers**: `TransferQueue` class with `p-limit` concurrency control, SSE progress, abort support. Routes under `/api/transfer`. Supports S3↔S3, S3↔PVC, PVC↔PVC.
 - **HuggingFace import**: Streaming download-to-S3 with SSE progress. Route at `POST /api/objects/import-hf`.
-- **Settings**: Mutable in-memory config overriding env var defaults. Routes under `/api/settings` for S3, HuggingFace, proxy, transfer concurrency, pagination.
-- **File validation**: Allowed/blocked extension lists.
+- **Settings**: Mutable in-memory config overriding env var defaults. Routes under `/api/settings` for S3, HuggingFace, proxy, transfer concurrency, pagination, and file extensions.
+- **File validation**: Allowed/blocked extension lists with glob/wildcard support, configurable at runtime via Settings UI or `ALLOWED_FILE_EXTENSIONS`/`BLOCKED_FILE_EXTENSIONS` env vars.
 - **URL encoding**: `locationId` is plain text; file paths are base64-encoded in URLs.
 
 The storage backend runs per-project with:
@@ -138,17 +138,23 @@ The BFF in `bff/` is an Express server that proxies data-plane requests to per-p
 - Route pattern: `/api/:namespace/*` → `http://brewet-storage-backend.{namespace}.svc.cluster.local:8888/api/{remainingPath}`
 - Supports streaming (SSE, file downloads), multipart uploads, and binary responses
 - Forwards the user's Bearer token
-- Discovers storage backend services via K8s API using its ServiceAccount
+- Discovers storage backend services via K8s API with in-flight deduplication and TTL cache
+- Rate limiting per client IP
+- Proxy header sanitization (strips and rewrites `x-forwarded-*` headers)
+- Namespace validation against K8s naming regex
+- Graceful shutdown on SIGTERM
+- Health endpoint at `/healthz`
 
-### Container Lifecycle
+### Brewet Lifecycle
 
-The "Brewet container" deployed per-project consists of:
+The per-project "Brewet" (storage backend) deployed per-project consists of:
 
-- **Deployment**: `brewet-storage-backend` image with Data Connection `envFrom` and PVC `volumeMounts`
+- **Deployment**: `brewet-storage-backend` image with Data Connection `envFrom`, PVC `volumeMounts`, and settings Secret `envFrom`
 - **Service**: ClusterIP on port 8888
 - **NetworkPolicy**: Ingress only from BFF namespace
+- **Secret**: `brewet-storage-backend-settings` storing non-S3 settings (HuggingFace, proxy, transfer, pagination, file extensions)
 
-Start/Stop = scale replicas 1/0. Created and managed via dashboard `/api/k8s` proxy from the frontend.
+Start/Stop = scale replicas 1/0. Created and managed via dashboard `/api/k8s` proxy from the frontend. The UI uses "Brewet" terminology (not "container") throughout.
 
 ### Plugin Registration
 
@@ -168,7 +174,7 @@ Jest with `ts-jest` preset and `jsdom` environment (`jest.config.js`). `jest.set
 
 - `scripts/build-push.sh` — Builds and pushes container images (frontend, BFF, storage-backend) to Quay.io.
 - `scripts/scan-image.sh` — Builds container images locally and scans them for vulnerabilities using Trivy.
-- `scripts/sync-chart-version.js` — Syncs the version from root `package.json` into `chart/Chart.yaml`, `bff/package.json`, `storage-backend/package.json`, and `plugin.yaml`.
+- `scripts/sync-chart-version.js` — Syncs the version from root `package.json` into `chart/Chart.yaml`, `bff/package.json`, `storage-backend/package.json`, `plugin.yaml`, and `.env.development`.
 
 ### Deployment
 
@@ -185,9 +191,10 @@ Jest with `ts-jest` preset and `jsdom` environment (`jest.config.js`). `jest.set
 ## Documentation
 
 ```text
+docs/user/           — End-user guide with feature walkthroughs
 docs/project/        — Project plan and architecture decisions
 docs/architecture/   — Plugin system internals and extension contract
-docs/development/    — Local dev setup and dashboard API reference
+docs/development/    — Local dev setup, dashboard API reference, best practices, and testing guide
 docs/deployment/     — OpenShift deployment with Helm and dashboard registration
 ```
 

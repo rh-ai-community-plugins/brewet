@@ -534,18 +534,16 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         return reply.send({ message: 'Object uploaded successfully' });
       } catch (e) {
         if (e instanceof S3ServiceException) {
-          return reply.code(e.$metadata?.httpStatusCode || 500).send({
-            error: e.name || 'S3ServiceException',
-            message: e.message || 'An S3 service exception occurred.',
-          });
+          return handleS3Error(e, reply);
         }
         const err = e as Error;
         if (err.name === 'AbortError') {
           return reply.code(499).send({ error: 'AbortError', message: 'Upload aborted by client' });
         }
+        console.error('Upload failed:', e);
         return reply.code(500).send({
-          error: err.name || 'Unknown error',
-          message: err.message || 'An unexpected error occurred.',
+          error: 'InternalError',
+          message: 'An unexpected error occurred.',
         });
       }
     },
@@ -590,6 +588,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       localPath?: string;
       hfToken?: string;
       prefix?: string;
+      excludeExtensions?: string[];
     }
 
     const body = req.body as HuggingFaceImportRequest;
@@ -628,26 +627,31 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       'kubernetes.default.svc', 'kubernetes.default',
     ];
 
-    const isBlockedRedirect = (url: string): boolean => {
+    const resolveRedirectUrl = (location: string, requestUrl: string): URL | null => {
       try {
-        const parsed = new URL(url);
-        const hostname = parsed.hostname.toLowerCase();
-        if (BLOCKED_HOSTNAMES.includes(hostname)) return true;
-        if (hostname.endsWith('.internal') || hostname.endsWith('.local')) return true;
-        if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname)) return true;
-        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return true;
-        return false;
+        return new URL(location);
       } catch {
-        return true;
+        try {
+          return new URL(location, requestUrl);
+        } catch {
+          return null;
+        }
       }
     };
 
-    const isHuggingFaceHost = (url: string): boolean => {
-      try {
-        return new URL(url).hostname.endsWith('huggingface.co');
-      } catch {
-        return false;
-      }
+    const isBlockedRedirect = (parsed: URL | null): boolean => {
+      if (!parsed) return true;
+      const hostname = parsed.hostname.toLowerCase();
+      if (BLOCKED_HOSTNAMES.includes(hostname)) return true;
+      if (hostname.endsWith('.internal') || hostname.endsWith('.local')) return true;
+      if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname)) return true;
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return true;
+      return false;
+    };
+
+    const isHuggingFaceHost = (parsed: URL | null): boolean => {
+      if (!parsed) return false;
+      return parsed.hostname.endsWith('huggingface.co');
     };
 
     const makeRequest = (
@@ -668,9 +672,13 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         },
       };
       if (isHttps && httpsProxy) {
-        try { options.agent = new HttpsProxyAgent(httpsProxy); } catch { /* no proxy */ }
+        try { options.agent = new HttpsProxyAgent(httpsProxy); } catch (e) {
+          console.warn('Failed to create HTTPS proxy agent for %s: %s', httpsProxy, (e as Error).message);
+        }
       } else if (!isHttps && httpProxy) {
-        try { options.agent = new HttpProxyAgent(httpProxy); } catch { /* no proxy */ }
+        try { options.agent = new HttpProxyAgent(httpProxy); } catch (e) {
+          console.warn('Failed to create HTTP proxy agent for %s: %s', httpProxy, (e as Error).message);
+        }
       }
       return isHttps
         ? https.request(options, callback)
@@ -685,24 +693,26 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         }
         const request = makeRequest(url, (res: http.IncomingMessage) => {
           if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            const redirectUrl = res.headers.location;
-            res.resume(); // drain redirect body so the socket is released back to the pool
-            if (isBlockedRedirect(redirectUrl)) {
-              reject(new Error('Redirect to blocked URL'));
+            const parsed = resolveRedirectUrl(res.headers.location, url);
+            res.resume();
+            if (isBlockedRedirect(parsed)) {
+              reject(new Error(`Redirect to blocked URL: ${res.headers.location}`));
               return;
             }
-            const sendAuth = isHuggingFaceHost(redirectUrl);
-            fetchJSON(redirectUrl, sendAuth, redirectCount + 1).then(resolve).catch(reject);
-            return;
-          }
-          if (res.statusCode && res.statusCode >= 400) {
-            res.resume(); // drain error body so the socket is released back to the pool
-            reject(new Error(`HuggingFace API returned ${res.statusCode}`));
+            const resolvedUrl = parsed!.href;
+            const sendAuth = isHuggingFaceHost(parsed);
+            fetchJSON(resolvedUrl, sendAuth, redirectCount + 1).then(resolve).catch(reject);
             return;
           }
           let data = '';
           res.on('data', (chunk: Buffer) => { data += chunk; });
           res.on('end', () => {
+            if (res.statusCode && res.statusCode >= 400) {
+              let detail = '';
+              try { detail = JSON.parse(data).error; } catch { /* use raw body */ }
+              reject(new Error(detail || `HuggingFace API returned ${res.statusCode}`));
+              return;
+            }
             try { resolve(JSON.parse(data)); } catch { reject(new Error('Invalid JSON response')); }
           });
         }, includeAuth);
@@ -722,19 +732,25 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         }
         const request = makeRequest(url, (res: http.IncomingMessage) => {
           if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-            const redirectUrl = res.headers.location;
-            res.resume(); // drain redirect body so the socket is released back to the pool
-            if (isBlockedRedirect(redirectUrl)) {
-              reject(new Error('Redirect to blocked URL'));
+            const parsed = resolveRedirectUrl(res.headers.location, url);
+            res.resume();
+            if (isBlockedRedirect(parsed)) {
+              reject(new Error(`Redirect to blocked URL: ${res.headers.location}`));
               return;
             }
-            const sendAuth = isHuggingFaceHost(redirectUrl);
-            downloadFile(redirectUrl, redirectCount + 1, sendAuth).then(resolve).catch(reject);
+            const resolvedUrl = parsed!.href;
+            const sendAuth = isHuggingFaceHost(parsed);
+            downloadFile(resolvedUrl, redirectCount + 1, sendAuth).then(resolve).catch(reject);
             return;
           }
           if (res.statusCode && res.statusCode >= 400) {
-            res.resume(); // drain error body so the socket is released back to the pool
-            reject(new Error(`Download failed with status ${res.statusCode}`));
+            let data = '';
+            res.on('data', (chunk: Buffer) => { data += chunk; });
+            res.on('end', () => {
+              let detail = '';
+              try { detail = JSON.parse(data).error; } catch { /* use status code */ }
+              reject(new Error(detail || `Download failed with status ${res.statusCode}`));
+            });
             return;
           }
           const contentLength = parseInt(res.headers['content-length'] || '0', 10);
@@ -756,10 +772,18 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         }
         try {
           await fetchJSON('https://huggingface.co/api/whoami-v2');
-        } catch {
+        } catch (whoamiErr: unknown) {
+          const msg = whoamiErr instanceof Error ? whoamiErr.message : String(whoamiErr);
+          if (/ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(msg)) {
+            req.log.error(whoamiErr, 'HuggingFace whoami check failed due to network error');
+            return reply.code(502).send({
+              error: 'HuggingFace Unreachable',
+              message: `Cannot reach HuggingFace API to verify token: ${msg}`,
+            });
+          }
           return reply.code(401).send({
             error: 'Authentication Failed',
-            message: 'HF token is invalid or does not have access to this gated model.',
+            message: msg || 'HF token is invalid or does not have access to this gated model.',
           });
         }
       }
@@ -771,8 +795,17 @@ export default async (fastify: FastifyInstance): Promise<void> => {
         });
       }
 
-      const modelFiles = modelInfo.siblings as Array<{ rfilename: string }>;
+      let modelFiles = modelInfo.siblings as Array<{ rfilename: string }>;
       const prefix = body.prefix || body.modelId.replace('/', '_');
+
+      if (body.excludeExtensions && body.excludeExtensions.length > 0) {
+        const excluded = body.excludeExtensions.map((e) =>
+          e.startsWith('.') ? e.toLowerCase() : `.${e.toLowerCase()}`,
+        );
+        modelFiles = modelFiles.filter(
+          (f) => !excluded.some((ext) => f.rfilename.toLowerCase().endsWith(ext)),
+        );
+      }
 
       const files: TransferFileJob[] = modelFiles.map((f) => ({
         sourcePath: f.rfilename,
@@ -824,7 +857,10 @@ export default async (fastify: FastifyInstance): Promise<void> => {
           });
 
           try {
-            await Promise.all([pipelinePromise, uploadWithCleanup(upload)]);
+            await Promise.all([
+              pipelinePromise,
+              uploadWithCleanup(upload, (uploaded) => { file.uploadLoaded = uploaded; }),
+            ]);
           } finally {
             signal.removeEventListener('abort', cleanup);
           }
@@ -873,10 +909,11 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       if (err instanceof S3ServiceException) {
         return handleS3Error(err, reply);
       }
+      const errMsg = err instanceof Error ? err.message : String(err);
       req.log.error(err, 'HuggingFace import failed');
       return reply.code(500).send({
-        error: 'Import Error',
-        message: err instanceof Error ? err.message : 'Failed to initiate HuggingFace import',
+        error: 'ImportError',
+        message: `HuggingFace import failed: ${errMsg}`,
       });
     }
   });

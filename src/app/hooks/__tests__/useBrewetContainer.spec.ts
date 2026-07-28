@@ -1,10 +1,14 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { BrewetProvider } from '../../context/BrewetContext';
 import { useBrewetContainer } from '../useBrewetContainer';
+import { useProjects } from '../useProjects';
+
+jest.mock('../useProjects');
 
 function wrapper({ children }: { children: React.ReactNode }) {
-  return React.createElement(BrewetProvider, null, children);
+  return React.createElement(MemoryRouter, null, React.createElement(BrewetProvider, null, children));
 }
 
 const mockDeployment = {
@@ -17,6 +21,12 @@ describe('useBrewetContainer', () => {
   beforeEach(() => {
     localStorage.clear();
     jest.restoreAllMocks();
+    (useProjects as jest.Mock).mockReturnValue({
+      projects: [],
+      loading: false,
+      error: null,
+      refresh: jest.fn().mockResolvedValue([]),
+    });
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -99,7 +109,7 @@ describe('useBrewetContainer', () => {
     expect(body.spec.replicas).toBe(0);
   });
 
-  it('should delete all three resources', async () => {
+  it('should delete all four resources including settings secret', async () => {
     localStorage.setItem('brewet.selected-project', 'test-ns');
 
     global.fetch = jest.fn()
@@ -123,13 +133,14 @@ describe('useBrewetContainer', () => {
     const deleteCalls = (global.fetch as jest.Mock).mock.calls.filter(
       (call: [string, RequestInit]) => call[1]?.method === 'DELETE',
     );
-    expect(deleteCalls).toHaveLength(3);
+    expect(deleteCalls).toHaveLength(4);
     expect(deleteCalls[0][0]).toContain('networkpolicies');
     expect(deleteCalls[1][0]).toContain('services');
     expect(deleteCalls[2][0]).toContain('deployments');
+    expect(deleteCalls[3][0]).toContain('secrets');
   });
 
-  it('should create deployment, service, and network policy', async () => {
+  it('should create secret, deployment, service, and network policy', async () => {
     localStorage.setItem('brewet.selected-project', 'test-ns');
 
     global.fetch = jest.fn()
@@ -150,13 +161,13 @@ describe('useBrewetContainer', () => {
       });
     });
 
-    expect(results).toHaveLength(3);
+    expect(results).toHaveLength(4);
     expect(results.every((r) => r.success)).toBe(true);
 
     const postCalls = (global.fetch as jest.Mock).mock.calls.filter(
       (call: [string, RequestInit]) => call[1]?.method === 'POST',
     );
-    expect(postCalls).toHaveLength(3);
+    expect(postCalls).toHaveLength(4);
   });
 
   it('should rollback on partial create failure', async () => {
@@ -200,16 +211,60 @@ describe('useBrewetContainer', () => {
     expect(deleteCalls.length).toBeGreaterThan(0);
   });
 
-  it('should use PATCH for update', async () => {
+  it('should replace existing resources on 409 AlreadyExists', async () => {
     localStorage.setItem('brewet.selected-project', 'test-ns');
+
+    global.fetch = jest.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      if (!init?.method || init.method === 'GET') {
+        return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+      }
+      if (init.method === 'POST') {
+        return Promise.resolve({ ok: false, status: 409, text: () => Promise.resolve('AlreadyExists') });
+      }
+      if (init.method === 'PUT') {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
+      }
+      return Promise.resolve({ ok: true, status: 200 });
+    });
+
+    const { result } = renderHook(() => useBrewetContainer(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.containerStatus).toBe('none');
+    });
+
+    let results: Array<{ resource: string; success: boolean }> = [];
+    await act(async () => {
+      results = await result.current.createContainer({
+        dataConnection: null,
+        pvcMounts: [],
+      });
+    });
+
+    expect(results).toHaveLength(4);
+    expect(results.every((r) => r.success)).toBe(true);
+
+    const putCalls = (global.fetch as jest.Mock).mock.calls.filter(
+      (call: [string, RequestInit]) => call[1]?.method === 'PUT',
+    );
+    expect(putCalls).toHaveLength(4);
+  });
+
+  it('should PUT settings secret and PUT deployment for update', async () => {
+    localStorage.setItem('brewet.selected-project', 'test-ns');
+
+    const currentDeployment = {
+      ...mockDeployment,
+      metadata: { ...mockDeployment.metadata, resourceVersion: '12345' },
+    };
 
     global.fetch = jest.fn()
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: () => Promise.resolve(mockDeployment),
+        json: () => Promise.resolve(currentDeployment),
       })
-      .mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve({}) });
+      .mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve(currentDeployment) });
 
     const { result } = renderHook(() => useBrewetContainer(), { wrapper });
 
@@ -224,13 +279,25 @@ describe('useBrewetContainer', () => {
       });
     });
 
-    const patchCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      (call: [string, RequestInit]) => call[1]?.method === 'PATCH',
+    const secretPutCalls = (global.fetch as jest.Mock).mock.calls.filter(
+      (call: [string, RequestInit]) => call[1]?.method === 'PUT' && call[0].includes('secrets'),
     );
-    expect(patchCalls).toHaveLength(1);
-    expect(patchCalls[0][1].headers).toEqual({
-      'Content-Type': 'application/strategic-merge-patch+json',
+    expect(secretPutCalls).toHaveLength(1);
+
+    const deployGetCalls = (global.fetch as jest.Mock).mock.calls.filter(
+      (call: [string, RequestInit]) => (!call[1]?.method || call[1]?.method === 'GET') && call[0].includes('deployments/brewet-storage-backend'),
+    );
+    expect(deployGetCalls.length).toBeGreaterThanOrEqual(1);
+
+    const deployPutCalls = (global.fetch as jest.Mock).mock.calls.filter(
+      (call: [string, RequestInit]) => call[1]?.method === 'PUT' && call[0].includes('deployments'),
+    );
+    expect(deployPutCalls).toHaveLength(1);
+    expect(deployPutCalls[0][1].headers).toEqual({
+      'Content-Type': 'application/json',
     });
+    const body = JSON.parse(deployPutCalls[0][1].body as string);
+    expect(body.metadata.resourceVersion).toBe('12345');
   });
 
   it('should return Operation:Aborted entry and rollback on abort during create', async () => {
@@ -276,11 +343,11 @@ describe('useBrewetContainer', () => {
     expect(abortEntry).toBeDefined();
     expect(abortEntry?.success).toBe(false);
 
-    // Deployment was created before abort — rollback DELETE should be issued
+    // Secret was created before abort — rollback DELETE should be issued
     const deleteCalls = (global.fetch as jest.Mock).mock.calls.filter(
       (call: [string, RequestInit]) => call[1]?.method === 'DELETE',
     );
     expect(deleteCalls.length).toBeGreaterThan(0);
-    expect(deleteCalls.some((call: [string]) => call[0].includes('deployments'))).toBe(true);
+    expect(deleteCalls.some((call: [string]) => call[0].includes('secrets'))).toBe(true);
   });
 });

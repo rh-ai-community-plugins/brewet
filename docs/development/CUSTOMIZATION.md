@@ -16,6 +16,7 @@ Given a plugin name `{plugin}`, the standard naming scheme is:
 |---|---|---|
 | Frontend container image | `{plugin}` | `my-cool-plugin` |
 | BFF container image | `{plugin}-bff` | `my-cool-plugin-bff` |
+| Storage backend container image | `{plugin}-storage-backend` | `my-cool-plugin-storage-backend` |
 | Helm chart | `{plugin}-chart` | `my-cool-plugin-chart` |
 | npm package | `{plugin}` | `my-cool-plugin` |
 | Module Federation remote | `{plugin}` in camelCase | `myCoolPlugin` |
@@ -129,6 +130,7 @@ my-cool-plugin/
 │   └── templates/
 ├── src/rhoai/extensions.ts              # Extension declarations (required)
 ├── bff/Containerfile                    # BFF image build (optional)
+├── storage-backend/Containerfile        # Storage backend image build (optional)
 ├── .github/workflows/ci.yml             # CI validation (recommended)
 ├── .github/workflows/build-push.yml     # Image publish (recommended)
 └── Makefile                             # Build, validate, image, chart targets
@@ -137,9 +139,10 @@ my-cool-plugin/
 Published OCI artifacts:
 
 ```text
-quay.io/rh-ai-community-plugins/my-cool-plugin:0.1.0        # Frontend image
-quay.io/rh-ai-community-plugins/my-cool-plugin-bff:0.1.0    # BFF image (optional)
-oci://quay.io/rh-ai-community-plugins/my-cool-plugin-chart   # Helm chart (required for auto-deploy)
+quay.io/rh-ai-community-plugins/my-cool-plugin:0.1.0                  # Frontend image
+quay.io/rh-ai-community-plugins/my-cool-plugin-bff:0.1.0              # BFF image (optional)
+quay.io/rh-ai-community-plugins/my-cool-plugin-storage-backend:0.1.0  # Storage backend image (optional)
+oci://quay.io/rh-ai-community-plugins/my-cool-plugin-chart             # Helm chart (required for auto-deploy)
 ```
 
 ---

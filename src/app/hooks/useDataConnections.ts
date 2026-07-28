@@ -34,8 +34,9 @@ export function useDataConnections(namespace: string | null) {
       })
       .then((data) => {
         const s3Connections = (data.items ?? []).filter((secret: DataConnection) => {
-          const connType = secret.metadata.annotations?.['opendatahub.io/connection-type'];
-          return connType === 's3';
+          const annotations = secret.metadata.annotations ?? {};
+          return annotations['opendatahub.io/connection-type'] === 's3' ||
+            annotations['opendatahub.io/connection-type-ref'] === 's3';
         });
         setDataConnections(s3Connections);
         setLoading(false);

@@ -1,19 +1,30 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
+  Button,
+  List,
+  ListItem,
   Modal,
   ModalBody,
+  ModalFooter,
   ModalHeader,
+  Spinner,
+  Stack,
+  StackItem,
+  Content,
   Wizard,
   WizardStep,
 } from '@patternfly/react-core';
+import { CheckCircleIcon, ExclamationCircleIcon } from '@patternfly/react-icons';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { useDataConnections } from '~/app/hooks/useDataConnections';
 import { usePVCs } from '~/app/hooks/usePVCs';
-import { useBrewetContainer } from '~/app/hooks/useBrewetContainer';
-import { DataConnection, PvcMount, ContainerConfig } from '~/app/types/k8s';
+import { useBrewetContainer, CreateResourceResult } from '~/app/hooks/useBrewetContainer';
+import { storageService } from '~/app/services/storageService';
+import { DataConnection, PvcMount, ContainerConfig, ContainerSettings } from '~/app/types/k8s';
 import { validateMountPath } from '~/app/utils/k8sResources';
 import { DataConnectionStep } from '~/app/components/ContainerWizard/DataConnectionStep';
 import { PvcSelectionStep } from '~/app/components/ContainerWizard/PvcSelectionStep';
+import { ConfigurationStep } from '~/app/components/ContainerWizard/ConfigurationStep';
 import { ReviewStep } from '~/app/components/ContainerWizard/ReviewStep';
 
 interface ContainerWizardProps {
@@ -25,14 +36,17 @@ export const ContainerWizard: React.FC<ContainerWizardProps> = ({
   onClose,
   isEditMode = false,
 }) => {
-  const { selectedProject, containerInfo } = useBrewetContext();
+  const { selectedProject, containerInfo, containerStatus } = useBrewetContext();
   const { dataConnections, loading: dcLoading, error: dcError } = useDataConnections(selectedProject);
   const { pvcs, loading: pvcLoading, error: pvcError } = usePVCs(selectedProject);
   const { createContainer, updateContainer, isActioning } = useBrewetContainer();
 
   const [selectedDc, setSelectedDc] = useState<DataConnection | null>(null);
   const [pvcMounts, setPvcMounts] = useState<PvcMount[]>([]);
+  const [settings, setSettings] = useState<ContainerSettings>({});
   const [createError, setCreateError] = useState<string | null>(null);
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [createResults, setCreateResults] = useState<CreateResourceResult[]>([]);
 
   const hasInitialized = useRef(false);
   useEffect(() => {
@@ -49,6 +63,12 @@ export const ContainerWizard: React.FC<ContainerWizardProps> = ({
       if (match) setSelectedDc(match);
     }
 
+    if (selectedProject) {
+      storageService.readSettingsSecret(selectedProject).then((restored) => {
+        setSettings(restored);
+      }).catch(() => {});
+    }
+
     if (containerInfo.volumeMounts && containerInfo.volumes) {
       const mounts: PvcMount[] = [];
       for (const vm of containerInfo.volumeMounts) {
@@ -63,8 +83,6 @@ export const ContainerWizard: React.FC<ContainerWizardProps> = ({
     }
   }, [isEditMode, dcLoading, pvcLoading, dataConnections, pvcs, containerInfo]);
 
-  const hasSelection = selectedDc !== null || pvcMounts.length > 0;
-
   const hasMountPathErrors = useMemo(() => {
     if (pvcMounts.length === 0) return false;
     return pvcMounts.some((mount, i) => {
@@ -73,7 +91,7 @@ export const ContainerWizard: React.FC<ContainerWizardProps> = ({
     });
   }, [pvcMounts]);
 
-  const canSave = hasSelection && !hasMountPathErrors && !isActioning;
+  const canSave = !hasMountPathErrors && !isActioning;
 
   const handleSave = useCallback(async () => {
     if (!selectedProject || !canSave) return;
@@ -82,6 +100,7 @@ export const ContainerWizard: React.FC<ContainerWizardProps> = ({
     const config: ContainerConfig = {
       dataConnection: selectedDc,
       pvcMounts,
+      settings,
     };
 
     const results = isEditMode
@@ -97,25 +116,102 @@ export const ContainerWizard: React.FC<ContainerWizardProps> = ({
       return;
     }
 
-    onClose();
-  }, [selectedProject, canSave, selectedDc, pvcMounts, isEditMode, createContainer, updateContainer, onClose]);
+    if (isEditMode) {
+      await Promise.all([
+        storageService.updateProxySettings(selectedProject, {
+          httpProxy: settings.httpProxy ?? '',
+          httpsProxy: settings.httpsProxy ?? '',
+        }),
+        storageService.updateHuggingFaceSettings(selectedProject, {
+          hfToken: settings.hfToken ?? '',
+        }),
+        storageService.updateMaxConcurrentTransfers(
+          selectedProject,
+          settings.maxConcurrentTransfers ?? 2,
+        ),
+        storageService.updateMaxFilesPerPage(
+          selectedProject,
+          settings.maxFilesPerPage ?? 100,
+        ),
+      ]).catch(() => {});
+      onClose();
+    } else {
+      setCreateResults(results);
+      setIsDeploying(true);
+    }
+  }, [selectedProject, canSave, selectedDc, pvcMounts, settings, isEditMode, createContainer, updateContainer, onClose]);
 
   const handleClose = useCallback(() => {
     setSelectedDc(null);
     setPvcMounts([]);
+    setSettings({});
     setCreateError(null);
     onClose();
   }, [onClose]);
+
+  if (isDeploying) {
+    const isRunning = containerStatus === 'running';
+    const isError = containerStatus === 'error';
+
+    return (
+      <Modal
+        variant="large"
+        isOpen={true}
+        onClose={onClose}
+        aria-label="Deploying Brewet"
+      >
+        <ModalHeader
+          title="Deploying Brewet"
+          description={`Project: ${selectedProject ?? ''}`}
+        />
+        <ModalBody>
+          <Stack hasGutter>
+            <StackItem>
+              <Content component="h4">Resources created</Content>
+              <List isPlain>
+                {createResults.map((r) => (
+                  <ListItem key={r.resource} icon={<CheckCircleIcon color="var(--pf-t--global--color--status--success--default)" />}>
+                    {r.resource}
+                  </ListItem>
+                ))}
+              </List>
+            </StackItem>
+            <StackItem>
+              <Content component="h4">Brewet status</Content>
+              {!isRunning && !isError && (
+                <Content component="p">
+                  <Spinner size="md" /> Brewet is starting…
+                </Content>
+              )}
+              {isRunning && (
+                <Content component="p">
+                  <CheckCircleIcon color="var(--pf-t--global--color--status--success--default)" /> Brewet is running
+                </Content>
+              )}
+              {isError && (
+                <Content component="p">
+                  <ExclamationCircleIcon color="var(--pf-t--global--color--status--danger--default)" /> Brewet failed to start
+                </Content>
+              )}
+            </StackItem>
+          </Stack>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="primary" onClick={onClose}>Close</Button>
+        </ModalFooter>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
       variant="large"
       isOpen={true}
       onClose={handleClose}
-      aria-label={isEditMode ? 'Edit container configuration' : 'Create storage container'}
+      aria-label={isEditMode ? 'Edit Brewet configuration' : 'Set up Brewet'}
     >
       <ModalHeader
-        title={isEditMode ? 'Edit Container Configuration' : 'Create Storage Container'}
+        title={isEditMode ? 'Edit Brewet Configuration' : 'Set Up Brewet'}
         description={`Project: ${selectedProject ?? ''}`}
       />
       <ModalBody>
@@ -149,6 +245,15 @@ export const ContainerWizard: React.FC<ContainerWizardProps> = ({
             />
           </WizardStep>
           <WizardStep
+            name="Configuration"
+            id="configuration"
+          >
+            <ConfigurationStep
+              settings={settings}
+              onChange={setSettings}
+            />
+          </WizardStep>
+          <WizardStep
             name="Review"
             id="review"
             footer={{
@@ -160,6 +265,7 @@ export const ContainerWizard: React.FC<ContainerWizardProps> = ({
               namespace={selectedProject ?? ''}
               dataConnection={selectedDc}
               pvcMounts={pvcMounts}
+              settings={settings}
               isCreating={isActioning}
               createError={createError}
             />

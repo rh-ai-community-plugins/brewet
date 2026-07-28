@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   PageSection,
-  Title,
   Tabs,
   Tab,
   TabTitleText,
@@ -17,15 +16,22 @@ import {
   Slider,
   InputGroup,
   InputGroupItem,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  ClipboardCopy,
 } from '@patternfly/react-core';
 import { EyeIcon, EyeSlashIcon } from '@patternfly/react-icons';
+import { HelperText, HelperTextItem } from '@patternfly/react-core';
+import { InfoIcon } from '@patternfly/react-icons';
 import { useBrewetContext } from '~/app/context/BrewetContext';
 import { ContainerRequired } from '~/app/components/ContainerRequired';
 import { storageService } from '~/app/services/storageService';
 import { useSettingsTab } from '~/app/hooks/useSettingsTab';
-import type { S3Settings, HuggingFaceSettings, ProxySettings } from '~/app/types/storage';
+import type { S3Settings, HuggingFaceSettings, ProxySettings, FileExtensionSettings } from '~/app/types/storage';
 
-type TabKey = 's3' | 'huggingface' | 'proxy' | 'transfers' | 'pagination';
+type TabKey = 's3' | 'huggingface' | 'proxy' | 'transfers' | 'pagination' | 'filetypes';
 
 const S3Tab: React.FC<{ namespace: string }> = ({ namespace }) => {
   const { data: settings, setData: setSettings, loading, alert, setAlert, mountedRef } =
@@ -128,6 +134,13 @@ const S3Tab: React.FC<{ namespace: string }> = ({ namespace }) => {
           Test Connection
         </Button>
       </ActionGroup>
+      <HelperText>
+        <HelperTextItem icon={<InfoIcon />}>
+          S3 settings are loaded from your Data Connection and stored in-memory only. Changes here apply
+          until Brewet restarts. To change them permanently, update the Data Connection in the
+          RHOAI dashboard.
+        </HelperTextItem>
+      </HelperText>
     </Form>
   );
 };
@@ -135,7 +148,10 @@ const S3Tab: React.FC<{ namespace: string }> = ({ namespace }) => {
 const HuggingFaceTab: React.FC<{ namespace: string }> = ({ namespace }) => {
   const { data: settings, setData: setSettings, loading, alert, setAlert, mountedRef } =
     useSettingsTab<HuggingFaceSettings>(
-      (ns, signal) => storageService.getHuggingFaceSettings(ns, signal),
+      async (ns, signal) => {
+        const s = await storageService.readSettingsSecret(ns, signal);
+        return { hfToken: s.hfToken ?? '' };
+      },
       namespace, {}, 'Failed to load HuggingFace settings',
     );
   const [saving, setSaving] = useState(false);
@@ -146,7 +162,10 @@ const HuggingFaceTab: React.FC<{ namespace: string }> = ({ namespace }) => {
     setSaving(true);
     setAlert(null);
     try {
-      await storageService.updateHuggingFaceSettings(namespace, settings);
+      await Promise.all([
+        storageService.patchSettingsSecret(namespace, { HF_TOKEN: settings.hfToken ?? '' }),
+        storageService.updateHuggingFaceSettings(namespace, settings),
+      ]);
       if (!mountedRef.current) return;
       setAlert({ variant: 'success', title: 'HuggingFace settings saved successfully' });
     } catch (err) {
@@ -224,7 +243,10 @@ const HuggingFaceTab: React.FC<{ namespace: string }> = ({ namespace }) => {
 const ProxyTab: React.FC<{ namespace: string }> = ({ namespace }) => {
   const { data: settings, setData: setSettings, loading, alert, setAlert, mountedRef } =
     useSettingsTab<ProxySettings>(
-      (ns, signal) => storageService.getProxySettings(ns, signal),
+      async (ns, signal) => {
+        const s = await storageService.readSettingsSecret(ns, signal);
+        return { httpProxy: s.httpProxy ?? '', httpsProxy: s.httpsProxy ?? '' };
+      },
       namespace, {}, 'Failed to load proxy settings',
     );
   const [testUrl, setTestUrl] = useState('');
@@ -235,7 +257,13 @@ const ProxyTab: React.FC<{ namespace: string }> = ({ namespace }) => {
     setSaving(true);
     setAlert(null);
     try {
-      await storageService.updateProxySettings(namespace, settings);
+      await Promise.all([
+        storageService.patchSettingsSecret(namespace, {
+          HTTP_PROXY: settings.httpProxy ?? '',
+          HTTPS_PROXY: settings.httpsProxy ?? '',
+        }),
+        storageService.updateProxySettings(namespace, settings),
+      ]);
       if (!mountedRef.current) return;
       setAlert({ variant: 'success', title: 'Proxy settings saved successfully' });
     } catch (err) {
@@ -325,7 +353,10 @@ const ProxyTab: React.FC<{ namespace: string }> = ({ namespace }) => {
 const TransferControlsTab: React.FC<{ namespace: string }> = ({ namespace }) => {
   const { data: value, setData: setValue, loading, alert, setAlert, mountedRef } =
     useSettingsTab<number>(
-      (ns, signal) => storageService.getMaxConcurrentTransfers(ns, signal),
+      async (ns, signal) => {
+        const s = await storageService.readSettingsSecret(ns, signal);
+        return s.maxConcurrentTransfers ?? 2;
+      },
       namespace, 2, 'Failed to load transfer settings',
     );
   const [saving, setSaving] = useState(false);
@@ -334,7 +365,12 @@ const TransferControlsTab: React.FC<{ namespace: string }> = ({ namespace }) => 
     setSaving(true);
     setAlert(null);
     try {
-      await storageService.updateMaxConcurrentTransfers(namespace, newValue);
+      await Promise.all([
+        storageService.patchSettingsSecret(namespace, {
+          MAX_CONCURRENT_TRANSFERS: String(newValue),
+        }),
+        storageService.updateMaxConcurrentTransfers(namespace, newValue),
+      ]);
       if (!mountedRef.current) return;
       setAlert({ variant: 'success', title: 'Transfer concurrency updated' });
     } catch (err) {
@@ -388,7 +424,10 @@ const TransferControlsTab: React.FC<{ namespace: string }> = ({ namespace }) => 
 const PaginationTab: React.FC<{ namespace: string }> = ({ namespace }) => {
   const { data: value, setData: setValue, loading, alert, setAlert, mountedRef } =
     useSettingsTab<number>(
-      (ns, signal) => storageService.getMaxFilesPerPage(ns, signal),
+      async (ns, signal) => {
+        const s = await storageService.readSettingsSecret(ns, signal);
+        return s.maxFilesPerPage ?? 100;
+      },
       namespace, 100, 'Failed to load pagination settings',
     );
   const [saving, setSaving] = useState(false);
@@ -397,7 +436,12 @@ const PaginationTab: React.FC<{ namespace: string }> = ({ namespace }) => {
     setSaving(true);
     setAlert(null);
     try {
-      await storageService.updateMaxFilesPerPage(namespace, value);
+      await Promise.all([
+        storageService.patchSettingsSecret(namespace, {
+          MAX_FILES_PER_PAGE: String(value),
+        }),
+        storageService.updateMaxFilesPerPage(namespace, value),
+      ]);
       if (!mountedRef.current) return;
       setAlert({ variant: 'success', title: 'Pagination settings updated' });
     } catch (err) {
@@ -442,6 +486,133 @@ const PaginationTab: React.FC<{ namespace: string }> = ({ namespace }) => {
   );
 };
 
+const DEFAULT_ALLOWED = '.safetensors, .bin, .pt, .pth, .onnx, .gguf, .h5, .csv, .json, .jsonl, .parquet, .arrow, .feather, .txt, .md, .yaml, .yml, .tar, .gz, .zip, .tgz, .jpg, .jpeg, .png, .gif, .bmp, .wav, .mp3, .mp4, .avi, .ipynb, .py, .pdf, .doc, .docx, .xls, .xlsx, .ppt, .pptx, .odt, .ods, .odp, .rtf, .xml, .html, .css, .old, .bak, .backup, .tmp, .log, .sql';
+
+const DEFAULT_BLOCKED = '.exe, .dll, .so, .dylib, .sh, .bat, .cmd, .com, .js, .ts, .rb, .pl, .php, .sys, .drv';
+
+const FileTypesTab: React.FC<{ namespace: string }> = ({ namespace }) => {
+  const { data: settings, setData: setSettings, loading, alert, setAlert, mountedRef } =
+    useSettingsTab<FileExtensionSettings>(
+      async (ns, signal) => {
+        const s = await storageService.readSettingsSecret(ns, signal);
+        return {
+          allowedExtensions: s.allowedFileExtensions ?? '',
+          blockedExtensions: s.blockedFileExtensions ?? '',
+        };
+      },
+      namespace,
+      { allowedExtensions: '', blockedExtensions: '' },
+      'Failed to load file type settings',
+    );
+  const [saving, setSaving] = useState(false);
+  const [defaultsModal, setDefaultsModal] = useState<'allowed' | 'blocked' | null>(null);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setAlert(null);
+    try {
+      const allowedList = (settings.allowedExtensions || '')
+        .split(',').map((e) => e.trim()).filter(Boolean);
+      const blockedList = (settings.blockedExtensions || '')
+        .split(',').map((e) => e.trim()).filter(Boolean);
+
+      await Promise.all([
+        storageService.patchSettingsSecret(namespace, {
+          ALLOWED_FILE_EXTENSIONS: settings.allowedExtensions ?? '',
+          BLOCKED_FILE_EXTENSIONS: settings.blockedExtensions ?? '',
+        }),
+        storageService.updateFileExtensions(namespace, {
+          allowedExtensions: allowedList,
+          blockedExtensions: blockedList,
+        }),
+      ]);
+      if (!mountedRef.current) return;
+      setAlert({ variant: 'success', title: 'File type settings saved successfully' });
+    } catch (err) {
+      if (!mountedRef.current) return;
+      setAlert({ variant: 'danger', title: 'Failed to save file type settings', message: (err as Error).message });
+    } finally {
+      if (mountedRef.current) setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <Bullseye><Spinner aria-label="Loading file type settings" /></Bullseye>;
+  }
+
+  return (
+    <Form>
+      {alert && (
+        <Alert variant={alert.variant} title={alert.title} isInline actionClose={<AlertActionCloseButton onClose={() => setAlert(null)} />}>
+          {alert.message}
+        </Alert>
+      )}
+      <FormGroup
+        label={
+          <span>
+            Allowed file extensions{' '}
+            <Button variant="link" isInline onClick={() => setDefaultsModal('allowed')}>(defaults)</Button>
+          </span>
+        }
+        fieldId="allowed-extensions"
+      >
+        <TextInput
+          id="allowed-extensions"
+          value={settings.allowedExtensions || ''}
+          onChange={(_e, v) => setSettings((prev) => ({ ...prev, allowedExtensions: v }))}
+          placeholder=".safetensors, .bin, .pt, .csv, .json, .py, ..."
+        />
+      </FormGroup>
+      <FormGroup
+        label={
+          <span>
+            Blocked file extensions{' '}
+            <Button variant="link" isInline onClick={() => setDefaultsModal('blocked')}>(defaults)</Button>
+          </span>
+        }
+        fieldId="blocked-extensions"
+      >
+        <TextInput
+          id="blocked-extensions"
+          value={settings.blockedExtensions || ''}
+          onChange={(_e, v) => setSettings((prev) => ({ ...prev, blockedExtensions: v }))}
+          placeholder=".exe, .dll, .sh, .bat, ..."
+        />
+      </FormGroup>
+      <ActionGroup>
+        <Button variant="primary" onClick={handleSave} isLoading={saving} isDisabled={saving}>
+          Save
+        </Button>
+      </ActionGroup>
+      <HelperText>
+        <HelperTextItem icon={<InfoIcon />}>
+          Comma-separated lists of file extensions. Wildcards are supported: .p* matches .py, .pl,
+          .php; * matches any extension. Setting a value fully replaces the built-in defaults — include
+          all extensions you want. Leave empty to use the defaults.
+        </HelperTextItem>
+      </HelperText>
+      <Modal
+        isOpen={defaultsModal !== null}
+        onClose={() => setDefaultsModal(null)}
+        aria-label="Default extensions"
+        variant="medium"
+      >
+        <ModalHeader
+          title={defaultsModal === 'allowed' ? 'Default allowed extensions' : 'Default blocked extensions'}
+        />
+        <ModalBody>
+          <ClipboardCopy isReadOnly hoverTip="Copy" clickTip="Copied" variant="expansion">
+            {defaultsModal === 'allowed' ? DEFAULT_ALLOWED : DEFAULT_BLOCKED}
+          </ClipboardCopy>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="primary" onClick={() => setDefaultsModal(null)}>Close</Button>
+        </ModalFooter>
+      </Modal>
+    </Form>
+  );
+};
+
 const SettingsContent: React.FC = () => {
   const { selectedProject } = useBrewetContext();
   const [activeTab, setActiveTab] = useState<TabKey>('s3');
@@ -479,15 +650,17 @@ const SettingsContent: React.FC = () => {
           <PaginationTab namespace={selectedProject} />
         </div>
       </Tab>
+      <Tab eventKey="filetypes" title={<TabTitleText>File Types</TabTitleText>} aria-label="File Types settings">
+        <div className="pf-v6-u-pt-lg">
+          <FileTypesTab namespace={selectedProject} />
+        </div>
+      </Tab>
     </Tabs>
   );
 };
 
 const SettingsPage: React.FC = () => (
-  <PageSection>
-    <Title headingLevel="h1" size="lg">
-      Settings
-    </Title>
+  <PageSection padding={{ default: 'noPadding' }} className="pf-v6-u-px-lg pf-v6-u-pb-md">
     <ContainerRequired>
       <SettingsContent />
     </ContainerRequired>

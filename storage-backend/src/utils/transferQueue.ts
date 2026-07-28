@@ -12,6 +12,7 @@ export interface TransferFileJob {
   size: number;
   status: TransferFileStatus;
   loaded: number;
+  uploadLoaded?: number;
   error?: string;
 }
 
@@ -107,7 +108,12 @@ export class TransferQueue extends EventEmitter {
     };
 
     this.jobs.set(jobId, job);
-    this.processFiles(job, executor);
+    this.processFiles(job, executor).catch((err) => {
+      console.error('Transfer processing failed:', err);
+      job.status = 'failed';
+      job.completedAt = Date.now();
+      this.emitProgress(job.id, true);
+    });
     return jobId;
   }
 
@@ -218,17 +224,22 @@ export class TransferQueue extends EventEmitter {
 
   private buildProgress(job: TransferJob): TransferProgress {
     const activeFile = job.files.find((f) => f.status === 'active');
+    const failedFiles = job.files.filter((f) => f.status === 'failed');
+    const error = job.status === 'failed'
+      ? failedFiles.map((f) => f.error).filter(Boolean).join('; ') || 'Transfer failed'
+      : undefined;
     return {
       jobId: job.id,
       status: job.status,
       type: job.type,
       totalFiles: job.files.length,
       completedFiles: job.files.filter((f) => f.status === 'completed').length,
-      failedFiles: job.files.filter((f) => f.status === 'failed').length,
+      failedFiles: failedFiles.length,
       cancelledFiles: job.files.filter((f) => f.status === 'cancelled').length,
       totalBytes: job.files.reduce((sum, f) => sum + f.size, 0),
       loadedBytes: job.files.reduce((sum, f) => sum + f.loaded, 0),
       currentFile: activeFile?.sourcePath,
+      error,
       files: job.files,
     };
   }

@@ -183,7 +183,7 @@ make chart-push
 ```bash
 helm install brewet oci://quay.io/rh-ai-community-plugins/brewet-chart \
   --version 0.1.0 \
-  --namespace brewet \
+  --namespace cp-brewet \
   --create-namespace
 ```
 

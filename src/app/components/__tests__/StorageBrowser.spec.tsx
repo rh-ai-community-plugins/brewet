@@ -64,11 +64,16 @@ function setupMocks(params?: Record<string, string | undefined>) {
     containerStatus: 'running',
     containerInfo: null,
     refreshContainerStatus: jest.fn(),
+    projects: [],
+    projectsLoading: false,
+    projectsError: null,
+    refreshProjects: jest.fn(),
+    addProject: jest.fn(),
     isActioning: false,
     setIsActioning: jest.fn(),
   });
-  mockStorageService.getLocations.mockResolvedValue(mockLocations);
-  mockStorageService.refreshLocations.mockResolvedValue(mockLocations);
+  mockStorageService.getLocations.mockResolvedValue({ locations: mockLocations, s3Connected: true });
+  mockStorageService.refreshLocations.mockResolvedValue({ locations: mockLocations, s3Connected: true });
   mockStorageService.listFiles.mockResolvedValue(mockFileResponse);
   mockStorageService.getMaxFilesPerPage.mockResolvedValue(100);
   mockStorageService.downloadFile.mockResolvedValue('/brewet/api/test-ns/objects/download/my-bucket/cmVhZG1lLnR4dA');
@@ -92,12 +97,11 @@ describe('StorageBrowser', () => {
       });
     });
 
-    it('should show the selected location name in toggle and breadcrumb', async () => {
+    it('should show the selected location name in toggle', async () => {
       setupMocks({ locationId: 'my-bucket' });
       render(<StorageBrowser />);
       await waitFor(() => {
-        const matches = screen.getAllByText('my-bucket');
-        expect(matches.length).toBeGreaterThanOrEqual(2);
+        expect(screen.getByText('my-bucket')).toBeInTheDocument();
       });
     });
 
@@ -142,7 +146,7 @@ describe('StorageBrowser', () => {
 
     it('should show loading spinner while fetching files', async () => {
       setupMocks({ locationId: 'my-bucket' });
-      let resolveLocations: (v: StorageLocation[]) => void;
+      let resolveLocations: (v: { locations: StorageLocation[]; s3Connected: boolean }) => void;
       mockStorageService.getLocations.mockReturnValue(
         new Promise((resolve) => { resolveLocations = resolve; }),
       );
@@ -154,7 +158,7 @@ describe('StorageBrowser', () => {
       expect(screen.getByLabelText('Loading storage locations')).toBeInTheDocument();
 
       // Resolve locations, triggering file load
-      resolveLocations!(mockLocations);
+      resolveLocations!({ locations: mockLocations, s3Connected: true });
 
       await waitFor(() => {
         expect(screen.getByLabelText('Loading files')).toBeInTheDocument();
@@ -219,6 +223,7 @@ describe('StorageBrowser', () => {
       });
 
       await userEvent.click(screen.getByLabelText('Delete readme.txt'));
+      await userEvent.type(screen.getByLabelText(/Type "readme.txt" to confirm/), 'readme.txt');
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
       await waitFor(() => {
@@ -330,6 +335,39 @@ describe('StorageBrowser', () => {
 
       expect(screen.getByText('Upload')).toBeInTheDocument();
     });
+
+    it('should show Cancel Upload button during active uploads and cancel on click', async () => {
+      setupMocks({ locationId: 'my-bucket' });
+      let rejectUpload: (err: Error) => void = () => {};
+      mockStorageService.uploadFile.mockImplementation(
+        () => new Promise((_resolve, reject) => { rejectUpload = reject; }),
+      );
+
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('readme.txt')).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByText('Upload'));
+
+      const dropzone = screen.getByText(/Drag and drop/);
+      const file = new File(['test'], 'test-file.txt', { type: 'text/plain' });
+      const dataTransfer = { files: [file], items: [{ kind: 'file', getAsFile: () => file }], types: ['Files'] };
+      fireEvent.drop(dropzone, { dataTransfer });
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Cancel Upload' })).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel Upload' }));
+
+      // Simulate the abort causing the pending promise to reject
+      rejectUpload(new DOMException('The operation was aborted', 'AbortError'));
+
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: 'Cancel Upload' })).not.toBeInTheDocument();
+      });
+    });
   });
 
   describe('Load more', () => {
@@ -359,11 +397,21 @@ describe('StorageBrowser', () => {
   describe('No locations', () => {
     it('should show info alert when no locations available', async () => {
       setupMocks();
-      mockStorageService.getLocations.mockResolvedValue([]);
+      mockStorageService.getLocations.mockResolvedValue({ locations: [], s3Connected: false });
       render(<StorageBrowser />);
       await waitFor(() => {
         expect(screen.getByText('No storage locations found')).toBeInTheDocument();
       });
+    });
+
+    it('should show S3 connected message when S3 has no buckets', async () => {
+      setupMocks();
+      mockStorageService.getLocations.mockResolvedValue({ locations: [], s3Connected: true });
+      render(<StorageBrowser />);
+      await waitFor(() => {
+        expect(screen.getByText('S3 connected — no buckets yet')).toBeInTheDocument();
+      });
+      expect(screen.getByText('Go to Storage Management')).toBeInTheDocument();
     });
   });
 
@@ -608,7 +656,7 @@ describe('StorageBrowser', () => {
       await userEvent.click(screen.getByText('Delete Selected'));
 
       await waitFor(() => {
-        expect(screen.getByText('Delete Selected Items')).toBeInTheDocument();
+        expect(screen.getByText('Delete Folder')).toBeInTheDocument();
       });
     });
 
@@ -633,6 +681,7 @@ describe('StorageBrowser', () => {
         expect(screen.getByText('Delete Selected Items')).toBeInTheDocument();
       });
 
+      await userEvent.type(screen.getByLabelText(/Type "confirm" to confirm/), 'confirm');
       await userEvent.click(screen.getByRole('button', { name: /Delete 3 Items/ }));
 
       await waitFor(() => {

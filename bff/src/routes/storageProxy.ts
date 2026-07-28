@@ -6,8 +6,7 @@ import {
 } from '../utils/serviceDiscovery';
 import { K8sHttpError } from '../utils/k8sClient';
 import { rateLimiter } from '../middleware/rateLimiter';
-
-const K8S_NAMESPACE_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+import { K8S_NAMESPACE_RE } from '../utils/constants';
 
 const proxy = httpProxy.createProxyServer({});
 
@@ -44,15 +43,29 @@ function handleProxyError(
   res: Response,
 ): void {
   clearCache(namespace);
-  if (res.headersSent) return;
 
   const code = err.code;
-  if (
+  const isConnectionError =
     code === 'ECONNREFUSED' ||
     code === 'ECONNRESET' ||
     code === 'ETIMEDOUT' ||
-    code === 'ENOTFOUND'
-  ) {
+    code === 'ENOTFOUND';
+
+  if (res.headersSent) {
+    console.error('Proxy error mid-stream for namespace %s: %s (code=%s)', namespace, err.message, code || 'none');
+    if (res.writable) {
+      try {
+        const detail = isConnectionError
+          ? 'Storage backend connection lost'
+          : `Proxy error: ${err.message}`;
+        res.write(`event: error\ndata: ${JSON.stringify({ error: detail })}\n\n`);
+      } catch { /* response already closed */ }
+      res.end();
+    }
+    return;
+  }
+
+  if (isConnectionError) {
     res.status(503).json({
       error: 'Storage backend is unreachable',
       detail: `The storage backend in namespace "${namespace}" is not running. Start the Brewet container first.`,
@@ -144,4 +157,7 @@ export function createStorageProxyRouter(): Router {
   return router;
 }
 
-export { proxy };
+/** Shut down the underlying http-proxy server (for test cleanup). */
+export function closeProxy(): void {
+  proxy.close();
+}

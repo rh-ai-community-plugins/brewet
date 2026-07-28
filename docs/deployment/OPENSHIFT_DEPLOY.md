@@ -17,9 +17,9 @@ This guide walks through deploying the plugin on an OpenShift cluster that alrea
 Install directly from the OCI registry — no need to clone the repo:
 
 ```bash
-helm install brewet oci://quay.io/OWNER/brewet-chart \
+helm install brewet oci://quay.io/rh-ai-community-plugins/brewet-chart \
   --version 0.1.0 \
-  --namespace brewet \
+  --namespace cp-brewet \
   --create-namespace
 ```
 
@@ -27,7 +27,7 @@ Or, from a local checkout of the repository:
 
 ```bash
 helm install brewet chart/ \
-  --namespace brewet \
+  --namespace cp-brewet \
   --create-namespace
 ```
 
@@ -41,9 +41,9 @@ This creates:
 Pass `--set` flags to customize the installation:
 
 ```bash
-helm install brewet oci://quay.io/OWNER/brewet-chart \
+helm install brewet oci://quay.io/rh-ai-community-plugins/brewet-chart \
   --version 0.1.0 \
-  --namespace brewet \
+  --namespace cp-brewet \
   --create-namespace \
   --set replicaCount=2
 ```
@@ -51,9 +51,9 @@ helm install brewet oci://quay.io/OWNER/brewet-chart \
 To deploy the frontend only (no BFF):
 
 ```bash
-helm install brewet oci://quay.io/OWNER/brewet-chart \
+helm install brewet oci://quay.io/rh-ai-community-plugins/brewet-chart \
   --version 0.1.0 \
-  --namespace brewet \
+  --namespace cp-brewet \
   --create-namespace \
   --set bff.enabled=false
 ```
@@ -85,7 +85,7 @@ config.append({
     'tls': False,
     'service': {
       'name': 'brewet',
-      'namespace': 'brewet',
+      'namespace': 'cp-brewet',
       'port': 8080
     }
   }
@@ -117,7 +117,7 @@ config.append({
     'tls': False,
     'service': {
       'name': 'brewet',
-      'namespace': 'brewet',
+      'namespace': 'cp-brewet',
       'port': 8080
     }
   },
@@ -128,7 +128,7 @@ config.append({
     'tls': False,
     'service': {
       'name': 'brewet-bff',
-      'namespace': 'brewet',
+      'namespace': 'cp-brewet',
       'port': 3000
     }
   }]
@@ -175,7 +175,7 @@ for entry in data:
 Verify the plugin pods are running:
 
 ```bash
-oc get pods -n brewet
+oc get pods -n cp-brewet
 ```
 
 You should see pods for `brewet` (and `brewet-bff` if BFF is enabled), all in `Running` status.
@@ -211,8 +211,8 @@ oc set env deployment/rhods-dashboard \
 ### 2. Uninstall the Helm release
 
 ```bash
-helm uninstall brewet -n brewet
-oc delete namespace brewet   # optional: remove the namespace entirely
+helm uninstall brewet -n cp-brewet
+oc delete namespace cp-brewet   # optional: remove the namespace entirely
 ```
 
 ---
@@ -223,7 +223,7 @@ Key values in `chart/values.yaml`:
 
 | Parameter | Default | Description |
 |---|---|---|
-| `image.repository` | `quay.io/OWNER/brewet` | Frontend container image |
+| `image.repository` | `quay.io/rh-ai-community-plugins/brewet` | Frontend container image |
 | `image.tag` | `""` (defaults to appVersion) | Frontend image tag |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy |
 | `replicaCount` | `1` | Frontend replicas |
@@ -234,7 +234,7 @@ Key values in `chart/values.yaml`:
 | `resources.limits.cpu` | `100m` | Frontend CPU limit |
 | `resources.limits.memory` | `128Mi` | Frontend memory limit |
 | `bff.enabled` | `true` | Deploy the BFF service |
-| `bff.image.repository` | `quay.io/OWNER/brewet-bff` | BFF container image |
+| `bff.image.repository` | `quay.io/rh-ai-community-plugins/brewet-bff` | BFF container image |
 | `bff.image.tag` | `""` (defaults to appVersion) | BFF image tag |
 | `bff.service.port` | `3000` | BFF Service port |
 | `bff.resources.requests.cpu` | `100m` | BFF CPU request |

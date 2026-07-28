@@ -15,13 +15,16 @@ import {
   ProgressMeasureLocation,
   Content,
   Radio,
+  Checkbox,
   Bullseye,
   Spinner,
   Label,
   List,
   ListItem,
+  Breadcrumb,
+  BreadcrumbItem,
 } from '@patternfly/react-core';
-import { CloudIcon, FolderIcon } from '@patternfly/react-icons';
+import { CloudIcon, FolderIcon, FolderOpenIcon } from '@patternfly/react-icons';
 import { storageService } from '~/app/services/storageService';
 import { formatBytes } from '~/app/utils/format';
 import { transferEmitter } from '~/app/utils/emitter';
@@ -33,6 +36,7 @@ import type {
   TransferRequest,
   ConflictCheckResult,
 } from '~/app/types/storage';
+import './TransferModal.css';
 
 type ConflictResolution = 'overwrite' | 'skip' | 'rename';
 type ModalStep = 'destination' | 'conflicts' | 'progress';
@@ -62,6 +66,11 @@ const TransferModal: React.FC<TransferModalProps> = ({
   // Destination selection
   const [destLocationId, setDestLocationId] = useState<string | null>(null);
   const [destLocationSelectOpen, setDestLocationSelectOpen] = useState(false);
+  const [deleteSource, setDeleteSource] = useState(true);
+  const [destPath, setDestPath] = useState('');
+  const [destFolders, setDestFolders] = useState<FileInfo[]>([]);
+  const [destFoldersLoading, setDestFoldersLoading] = useState(false);
+  const [destFoldersError, setDestFoldersError] = useState<string | null>(null);
 
   // Conflict detection
   const [conflictResolution, setConflictResolution] = useState<ConflictResolution>('overwrite');
@@ -123,17 +132,40 @@ const TransferModal: React.FC<TransferModalProps> = ({
     };
   }, [cleanupEventSource]);
 
+  useEffect(() => {
+    if (!destLocation) {
+      setDestFolders([]);
+      return;
+    }
+    let cancelled = false;
+    setDestFoldersLoading(true);
+    setDestFoldersError(null);
+    storageService
+      .listFiles(namespace, destLocation, destPath)
+      .then((res) => {
+        if (!cancelled) setDestFolders(res.files.filter((f) => f.isDirectory));
+      })
+      .catch((err) => {
+        if (!cancelled) setDestFoldersError(err instanceof Error ? err.message : 'Failed to load folders.');
+      })
+      .finally(() => {
+        if (!cancelled) setDestFoldersLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [namespace, destLocation, destPath]);
+
   const buildRequest = useCallback(
     (resolution?: ConflictResolution): TransferRequest | null => {
       if (!destLocation) return null;
       return {
         source,
-        destination: buildTransferPath(destLocation, ''),
+        destination: buildTransferPath(destLocation, destPath),
         items,
         conflictResolution: resolution,
+        deleteSource,
       };
     },
-    [source, destLocation, items],
+    [source, destLocation, destPath, items, deleteSource],
   );
 
   const startTransfer = useCallback(
@@ -308,6 +340,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
             onSelect={(_e, value) => {
               if (typeof value === 'string') {
                 setDestLocationId(value);
+                setDestPath('');
                 setDestLocationSelectOpen(false);
               }
             }}
@@ -317,7 +350,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
                 ref={toggleRef}
                 onClick={() => setDestLocationSelectOpen((prev) => !prev)}
                 isExpanded={destLocationSelectOpen}
-                style={{ minWidth: '250px' }}
+                className="transfer-modal__dest-toggle"
                 id="transfer-dest"
               >
                 {destLocation ? (
@@ -351,6 +384,77 @@ const TransferModal: React.FC<TransferModalProps> = ({
             </SelectList>
           </Select>
         </FormGroup>
+
+        {destLocation && (
+          <FormGroup label="Destination folder" fieldId="transfer-dest-folder" className="pf-v6-u-mt-md">
+            <Breadcrumb className="pf-v6-u-mb-sm">
+              <BreadcrumbItem
+                component="button"
+                onClick={() => setDestPath('')}
+                className={!destPath ? 'pf-m-current' : undefined}
+              >
+                {destLocation.name}
+              </BreadcrumbItem>
+              {destPath.replace(/\/$/, '').split('/').filter(Boolean).map((segment, i, arr) => {
+                const segmentPath = arr.slice(0, i + 1).join('/') + '/';
+                const isCurrent = i === arr.length - 1;
+                return (
+                  <BreadcrumbItem
+                    key={segmentPath}
+                    component="button"
+                    onClick={() => setDestPath(segmentPath)}
+                    className={isCurrent ? 'pf-m-current' : undefined}
+                  >
+                    {segment}
+                  </BreadcrumbItem>
+                );
+              })}
+            </Breadcrumb>
+
+            {destFoldersLoading && (
+              <Bullseye className="pf-v6-u-py-sm">
+                <Spinner size="md" aria-label="Loading folders" />
+              </Bullseye>
+            )}
+
+            {destFoldersError && (
+              <Alert variant="danger" title={destFoldersError} isInline isPlain />
+            )}
+
+            {!destFoldersLoading && !destFoldersError && (
+              <div className="transfer-modal__folder-list">
+                {destFolders.length === 0 ? (
+                  <Content component="small" className="pf-v6-u-color-200">
+                    No subfolders. Files will be transferred here.
+                  </Content>
+                ) : (
+                  <List isPlain>
+                    {destFolders.map((folder) => (
+                      <ListItem key={folder.name}>
+                        <Button
+                          variant="link"
+                          isInline
+                          onClick={() => setDestPath(destPath + folder.name + '/')}
+                          icon={<FolderOpenIcon className="pf-v6-u-mr-xs" />}
+                        >
+                          {folder.name.replace(/\/$/, '')}
+                        </Button>
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+              </div>
+            )}
+          </FormGroup>
+        )}
+
+        <Checkbox
+          id="transfer-delete-source"
+          label="Remove source files after transfer (move)"
+          isChecked={deleteSource}
+          onChange={(_event, checked) => setDeleteSource(checked)}
+          className="pf-v6-u-mt-md"
+        />
 
         {conflictError && (
           <Alert variant="danger" title="Conflict check failed" isInline className="pf-v6-u-mt-md">
@@ -386,7 +490,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
               className="pf-v6-u-mb-md"
             />
 
-            <List isPlain className="pf-v6-u-mb-md" style={{ maxHeight: '200px', overflow: 'auto' }}>
+            <List isPlain className="pf-v6-u-mb-md transfer-modal__conflict-list">
               {conflictResult.conflicts.map((c) => (
                 <ListItem key={c.path}>
                   {c.path}{' '}
@@ -458,7 +562,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
         )}
 
         {progress && (
-          <>
+          <div aria-live="polite">
             <Content component="p" className="pf-v6-u-mb-md">
               Transferring files to{' '}
               <strong>{destLocation?.name}</strong>
@@ -512,7 +616,7 @@ const TransferModal: React.FC<TransferModalProps> = ({
                 {progress.completedFiles} of {progress.totalFiles} files were transferred before cancellation.
               </Alert>
             )}
-          </>
+          </div>
         )}
 
         {transferError && (

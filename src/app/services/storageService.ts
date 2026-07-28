@@ -1,10 +1,16 @@
 import { apiClient } from '~/app/services/apiClient';
 import { base64Encode } from '~/app/utils/encoding';
+import { buildSettingsSecret, SETTINGS_SECRET_NAME } from '~/app/utils/k8sResources';
+import type { ContainerSettings } from '~/app/types/k8s';
 import type {
   StorageLocation,
   BucketsList,
+  LocationsResult,
   LocalStorageLocation,
+  FileInfo,
   FileListResponse,
+  RawS3ListResponse,
+  RawLocalListResponse,
   TransferRequest,
   TransferJob,
   TransferProgress,
@@ -17,11 +23,84 @@ import type {
   HuggingFaceImportResponse,
 } from '~/app/types/storage';
 
+/**
+ * Transform a raw S3 list-objects response into a FileListResponse.
+ *
+ * The storage backend returns `{ objects, prefixes, nextContinuationToken, isTruncated }`
+ * where `objects` are AWS SDK Contents items (Key, Size, LastModified, ETag) and
+ * `prefixes` are CommonPrefixes items (Prefix). This maps them into FileInfo[].
+ */
+export function transformS3Response(raw: RawS3ListResponse): FileListResponse {
+  const files: FileInfo[] = [];
+
+  // Map prefixes (directories) first
+  if (raw.prefixes) {
+    for (const prefix of raw.prefixes) {
+      const fullPrefix = prefix.Prefix || '';
+      // Extract the folder name: "path/to/folder/" -> "folder"
+      const trimmed = fullPrefix.endsWith('/') ? fullPrefix.slice(0, -1) : fullPrefix;
+      const name = trimmed.split('/').pop() || trimmed;
+      if (name) {
+        files.push({
+          name,
+          isDirectory: true,
+        });
+      }
+    }
+  }
+
+  // Map objects (files)
+  if (raw.objects) {
+    for (const obj of raw.objects) {
+      const key = obj.Key || '';
+      // Skip "folder marker" objects (zero-byte keys ending with /)
+      if (key.endsWith('/')) continue;
+      const name = key.split('/').pop() || key;
+      if (name) {
+        files.push({
+          name,
+          isDirectory: false,
+          size: obj.Size,
+          lastModified: obj.LastModified,
+          etag: obj.ETag,
+        });
+      }
+    }
+  }
+
+  return {
+    files,
+    continuationToken: raw.nextContinuationToken ?? undefined,
+    isTruncated: raw.isTruncated,
+  };
+}
+
+/**
+ * Transform a raw local file listing response into a FileListResponse.
+ *
+ * The storage backend returns FileEntry objects with `{ name, path, type, size?, modified? }`
+ * where `type` is 'file' | 'directory' | 'symlink'. This maps `type` to `isDirectory`
+ * and `modified` to `lastModified`.
+ */
+export function transformLocalResponse(raw: RawLocalListResponse): FileListResponse {
+  const files: FileInfo[] = raw.files.map((entry) => ({
+    name: entry.name,
+    isDirectory: entry.type === 'directory',
+    size: entry.size,
+    lastModified: entry.modified,
+  }));
+
+  return {
+    files,
+    totalCount: raw.totalCount,
+  };
+}
+
 class StorageService {
-  private locationsCache: StorageLocation[] | null = null;
+  private locationsCache: LocationsResult | null = null;
   private cacheNamespace: string | null = null;
 
-  async getLocations(namespace: string, signal?: AbortSignal): Promise<StorageLocation[]> {
+  async getLocations(namespace: string, signal?: AbortSignal): Promise<LocationsResult> {
     if (this.locationsCache && this.cacheNamespace === namespace) {
       return this.locationsCache;
     }
@@ -32,10 +111,12 @@ class StorageService {
     ]);
 
     const locations: StorageLocation[] = [];
+    let s3Connected = false;
 
     if (bucketsResult.status === 'fulfilled') {
-      const bucketsList = bucketsResult.value;
-      for (const bucket of bucketsList.buckets) {
+      s3Connected = bucketsResult.value?.s3Connected ?? false;
+      const buckets = bucketsResult.value?.buckets ?? [];
+      for (const bucket of buckets) {
         locations.push({
           id: bucket.Name,
           name: bucket.Name,
@@ -47,7 +128,8 @@ class StorageService {
     }
 
     if (localResult.status === 'fulfilled') {
-      for (const loc of localResult.value.locations) {
+      const localLocations = localResult.value?.locations ?? [];
+      for (const loc of localLocations) {
         locations.push({
           id: loc.id,
           name: loc.name,
@@ -58,12 +140,15 @@ class StorageService {
       }
     }
 
-    this.locationsCache = locations;
-    this.cacheNamespace = namespace;
-    return locations;
+    const result: LocationsResult = { locations, s3Connected };
+    if (locations.length > 0 || s3Connected) {
+      this.locationsCache = result;
+      this.cacheNamespace = namespace;
+    }
+    return result;
   }
 
-  async refreshLocations(namespace: string, signal?: AbortSignal): Promise<StorageLocation[]> {
+  async refreshLocations(namespace: string, signal?: AbortSignal): Promise<LocationsResult> {
     this.locationsCache = null;
     this.cacheNamespace = null;
     return this.getLocations(namespace, signal);
@@ -114,18 +199,30 @@ class StorageService {
       }
 
       const query = params.toString();
-      return apiClient.get<FileListResponse>(namespace, query ? `${url}?${query}` : url, signal);
+      const raw = await apiClient.get<RawS3ListResponse>(
+        namespace,
+        query ? `${url}?${query}` : url,
+        signal,
+      );
+      return transformS3Response(raw);
     }
 
-    const encodedPath = base64Encode(path || '/');
-    const url = `/local/files/${encodeURIComponent(location.id)}/${encodedPath}`;
+    const encodedPath = path ? base64Encode(path) : '';
+    const url = encodedPath
+      ? `/local/files/${encodeURIComponent(location.id)}/${encodedPath}`
+      : `/local/files/${encodeURIComponent(location.id)}/`;
 
     const params = new URLSearchParams();
     if (options?.limit != null) params.set('limit', String(options.limit));
     if (options?.offset != null) params.set('offset', String(options.offset));
 
     const query = params.toString();
-    return apiClient.get<FileListResponse>(namespace, query ? `${url}?${query}` : url, signal);
+    const raw = await apiClient.get<RawLocalListResponse>(
+      namespace,
+      query ? `${url}?${query}` : url,
+      signal,
+    );
+    return transformLocalResponse(raw);
   }
 
   async uploadFile(
@@ -306,6 +403,21 @@ class StorageService {
     await apiClient.put(namespace, '/settings/max-files-per-page', { maxFilesPerPage: value }, signal);
   }
 
+  async getFileExtensions(
+    namespace: string,
+    signal?: AbortSignal,
+  ): Promise<{ allowedExtensions: string[]; blockedExtensions: string[] }> {
+    return apiClient.get(namespace, '/settings/file-extensions', signal);
+  }
+
+  async updateFileExtensions(
+    namespace: string,
+    settings: { allowedExtensions: string[]; blockedExtensions: string[] },
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await apiClient.put(namespace, '/settings/file-extensions', settings, signal);
+  }
+
   async importHuggingFace(
     namespace: string,
     request: HuggingFaceImportRequest,
@@ -362,6 +474,94 @@ class StorageService {
   getTransferSseUrl(namespace: string, sseUrl: string): string {
     const path = sseUrl.replace(/^\/api/, '');
     return apiClient.getDownloadUrl(namespace, path);
+  }
+
+  async readSettingsSecret(
+    namespace: string,
+    signal?: AbortSignal,
+  ): Promise<ContainerSettings> {
+    const ns = encodeURIComponent(namespace);
+    const res = await fetch(
+      `/api/k8s/api/v1/namespaces/${ns}/secrets/${SETTINGS_SECRET_NAME}`,
+      { signal },
+    );
+    if (res.status === 404) return {};
+    if (!res.ok) throw new Error(`Failed to read settings: ${res.status}`);
+    const secret = await res.json();
+    const data: Record<string, string> = secret.data ?? {};
+    const decode = (v: string) => atob(v);
+    const settings: ContainerSettings = {};
+    if (data.HF_TOKEN) settings.hfToken = decode(data.HF_TOKEN);
+    if (data.HTTP_PROXY) settings.httpProxy = decode(data.HTTP_PROXY);
+    if (data.HTTPS_PROXY) settings.httpsProxy = decode(data.HTTPS_PROXY);
+    if (data.MAX_CONCURRENT_TRANSFERS) {
+      const v = parseInt(decode(data.MAX_CONCURRENT_TRANSFERS), 10);
+      if (!isNaN(v)) settings.maxConcurrentTransfers = v;
+    }
+    if (data.MAX_FILES_PER_PAGE) {
+      const v = parseInt(decode(data.MAX_FILES_PER_PAGE), 10);
+      if (!isNaN(v)) settings.maxFilesPerPage = v;
+    }
+    if (data.ALLOWED_FILE_EXTENSIONS) {
+      settings.allowedFileExtensions = decode(data.ALLOWED_FILE_EXTENSIONS);
+    }
+    if (data.BLOCKED_FILE_EXTENSIONS) {
+      settings.blockedFileExtensions = decode(data.BLOCKED_FILE_EXTENSIONS);
+    }
+    return settings;
+  }
+
+  async patchSettingsSecret(
+    namespace: string,
+    stringData: Record<string, string>,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const ns = encodeURIComponent(namespace);
+    const current = await this.readSettingsSecret(namespace, signal);
+    const merged: ContainerSettings = { ...current };
+    if ('HF_TOKEN' in stringData) merged.hfToken = stringData.HF_TOKEN;
+    if ('HTTP_PROXY' in stringData) merged.httpProxy = stringData.HTTP_PROXY;
+    if ('HTTPS_PROXY' in stringData) merged.httpsProxy = stringData.HTTPS_PROXY;
+    if ('MAX_CONCURRENT_TRANSFERS' in stringData) {
+      merged.maxConcurrentTransfers = parseInt(stringData.MAX_CONCURRENT_TRANSFERS, 10);
+    }
+    if ('MAX_FILES_PER_PAGE' in stringData) {
+      merged.maxFilesPerPage = parseInt(stringData.MAX_FILES_PER_PAGE, 10);
+    }
+    if ('ALLOWED_FILE_EXTENSIONS' in stringData) {
+      merged.allowedFileExtensions = stringData.ALLOWED_FILE_EXTENSIONS;
+    }
+    if ('BLOCKED_FILE_EXTENSIONS' in stringData) {
+      merged.blockedFileExtensions = stringData.BLOCKED_FILE_EXTENSIONS;
+    }
+    const body = buildSettingsSecret(namespace, merged);
+    const url = `/api/k8s/api/v1/namespaces/${ns}/secrets/${SETTINGS_SECRET_NAME}`;
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (res.status === 404) {
+      const createRes = await fetch(
+        `/api/k8s/api/v1/namespaces/${ns}/secrets`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal,
+        },
+      );
+      if (!createRes.ok) {
+        const text = await createRes.text().catch(() => '');
+        throw new Error(`Failed to create settings secret: ${createRes.status} ${text}`);
+      }
+      return;
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Failed to save settings: ${res.status} ${text}`);
+    }
   }
 }
 

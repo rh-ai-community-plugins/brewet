@@ -21,8 +21,10 @@ export const rateLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
     const namespace = req.params.namespace || 'global';
-    const rawIp = req.socket.remoteAddress || 'unknown';
-    return `${ipKeyGenerator(rawIp)}:${namespace}`;
+    // Use req.ip (respects trust proxy) instead of req.socket.remoteAddress,
+    // which returns the proxy's IP when behind an ingress controller.
+    const clientIp = req.ip || 'unknown';
+    return `${ipKeyGenerator(clientIp)}:${namespace}`;
   },
   message: {
     error: 'Too Many Requests',

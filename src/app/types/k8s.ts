@@ -32,9 +32,20 @@ export interface PersistentVolumeClaim {
   };
 }
 
+export interface ContainerSettings {
+  hfToken?: string;
+  httpProxy?: string;
+  httpsProxy?: string;
+  maxConcurrentTransfers?: number;
+  maxFilesPerPage?: number;
+  allowedFileExtensions?: string;
+  blockedFileExtensions?: string;
+}
+
 export interface ContainerConfig {
   dataConnection: DataConnection | null;
   pvcMounts: PvcMount[];
+  settings?: ContainerSettings;
 }
 
 export interface PvcMount {

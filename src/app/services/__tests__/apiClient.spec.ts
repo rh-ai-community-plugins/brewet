@@ -86,7 +86,7 @@ describe('apiClient', () => {
   });
 
   describe('error handling', () => {
-    it('should throw ApiError with 401 message', async () => {
+    it('should throw ApiError on 401', async () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: false,
         status: 401,
@@ -95,7 +95,7 @@ describe('apiClient', () => {
       });
 
       await expect(apiClient.get('ns', '/test')).rejects.toThrow(ApiError);
-      await expect(apiClient.get('ns', '/test')).rejects.toThrow('Authentication required');
+      await expect(apiClient.get('ns', '/test')).rejects.toThrow('Unauthorized');
     });
 
     it('should throw ApiError with 503 message', async () => {
@@ -106,7 +106,7 @@ describe('apiClient', () => {
         text: () => Promise.resolve(''),
       });
 
-      await expect(apiClient.get('ns', '/test')).rejects.toThrow('Storage container is not running');
+      await expect(apiClient.get('ns', '/test')).rejects.toThrow('Brewet is not running');
     });
 
     it('should throw ApiError with response body for other errors', async () => {

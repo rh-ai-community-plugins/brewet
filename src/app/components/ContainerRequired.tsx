@@ -21,42 +21,37 @@ export const ContainerRequired: React.FC<ContainerRequiredProps> = ({ children }
   const { startContainer, stopContainer, isActioning, refreshContainerStatus } = useBrewetContainer();
   const [isWizardOpen, setIsWizardOpen] = useState(false);
 
+  let content: React.ReactNode;
+
   if (!selectedProject) {
-    return (
+    content = (
       <EmptyState headingLevel="h2" titleText="Select a project" icon={CubesIcon}>
         <EmptyStateBody>
           Select a project from the toolbar to get started with storage management.
         </EmptyStateBody>
       </EmptyState>
     );
-  }
-
-  if (containerStatus === 'none') {
-    return (
-      <>
-        <EmptyState headingLevel="h2" titleText="No storage container" icon={CubesIcon}>
-          <EmptyStateBody>
-            No Brewet storage container exists in this project. Create one to start
-            browsing and managing your S3 and PVC storage.
-          </EmptyStateBody>
-          <EmptyStateFooter>
-            <EmptyStateActions>
-              <Button variant="primary" onClick={() => setIsWizardOpen(true)}>
-                Create Container
-              </Button>
-            </EmptyStateActions>
-          </EmptyStateFooter>
-        </EmptyState>
-        {isWizardOpen && <ContainerWizard onClose={() => setIsWizardOpen(false)} />}
-      </>
-    );
-  }
-
-  if (containerStatus === 'stopped') {
-    return (
-      <EmptyState headingLevel="h2" titleText="Container stopped" icon={CubesIcon}>
+  } else if (containerStatus === 'none') {
+    content = (
+      <EmptyState headingLevel="h2" titleText="Brewet not set up" icon={CubesIcon}>
         <EmptyStateBody>
-          The storage container in this project is stopped. Start it to access your
+          Brewet is not set up in this project. Set it up to start
+          browsing and managing your S3 and PVC storage.
+        </EmptyStateBody>
+        <EmptyStateFooter>
+          <EmptyStateActions>
+            <Button variant="primary" onClick={() => setIsWizardOpen(true)}>
+              Set Up Brewet
+            </Button>
+          </EmptyStateActions>
+        </EmptyStateFooter>
+      </EmptyState>
+    );
+  } else if (containerStatus === 'stopped') {
+    content = (
+      <EmptyState headingLevel="h2" titleText="Brewet stopped" icon={CubesIcon}>
+        <EmptyStateBody>
+          Brewet is stopped in this project. Start it to access your
           storage.
         </EmptyStateBody>
         <EmptyStateFooter>
@@ -67,30 +62,26 @@ export const ContainerRequired: React.FC<ContainerRequiredProps> = ({ children }
               isLoading={isActioning}
               isDisabled={isActioning}
             >
-              Start Container
+              Start Brewet
             </Button>
           </EmptyStateActions>
         </EmptyStateFooter>
       </EmptyState>
     );
-  }
-
-  if (containerStatus === 'starting') {
-    return (
-      <EmptyState headingLevel="h2" titleText="Container starting" icon={CubesIcon}>
+  } else if (containerStatus === 'starting') {
+    content = (
+      <EmptyState headingLevel="h2" titleText="Brewet starting" icon={CubesIcon}>
         <EmptyStateBody>
-          <Spinner size="lg" aria-label="Container starting" />
-          {' '}The storage container is starting up. This may take a moment.
+          <Spinner size="lg" aria-label="Brewet starting" />
+          {' '}Brewet is starting up. This may take a moment.
         </EmptyStateBody>
       </EmptyState>
     );
-  }
-
-  if (containerStatus === 'error') {
-    return (
-      <EmptyState headingLevel="h2" titleText="Container error" icon={ExclamationCircleIcon}>
+  } else if (containerStatus === 'error') {
+    content = (
+      <EmptyState headingLevel="h2" titleText="Brewet error" icon={ExclamationCircleIcon}>
         <EmptyStateBody>
-          The storage container encountered an error. Try stopping and restarting it.
+          Brewet encountered an error. Try stopping and restarting it.
         </EmptyStateBody>
         <EmptyStateFooter>
           <EmptyStateActions>
@@ -100,7 +91,7 @@ export const ContainerRequired: React.FC<ContainerRequiredProps> = ({ children }
               isLoading={isActioning}
               isDisabled={isActioning}
             >
-              Stop Container
+              Stop Brewet
             </Button>
             <Button variant="link" onClick={refreshContainerStatus}>
               Refresh Status
@@ -109,7 +100,14 @@ export const ContainerRequired: React.FC<ContainerRequiredProps> = ({ children }
         </EmptyStateFooter>
       </EmptyState>
     );
+  } else {
+    content = children;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {content}
+      {isWizardOpen && <ContainerWizard onClose={() => setIsWizardOpen(false)} />}
+    </>
+  );
 };
