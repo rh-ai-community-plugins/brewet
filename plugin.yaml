@@ -61,8 +61,11 @@ remote:
 # networking.k8s.io/networkpolicies, and core/secrets via the dashboard's
 # K8s API pass-through.
 rbac:
-  required_roles: []
-  cluster_roles: true
+  required_roles:
+    - "apps/deployments: create, get, list, update, delete"
+    - "core/services, configmaps, secrets, pvcs, serviceaccounts: create, get, list, update, delete"
+    - "route.openshift.io/routes: create, get, list, update, delete"
+  cluster_roles: false
 
 # --- Support (optional) ---
 support:
