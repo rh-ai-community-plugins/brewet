@@ -4,6 +4,10 @@ This directory contains all project documentation, organized by topic.
 
 ## Sections
 
+### [User guide] (user/)
+
+Full user guide for Brewet.
+
 ### [Architecture](architecture/)
 
 How the RHOAI Dashboard plugin system works, including the extension contract, Module Federation config, and deployment models.

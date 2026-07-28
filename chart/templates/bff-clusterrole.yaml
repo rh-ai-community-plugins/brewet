@@ -1,0 +1,13 @@
+{{- if .Values.bff.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "brewet.bffFullname" . }}
+  labels:
+    {{- include "brewet.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bff
+rules:
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get"]
+{{- end }}

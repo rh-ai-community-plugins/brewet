@@ -1,9 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useProjects } from '~/app/hooks/useProjects';
+import { useBrewetContext, BrewetContextValue } from '~/app/context/BrewetContext';
 import { ProjectSelector } from '../ProjectSelector';
 
-jest.mock('~/app/hooks/useProjects');
+jest.mock('~/app/context/BrewetContext');
 
 const userProjects = [
   { metadata: { name: 'my-app', uid: 'uid-1' } },
@@ -19,8 +19,23 @@ const systemProjects = [
 
 const allProjects = [...userProjects, ...systemProjects];
 
-function mockProjects(projects = allProjects, loading = false, error: string | null = null) {
-  (useProjects as jest.Mock).mockReturnValue({ projects, loading, error, refresh: jest.fn() });
+const baseContext: BrewetContextValue = {
+  selectedProject: null,
+  setSelectedProject: jest.fn(),
+  projects: [],
+  projectsLoading: false,
+  projectsError: null,
+  refreshProjects: jest.fn(),
+  addProject: jest.fn(),
+  containerStatus: 'none',
+  containerInfo: null,
+  refreshContainerStatus: jest.fn(),
+  isActioning: false,
+  setIsActioning: jest.fn(),
+};
+
+function mockContext(overrides: Partial<BrewetContextValue> = {}) {
+  (useBrewetContext as jest.Mock).mockReturnValue({ ...baseContext, ...overrides });
 }
 
 const STORAGE_KEY = 'rhoai.project-favorites';
@@ -34,32 +49,32 @@ describe('ProjectSelector', () => {
   });
 
   it('shows placeholder when no project is selected', () => {
-    mockProjects();
+    mockContext({ projects: allProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
     expect(screen.getByText('Select a project')).toBeInTheDocument();
   });
 
   it('shows selected project name in toggle', () => {
-    mockProjects();
+    mockContext({ projects: allProjects });
     render(<ProjectSelector selectedProject="my-app" onSelect={onSelect} />);
     expect(screen.getByText('Project: my-app')).toBeInTheDocument();
   });
 
   it('shows spinner when loading', () => {
-    mockProjects([], true);
+    mockContext({ projectsLoading: true });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
     expect(screen.getByLabelText('Loading projects')).toBeInTheDocument();
   });
 
   it('shows error alert on failure', () => {
-    mockProjects([], false, 'Network error');
+    mockContext({ projectsError: 'Network error' });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
     expect(screen.getByText('Network error')).toBeInTheDocument();
   });
 
   it('opens dropdown and shows projects sorted alphabetically', async () => {
     const user = userEvent.setup();
-    mockProjects();
+    mockContext({ projects: allProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
 
     await user.click(screen.getByLabelText('Select a project'));
@@ -71,7 +86,7 @@ describe('ProjectSelector', () => {
 
   it('hides system namespaces by default', async () => {
     const user = userEvent.setup();
-    mockProjects();
+    mockContext({ projects: allProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
 
     await user.click(screen.getByLabelText('Select a project'));
@@ -85,7 +100,7 @@ describe('ProjectSelector', () => {
 
   it('shows system namespaces when toggle is turned on', async () => {
     const user = userEvent.setup();
-    mockProjects();
+    mockContext({ projects: allProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
 
     await user.click(screen.getByLabelText('Select a project'));
@@ -99,7 +114,7 @@ describe('ProjectSelector', () => {
 
   it('does not show system namespace toggle when no system namespaces exist', async () => {
     const user = userEvent.setup();
-    mockProjects(userProjects);
+    mockContext({ projects: userProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
 
     await user.click(screen.getByLabelText('Select a project'));
@@ -109,7 +124,7 @@ describe('ProjectSelector', () => {
 
   it('filters projects by search text', async () => {
     const user = userEvent.setup();
-    mockProjects();
+    mockContext({ projects: allProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
 
     await user.click(screen.getByLabelText('Select a project'));
@@ -124,7 +139,7 @@ describe('ProjectSelector', () => {
 
   it('uses fuzzy matching for filter', async () => {
     const user = userEvent.setup();
-    mockProjects();
+    mockContext({ projects: allProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
 
     await user.click(screen.getByLabelText('Select a project'));
@@ -137,7 +152,7 @@ describe('ProjectSelector', () => {
 
   it('shows empty state when filter matches nothing', async () => {
     const user = userEvent.setup();
-    mockProjects();
+    mockContext({ projects: allProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
 
     await user.click(screen.getByLabelText('Select a project'));
@@ -151,7 +166,7 @@ describe('ProjectSelector', () => {
 
   it('calls onSelect when a project is clicked', async () => {
     const user = userEvent.setup();
-    mockProjects();
+    mockContext({ projects: allProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
 
     await user.click(screen.getByLabelText('Select a project'));
@@ -161,7 +176,7 @@ describe('ProjectSelector', () => {
   });
 
   it('can be disabled', () => {
-    mockProjects();
+    mockContext({ projects: allProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} isDisabled />);
     expect(screen.getByLabelText('Select a project')).toBeDisabled();
   });
@@ -169,7 +184,7 @@ describe('ProjectSelector', () => {
   it('shows favorited projects in the Favorites group', async () => {
     const user = userEvent.setup();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(['staging']));
-    mockProjects(userProjects);
+    mockContext({ projects: userProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
 
     await user.click(screen.getByLabelText('Select a project'));
@@ -180,7 +195,7 @@ describe('ProjectSelector', () => {
 
   it('toggles favorite when star icon is clicked', async () => {
     const user = userEvent.setup();
-    mockProjects(userProjects);
+    mockContext({ projects: userProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
 
     await user.click(screen.getByLabelText('Select a project'));
@@ -194,7 +209,7 @@ describe('ProjectSelector', () => {
   it('filters favorites by search text', async () => {
     const user = userEvent.setup();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(['my-app', 'staging']));
-    mockProjects(userProjects);
+    mockContext({ projects: userProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
 
     await user.click(screen.getByLabelText('Select a project'));
@@ -208,10 +223,25 @@ describe('ProjectSelector', () => {
     });
   });
 
+  it('closes dropdown when window loses focus', async () => {
+    const user = userEvent.setup();
+    mockContext({ projects: userProjects });
+    render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
+
+    await user.click(screen.getByLabelText('Select a project'));
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+
+    act(() => window.dispatchEvent(new Event('blur')));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    });
+  });
+
   it('hides Favorites group when no favorites match the filter', async () => {
     const user = userEvent.setup();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(['my-app']));
-    mockProjects(userProjects);
+    mockContext({ projects: userProjects });
     render(<ProjectSelector selectedProject={null} onSelect={onSelect} />);
 
     await user.click(screen.getByLabelText('Select a project'));

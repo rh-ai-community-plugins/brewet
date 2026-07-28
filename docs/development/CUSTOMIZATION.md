@@ -16,6 +16,7 @@ Given a plugin name `{plugin}`, the standard naming scheme is:
 |---|---|---|
 | Frontend container image | `{plugin}` | `my-cool-plugin` |
 | BFF container image | `{plugin}-bff` | `my-cool-plugin-bff` |
+| Storage backend container image | `{plugin}-storage-backend` | `my-cool-plugin-storage-backend` |
 | Helm chart | `{plugin}-chart` | `my-cool-plugin-chart` |
 | npm package | `{plugin}` | `my-cool-plugin` |
 | Module Federation remote | `{plugin}` in camelCase | `myCoolPlugin` |
@@ -129,6 +130,7 @@ my-cool-plugin/
 │   └── templates/
 ├── src/rhoai/extensions.ts              # Extension declarations (required)
 ├── bff/Containerfile                    # BFF image build (optional)
+├── storage-backend/Containerfile        # Storage backend image build (optional)
 ├── .github/workflows/ci.yml             # CI validation (recommended)
 ├── .github/workflows/build-push.yml     # Image publish (recommended)
 └── Makefile                             # Build, validate, image, chart targets
@@ -137,9 +139,10 @@ my-cool-plugin/
 Published OCI artifacts:
 
 ```text
-quay.io/rh-ai-community-plugins/my-cool-plugin:0.1.0        # Frontend image
-quay.io/rh-ai-community-plugins/my-cool-plugin-bff:0.1.0    # BFF image (optional)
-oci://quay.io/rh-ai-community-plugins/my-cool-plugin-chart   # Helm chart (required for auto-deploy)
+quay.io/rh-ai-community-plugins/my-cool-plugin:0.1.0                  # Frontend image
+quay.io/rh-ai-community-plugins/my-cool-plugin-bff:0.1.0              # BFF image (optional)
+quay.io/rh-ai-community-plugins/my-cool-plugin-storage-backend:0.1.0  # Storage backend image (optional)
+oci://quay.io/rh-ai-community-plugins/my-cool-plugin-chart             # Helm chart (required for auto-deploy)
 ```
 
 ---
@@ -157,7 +160,7 @@ The sections below list every plugin-specific identifier in the codebase and the
 - **Module Federation name/scope**: camelCase (`myPlugin`)
 - **Nav item IDs**: prefix with your plugin name (`my-plugin-page-name`)
 - **Section group sort key**: `{number}_{snake_case}` (e.g. `1_my_plugin`)
-- **npm package name**: `rhoai-{your-plugin}`
+- **npm package name**: `{your-plugin}`
 
 All route prefixes, hrefs, and path patterns in `extensions.ts` must use the same prefix as the route extension's `path` (e.g. `/my-plugin/*`).
 
@@ -165,37 +168,37 @@ All route prefixes, hrefs, and path patterns in `extensions.ts` must use the sam
 
 | File | Identifier | Current value | Replace with |
 |---|---|---|---|
-| `package.json` | `name` | `rhoai-brewet` | `rhoai-{your-plugin}` |
+| `package.json` | `name` | `brewet` | `{your-plugin}` |
 | `package.json` | `module-federation.name` | `brewet` | `{yourPlugin}` (camelCase) |
-| `package.json` | `module-federation.proxy[].path` | `/rhoai-brewet` | `/{your-plugin}` |
-| `package.json` | `module-federation.proxy[].pathRewrite` | `/rhoai-brewet` | `/{your-plugin}` |
+| `package.json` | `module-federation.proxy[].path` | `/brewet` | `/{your-plugin}` |
+| `package.json` | `module-federation.proxy[].pathRewrite` | `/brewet` | `/{your-plugin}` |
 | `package.json` | `module-federation.local.port` | `9500` | Any unused port (see [Port allocation](#port-allocation)) |
-| `plugin.yaml` | `name` | `rhoai-brewet` | `{your-plugin}` |
+| `plugin.yaml` | `name` | `brewet` | `{your-plugin}` |
 | `plugin.yaml` | `displayName` | `Brewet` | Your plugin name |
-| `plugin.yaml` | `image.repository` | `quay.io/.../rhoai-brewet` | Your image repository |
-| `plugin.yaml` | `install.helm.registry` | `oci://quay.io/.../rhoai-brewet` | Your OCI chart registry |
+| `plugin.yaml` | `image.repository` | `quay.io/.../brewet` | Your image repository |
+| `plugin.yaml` | `install.helm.registry` | `oci://quay.io/.../brewet` | Your OCI chart registry |
 | `plugin.yaml` | `remote.spec.name` | `brewet` | `{yourPlugin}` (camelCase) |
 | `plugin.yaml` | `remote.spec.scope` | `brewet` | `{yourPlugin}` (must match `name`) |
-| `plugin.yaml` | `remote.spec.remoteEntry` | `.../rhoai-brewet/...` | Your deployed image URL |
-| `plugin.yaml` | `remote.spec.paths[0].path` | `/rhoai-brewet` | `/{your-plugin}` |
+| `plugin.yaml` | `remote.spec.remoteEntry` | `.../brewet/...` | Your deployed image URL |
+| `plugin.yaml` | `remote.spec.paths[0].path` | `/brewet` | `/{your-plugin}` |
 | `plugin.yaml` | `remote.spec.paths[0].extensions` | `brewet/extensions` | `{yourPlugin}/extensions` |
 | `plugin.yaml` | `remote.spec.paths[1].path` | `brewet/Icon` | `{yourPlugin}/Icon` |
-| `src/rhoai/extensions.ts` | area `id` | `rhoai-brewet` | `{your-plugin}` |
-| `src/rhoai/extensions.ts` | plugin section `id` | `rhoai-brewet` | `{your-plugin}` |
+| `src/rhoai/extensions.ts` | area `id` | `brewet` | `{your-plugin}` |
+| `src/rhoai/extensions.ts` | plugin section `id` | `brewet` | `{your-plugin}` |
 | `src/rhoai/extensions.ts` | plugin section `title` | `Brewet` | Your plugin name |
 | `src/rhoai/extensions.ts` | plugin section `group` | `1_brewet` | `{N}_{your_plugin}` |
-| `src/rhoai/extensions.ts` | nav item `id`s | `rhoai-brewet-*` | `{your-plugin}-{page}` |
-| `src/rhoai/extensions.ts` | nav item `href`/`path` | `/rhoai-brewet/*` | `/{your-plugin}/*` |
-| `src/rhoai/extensions.ts` | route `path` | `/rhoai-brewet/*` | `/{your-plugin}/*` |
-| `src/bootstrap.tsx` | `Router basename` | `/rhoai-brewet` | `/{your-plugin}` |
+| `src/rhoai/extensions.ts` | nav item `id`s | `brewet-*` | `{your-plugin}-{page}` |
+| `src/rhoai/extensions.ts` | nav item `href`/`path` | `/brewet/*` | `/{your-plugin}/*` |
+| `src/rhoai/extensions.ts` | route `path` | `/brewet/*` | `/{your-plugin}/*` |
+| `src/bootstrap.tsx` | `Router basename` | `/brewet` | `/{your-plugin}` |
 | `config/webpack.common.js` | MF plugin `name` | `brewet` | `{yourPlugin}` (camelCase) |
 | `config/moduleFederation.js` | `name` | `brewet` | `{yourPlugin}` (camelCase) |
-| `config/webpack.dev.js` | proxy `context` | `/rhoai-brewet` | `/{your-plugin}` |
+| `config/webpack.dev.js` | proxy `context` | `/brewet` | `/{your-plugin}` |
 | `config/webpack.dev.js` | `port` | `9500` | Same as `package.json` port |
-| `.env.development` | `URL_PREFIX` | `/rhoai-brewet` | `/{your-plugin}` |
-| `chart/Chart.yaml` | `name` | `rhoai-brewet-chart` | `{your-plugin}-chart` |
-| `chart/values.yaml` | `image.repository` | `quay.io/.../rhoai-brewet` | Your image repository |
-| `chart/values.yaml` | `ingress.path` | `/rhoai-brewet` | `/{your-plugin}` |
+| `.env.development` | `URL_PREFIX` | `/brewet` | `/{your-plugin}` |
+| `chart/Chart.yaml` | `name` | `brewet-chart` | `{your-plugin}-chart` |
+| `chart/values.yaml` | `image.repository` | `quay.io/.../brewet` | Your image repository |
+| `chart/values.yaml` | `ingress.path` | `/brewet` | `/{your-plugin}` |
 
 ### Identifiers to keep (shared)
 

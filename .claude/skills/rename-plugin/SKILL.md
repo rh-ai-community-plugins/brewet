@@ -78,7 +78,7 @@ The script prints a checklist of manual steps. Relay these to the user clearly:
 
 1. **Update `MODULE_FEDERATION_CONFIG`** in the dashboard's environment — the `name` field must match the new `camelCase` identifier, and `proxyService.path` must match `/{kebab}/api`.
 2. **Restart ALL services** — the dashboard, plugin dev server, and BFF must all be restarted. The dashboard caches federation config at startup.
-3. **Update container image repositories** — replace `quay.io/OWNER/` placeholders in `chart/values.yaml` and `.github/workflows/build-push.yml`.
+3. **Update container image repositories** — replace `quay.io/rh-ai-community-plugins/` placeholders in `chart/values.yaml` and `.github/workflows/build-push.yml`.
 4. **Update `plugin.yaml`** — set the `remoteEntry` URL to point to the deployed image location.
 
 ## Example

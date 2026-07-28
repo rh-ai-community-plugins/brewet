@@ -14,9 +14,7 @@ Call the dashboard's own backend endpoints (`/api/status`, `/api/config`, `/api/
 
 **When to use:** You need user identity, dashboard settings, or information the dashboard already aggregates.
 
-**See:** [User Info page](../../src/app/pages/UserInfoPage.tsx) — calls `/api/status` to display the authenticated user's details.
-
-**How it works:** Your frontend code calls `fetch('/api/status')` directly. The dashboard backend handles authentication and returns JSON. No additional backend service needed.
+**Example:** Call `fetch('/api/status')` to get the authenticated user's details. The dashboard backend handles authentication and returns JSON. No additional backend service needed.
 
 See [section 1.2](#12-dashboard-backend-apis-callable-from-your-plugins-frontend) for the full API reference.
 
@@ -26,9 +24,7 @@ Use the dashboard's `/api/k8s/*` proxy to read, create, update, and delete any K
 
 **When to use:** You need to interact with Kubernetes resources (pods, deployments, services, custom resources, etc.) and the standard K8s API is sufficient.
 
-**See:** [Cluster Resources page](../../src/app/pages/ClusterResourcesPage.tsx) — creates and lists Deployments and Services in the user's namespaces.
-
-**How it works:** Your frontend code calls `fetch('/api/k8s/apis/apps/v1/namespaces/my-ns/deployments')`. The dashboard backend proxies the request to the K8s API server, forwarding the user's token. The response is the standard Kubernetes API response.
+**Example:** Call `fetch('/api/k8s/apis/apps/v1/namespaces/my-ns/deployments')` to list Deployments. The dashboard backend proxies the request to the K8s API server, forwarding the user's token. The response is the standard Kubernetes API response.
 
 See [section 2](#2-interacting-with-the-cluster-from-your-plugin) for code examples (listing resources, creating deployments, checking RBAC permissions).
 
@@ -43,9 +39,7 @@ Deploy your own backend service alongside the plugin. The dashboard proxies requ
 - You need to keep API keys or credentials server-side
 - You need server-side business logic or heavy data processing
 
-**See:** [Namespace Summary page](../../src/app/pages/NamespaceSummaryPage.tsx) — calls the plugin's BFF, which lists the user's projects and counts pods per namespace server-side, returning a single aggregated response.
-
-**How it works:** Your frontend calls `fetch('/rhoai-brewet/api/namespace-summary')`. The dashboard matches the path against the `proxyService` configuration, rewrites it to `/api/namespace-summary`, and forwards the request to your BFF service with the user's Bearer token. Your BFF uses the token to make K8s API calls as the user.
+**Example:** The Brewet plugin's frontend calls `fetch('/brewet/api/{namespace}/buckets/list')`. The dashboard matches the path against the `proxyService` configuration, rewrites it to `/api/{namespace}/buckets/list`, and forwards the request to the BFF with the user's Bearer token. The BFF resolves the per-project storage backend via K8s service discovery and proxies the request.
 
 See [section 1.3](#13-using-your-own-backend-bff-pattern) below and the full [BFF Pattern guide](../architecture/BFF_PATTERN.md) for setup details, token flow, and deployment configuration.
 
@@ -121,7 +115,7 @@ Example: `fetch('/api/k8s/apis/project.openshift.io/v1/projects')` lists the use
 | `/api/prometheus` | Prometheus metrics |
 | `/api/cluster-settings` | Cluster config |
 | `/api/connection-types` | Connection type definitions |
-| `/api/health` | Backend health check |
+| `/healthz` | Backend health check |
 | `/api/dsc` | DataScienceCluster CR |
 | `/api/dsci` | DSCInitialization CR |
 | `/api/integrations` | Integration configurations |
@@ -461,7 +455,7 @@ Use the `isAdmin` field from `/api/status` to conditionally render content that 
 ```tsx
 import { Card, CardTitle, CardBody } from '@patternfly/react-core';
 import { LockIcon } from '@patternfly/react-icons';
-import { useCurrentUser } from '~/app/hooks/useCurrentUser';
+// useCurrentUser hook from section 2.1 above
 
 const MyPage: React.FC = () => {
   const { user } = useCurrentUser();
@@ -483,7 +477,7 @@ const MyPage: React.FC = () => {
 
 The same approach works with `isAllowed` or with fine-grained RBAC checks via `useAccessReview` (see [section 2.4](#24-checking-user-permissions-rbac)) — for example, hiding a "Create" button when the user lacks `create` permission on a specific resource.
 
-The [User Info page](../../src/app/pages/UserInfoPage.tsx) includes an admin-only card that is only rendered when `user.isAdmin` is `true`.
+The `isAdmin` field is useful for conditionally rendering admin-only controls like cluster-wide settings or maintenance operations.
 
 ### 2.6 Reading Dashboard Configuration
 

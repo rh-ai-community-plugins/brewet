@@ -2,9 +2,10 @@ import {
   brewetAreaExtension,
   communityPluginsSectionExtension,
   brewetSectionExtension,
-  userInfoNavExtension,
-  clusterResourcesNavExtension,
-  namespaceSummaryNavExtension,
+  storageSectionExtension,
+  storageBrowserNavExtension,
+  storageManagementNavExtension,
+  settingsNavExtension,
   brewetRouteExtension,
   extensions,
 } from '../extensions';
@@ -45,32 +46,41 @@ describe('RHOAI Plugin Extensions', () => {
     });
   });
 
+  describe('storageSectionExtension', () => {
+    it('should define a Storage subsection under brewet', () => {
+      expect(storageSectionExtension.type).toBe('app.navigation/section');
+      expect(storageSectionExtension.properties.id).toBe('brewet-storage');
+      expect(storageSectionExtension.properties.title).toBe('Storage');
+      expect(storageSectionExtension.properties.section).toBe('brewet');
+    });
+  });
+
   describe('navigation extensions', () => {
-    it('should define User Info nav item under brewet section', () => {
-      expect(userInfoNavExtension.type).toBe('app.navigation/href');
-      expect(userInfoNavExtension.properties.id).toBe('brewet-user-info');
-      expect(userInfoNavExtension.properties.title).toBe('User Info');
-      expect(userInfoNavExtension.properties.href).toBe('/brewet/user-info');
-      expect(userInfoNavExtension.properties.section).toBe('brewet');
-      expect(userInfoNavExtension.properties.path).toBe('/brewet/user-info/*');
+    it('should define Storage Browser nav item under storage section', () => {
+      expect(storageBrowserNavExtension.type).toBe('app.navigation/href');
+      expect(storageBrowserNavExtension.properties.id).toBe('brewet-storage-browser');
+      expect(storageBrowserNavExtension.properties.title).toBe('Storage Browser');
+      expect(storageBrowserNavExtension.properties.href).toBe('/brewet/storage/browse');
+      expect(storageBrowserNavExtension.properties.section).toBe('brewet-storage');
+      expect(storageBrowserNavExtension.properties.path).toBe('/brewet/storage/browse/*');
     });
 
-    it('should define Cluster Resources nav item under brewet section', () => {
-      expect(clusterResourcesNavExtension.type).toBe('app.navigation/href');
-      expect(clusterResourcesNavExtension.properties.id).toBe('brewet-cluster-resources');
-      expect(clusterResourcesNavExtension.properties.title).toBe('Cluster Resources');
-      expect(clusterResourcesNavExtension.properties.href).toBe('/brewet/cluster-resources');
-      expect(clusterResourcesNavExtension.properties.section).toBe('brewet');
-      expect(clusterResourcesNavExtension.properties.path).toBe('/brewet/cluster-resources/*');
+    it('should define Storage Management nav item under storage section', () => {
+      expect(storageManagementNavExtension.type).toBe('app.navigation/href');
+      expect(storageManagementNavExtension.properties.id).toBe('brewet-storage-management');
+      expect(storageManagementNavExtension.properties.title).toBe('Storage Management');
+      expect(storageManagementNavExtension.properties.href).toBe('/brewet/storage/manage');
+      expect(storageManagementNavExtension.properties.section).toBe('brewet-storage');
+      expect(storageManagementNavExtension.properties.path).toBe('/brewet/storage/manage/*');
     });
 
-    it('should define Namespace Summary nav item under brewet section', () => {
-      expect(namespaceSummaryNavExtension.type).toBe('app.navigation/href');
-      expect(namespaceSummaryNavExtension.properties.id).toBe('brewet-namespace-summary');
-      expect(namespaceSummaryNavExtension.properties.title).toBe('Namespace Summary');
-      expect(namespaceSummaryNavExtension.properties.href).toBe('/brewet/namespace-summary');
-      expect(namespaceSummaryNavExtension.properties.section).toBe('brewet');
-      expect(namespaceSummaryNavExtension.properties.path).toBe('/brewet/namespace-summary/*');
+    it('should define Settings nav item under brewet section', () => {
+      expect(settingsNavExtension.type).toBe('app.navigation/href');
+      expect(settingsNavExtension.properties.id).toBe('brewet-settings');
+      expect(settingsNavExtension.properties.title).toBe('Settings');
+      expect(settingsNavExtension.properties.href).toBe('/brewet/settings');
+      expect(settingsNavExtension.properties.section).toBe('brewet');
+      expect(settingsNavExtension.properties.path).toBe('/brewet/settings/*');
     });
   });
 
@@ -84,8 +94,8 @@ describe('RHOAI Plugin Extensions', () => {
   });
 
   describe('extensions array', () => {
-    it('should contain all seven extensions', () => {
-      expect(extensions).toHaveLength(7);
+    it('should contain all eight extensions', () => {
+      expect(extensions).toHaveLength(8);
     });
 
     it('should include all extensions in the correct order', () => {
@@ -93,9 +103,10 @@ describe('RHOAI Plugin Extensions', () => {
         communityPluginsSectionExtension,
         brewetAreaExtension,
         brewetSectionExtension,
-        userInfoNavExtension,
-        clusterResourcesNavExtension,
-        namespaceSummaryNavExtension,
+        storageSectionExtension,
+        storageBrowserNavExtension,
+        storageManagementNavExtension,
+        settingsNavExtension,
         brewetRouteExtension,
       ]);
     });

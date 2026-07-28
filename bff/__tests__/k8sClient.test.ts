@@ -1,6 +1,6 @@
 import https from 'https';
 import { EventEmitter } from 'events';
-import { k8sRequest, getK8sBaseUrl } from '../src/utils/k8sClient';
+import { k8sRequest, getK8sBaseUrl, K8sHttpError } from '../src/utils/k8sClient';
 
 jest.mock('https');
 
@@ -53,6 +53,7 @@ describe('k8sRequest', () => {
     jest.resetAllMocks();
     process.env = { ...originalEnv };
     process.env.K8S_API_BASE = 'https://my-cluster:6443';
+    delete process.env.K8S_TLS_SKIP_VERIFY;
   });
 
   afterAll(() => {
@@ -91,7 +92,7 @@ describe('k8sRequest', () => {
     expect(callArgs.path).toBe('/apis/project.openshift.io/v1/projects');
   });
 
-  it('rejects on non-2xx responses', async () => {
+  it('rejects on non-2xx responses with K8sHttpError', async () => {
     const mockReq = new EventEmitter() as any;
     mockReq.end = jest.fn();
 
@@ -103,6 +104,29 @@ describe('k8sRequest', () => {
     await expect(k8sRequest('bad-token', '/api/v1/pods')).rejects.toThrow(
       'K8s API returned 403',
     );
+  });
+
+  it('does not include response body in K8sHttpError message', async () => {
+    const mockReq = new EventEmitter() as any;
+    mockReq.end = jest.fn();
+
+    const sensitiveBody = '{"message":"forbidden","serviceAccount":"system:serviceaccount:cp-brewet:bff"}';
+    mockedHttps.request.mockImplementation((_opts: any, callback: any) => {
+      callback(createMockResponse(403, sensitiveBody));
+      return mockReq;
+    });
+
+    try {
+      await k8sRequest('bad-token', '/api/v1/pods');
+      fail('Expected K8sHttpError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(K8sHttpError);
+      const httpErr = err as K8sHttpError;
+      expect(httpErr.message).toBe('K8s API returned 403');
+      expect(httpErr.message).not.toContain('serviceAccount');
+      expect(httpErr.status).toBe(403);
+      expect(httpErr.body).toBe(sensitiveBody);
+    }
   });
 
   it('rejects on request error', async () => {
@@ -117,5 +141,59 @@ describe('k8sRequest', () => {
     await expect(k8sRequest('token', '/api/v1/pods')).rejects.toThrow(
       'ECONNREFUSED',
     );
+  });
+
+  it('does not disable TLS verification by default', async () => {
+    const mockReq = new EventEmitter() as any;
+    mockReq.end = jest.fn();
+
+    mockedHttps.request.mockImplementation((_opts: any, callback: any) => {
+      callback(createMockResponse(200, '{}'));
+      return mockReq;
+    });
+
+    await k8sRequest('token', '/api/v1/pods');
+
+    const callArgs = mockedHttps.request.mock.calls[0][0] as any;
+    expect(callArgs.rejectUnauthorized).toBeUndefined();
+  });
+
+  it('disables TLS verification when K8S_TLS_SKIP_VERIFY is true', async () => {
+    process.env.K8S_TLS_SKIP_VERIFY = 'true';
+
+    const mockReq = new EventEmitter() as any;
+    mockReq.end = jest.fn();
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    mockedHttps.request.mockImplementation((_opts: any, callback: any) => {
+      callback(createMockResponse(200, '{}'));
+      return mockReq;
+    });
+
+    await k8sRequest('token', '/api/v1/pods');
+
+    const callArgs = mockedHttps.request.mock.calls[0][0] as any;
+    expect(callArgs.rejectUnauthorized).toBe(false);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('TLS certificate verification is disabled'),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('does not disable TLS when K8S_TLS_SKIP_VERIFY is not "true"', async () => {
+    process.env.K8S_TLS_SKIP_VERIFY = 'false';
+
+    const mockReq = new EventEmitter() as any;
+    mockReq.end = jest.fn();
+
+    mockedHttps.request.mockImplementation((_opts: any, callback: any) => {
+      callback(createMockResponse(200, '{}'));
+      return mockReq;
+    });
+
+    await k8sRequest('token', '/api/v1/pods');
+
+    const callArgs = mockedHttps.request.mock.calls[0][0] as any;
+    expect(callArgs.rejectUnauthorized).toBeUndefined();
   });
 });

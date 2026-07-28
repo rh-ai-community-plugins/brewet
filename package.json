@@ -1,9 +1,9 @@
 {
-  "name": "rhoai-brewet",
-  "version": "0.4.0",
+  "name": "brewet",
+  "version": "0.1.0",
   "description": "A reference implementation and scaffold plugin for the RHOAI Dashboard",
   "private": true,
-  "_comment_name": "[PLUGIN-SPECIFIC] package name — change to rhoai-{your-plugin}",
+  "_comment_name": "[PLUGIN-SPECIFIC] package name — change to {your-plugin}",
   "_comment_mf": "[PLUGIN-SPECIFIC] module-federation.name — camelCase, must match webpack and plugin.yaml",
   "module-federation": {
     "name": "brewet",
@@ -41,7 +41,7 @@
     "lint:ts": "eslint --ext .ts,.tsx src/",
     "lint:md": "markdownlint-cli2 '**/*.md'",
     "sync-chart-version": "node scripts/sync-chart-version.js",
-    "version": "npm run sync-chart-version && git add chart/Chart.yaml bff/package.json plugin.yaml README.md docs/development/BUILD_AND_PUSH.md docs/deployment/OPENSHIFT_DEPLOY.md"
+    "version": "npm run sync-chart-version && git add chart/Chart.yaml bff/package.json storage-backend/package.json plugin.yaml src/app/utils/k8sResources.ts .env.development README.md docs/development/BUILD_AND_PUSH.md docs/deployment/OPENSHIFT_DEPLOY.md"
   },
   "dependencies": {
     "@openshift/dynamic-plugin-sdk": "^5",

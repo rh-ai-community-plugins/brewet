@@ -26,7 +26,7 @@ jobs:
       - name: Build and push image
         uses: redhat-actions/buildah-build@v2
         with:
-          image: rhoai-brewet
+          image: brewet
           tags: ${{ inputs.version }}
           containerfiles: |
             ./Containerfile
@@ -34,7 +34,7 @@ jobs:
       - name: Push to Quay.io
         uses: redhat-actions/push-to-registry@v2
         with:
-          image: rhoai-brewet
+          image: brewet
           tags: ${{ inputs.version }}
           registry: quay.io/rh-ai-community-plugins
 
@@ -65,5 +65,35 @@ jobs:
         uses: redhat-actions/push-to-registry@v2
         with:
           image: brewet-bff
+          tags: ${{ inputs.version }}
+          registry: quay.io/rh-ai-community-plugins
+
+  build-and-push-storage-backend:
+    runs-on: ubuntu-latest
+    name: Build and push storage backend container image
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Quay.io
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Build storage backend image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: brewet-storage-backend
+          tags: ${{ inputs.version }}
+          containerfiles: |
+            ./storage-backend/Containerfile
+          context: ./storage-backend
+
+      - name: Push storage backend to Quay.io
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: brewet-storage-backend
           tags: ${{ inputs.version }}
           registry: quay.io/rh-ai-community-plugins

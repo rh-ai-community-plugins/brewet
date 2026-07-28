@@ -1,14 +1,17 @@
 apiVersion: v2
-name: rhoai-brewet-chart
+name: brewet-chart
 description: A Helm chart for deploying the RHOAI Brewet plugin
 type: application
-version: 0.4.0
-appVersion: "0.4.0"
+version: 0.1.0
+appVersion: "0.1.0"
 keywords:
   - rhoai
   - openshift-ai
   - plugin
-  - rhoai-brewet
-home: https://github.com/rh-ai-community-plugins/rhoai-brewet
+  - brewet
+home: https://github.com/rh-ai-community-plugins/brewet
 sources:
-  - https://github.com/rh-ai-community-plugins/rhoai-brewet
+  - https://github.com/rh-ai-community-plugins/brewet
+maintainers:
+  - name: rh-ai-community-plugins
+    url: https://github.com/rh-ai-community-plugins
