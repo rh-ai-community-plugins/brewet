@@ -10,7 +10,25 @@ import {
   SETTINGS_SECRET_NAME,
 } from '~/app/utils/k8sResources';
 
-const BFF_NAMESPACE = process.env.BFF_NAMESPACE ?? 'cp-brewet';
+const BFF_BASE = process.env.BFF_BASE_URL || '/brewet/api';
+let bffNamespaceCache: string | null = null;
+
+async function fetchBffNamespace(): Promise<string> {
+  if (bffNamespaceCache) return bffNamespaceCache;
+  try {
+    const res = await fetch(`${BFF_BASE}/config`);
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof data.bffNamespace === 'string' && data.bffNamespace) {
+        bffNamespaceCache = data.bffNamespace;
+        return data.bffNamespace;
+      }
+    }
+  } catch {
+    // BFF unreachable (e.g. local dev without BFF running)
+  }
+  return 'cp-brewet';
+}
 
 export interface CreateResourceResult {
   resource: string;
@@ -134,6 +152,8 @@ export function useBrewetContainer() {
       const results: CreateResourceResult[] = [];
       const createdUrls: string[] = [];
 
+      const bffNamespace = await fetchBffNamespace();
+
       const resourceSpecs = [
         {
           name: 'Secret',
@@ -157,7 +177,7 @@ export function useBrewetContainer() {
           name: 'NetworkPolicy',
           createUrl: `/api/k8s/apis/networking.k8s.io/v1/namespaces/${ns}/networkpolicies`,
           deleteUrl: `/api/k8s/apis/networking.k8s.io/v1/namespaces/${ns}/networkpolicies/${DEPLOYMENT_NAME}-ingress`,
-          body: buildNetworkPolicy(selectedProject, BFF_NAMESPACE),
+          body: buildNetworkPolicy(selectedProject, bffNamespace),
         },
       ];
 

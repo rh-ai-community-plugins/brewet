@@ -5,6 +5,7 @@ import { setupGracefulShutdown } from './shutdown';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
+const POD_NAMESPACE = process.env.POD_NAMESPACE ?? 'cp-brewet';
 
 // Trust the first reverse proxy (OpenShift router / ingress) so that
 // req.ip returns the real client IP instead of the proxy's address.
@@ -39,6 +40,10 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
+
+app.get('/api/config', (_req, res) => {
+  res.json({ bffNamespace: POD_NAMESPACE });
+});
 
 app.use('/api', createStorageProxyRouter());
 

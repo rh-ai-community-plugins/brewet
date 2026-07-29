@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-29
+
 ### Added
 
 - Configurable file type validation with a new **File Types** tab in Settings
@@ -14,11 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Supports glob/wildcard patterns (e.g., `.p*` matches `.py`, `.pl`, `.php`; `*` matches any extension)
   - Settings persist in the `brewet-storage-backend-settings` K8s Secret via `ALLOWED_FILE_EXTENSIONS` and `BLOCKED_FILE_EXTENSIONS` environment variables
   - Leave fields empty to use the built-in defaults
+- BFF `/api/config` endpoint exposing the BFF's namespace for runtime discovery
 
 ### Fixed
 
 - `.py` files can now be uploaded (moved from blocked to allowed in the default extension list)
 - Storage locations now shown when S3 is connected but no buckets exist yet, with a link to Storage Management ([#203](https://github.com/rh-ai-community-plugins/brewet/issues/203))
+- NetworkPolicy now references the actual BFF namespace instead of the hardcoded default, fixing storage backend connectivity when the plugin is deployed to a custom namespace
 
 ### Changed
 
@@ -26,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Extracted `useStorageLocations` and `useFileList` custom hooks
   - Extracted `DeleteConfirmationModal`, `CreateFolderModal`, `BulkDeleteConfirmationModal`, `UploadModal`, `FileTable`, `LocationToolbar`, and `StorageBrowserToolbar` components
   - Main component reduced to 499 lines with no behavior changes
+- BFF namespace for NetworkPolicy is now resolved at runtime from the BFF instead of being baked in at build time
 
 ## [0.1.0] - 2026-07-27
 

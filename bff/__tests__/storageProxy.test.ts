@@ -42,6 +42,8 @@ describe('Storage Proxy', () => {
   let bffServer: http.Server;
   let bffPort: number;
 
+  const TEST_POD_NAMESPACE = 'custom-ns';
+
   beforeAll((done) => {
     const target = express();
     target.use(express.json());
@@ -98,6 +100,7 @@ describe('Storage Proxy', () => {
 
       const bff = express();
       bff.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
+      bff.get('/api/config', (_req, res) => res.json({ bffNamespace: TEST_POD_NAMESPACE }));
       bff.use('/api', createStorageProxyRouter());
 
       bffServer = bff.listen(0, () => {
@@ -122,6 +125,15 @@ describe('Storage Proxy', () => {
       const res = await request(bffPort, '/healthz');
       expect(res.statusCode).toBe(200);
       expect(JSON.parse(res.body)).toEqual({ status: 'ok' });
+      expect(mockedResolve).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('config endpoint', () => {
+    it('returns the BFF namespace', async () => {
+      const res = await request(bffPort, '/api/config');
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)).toEqual({ bffNamespace: TEST_POD_NAMESPACE });
       expect(mockedResolve).not.toHaveBeenCalled();
     });
   });
