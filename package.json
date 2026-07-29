@@ -1,6 +1,6 @@
 {
   "name": "brewet",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A reference implementation and scaffold plugin for the RHOAI Dashboard",
   "private": true,
   "_comment_name": "[PLUGIN-SPECIFIC] package name — change to {your-plugin}",

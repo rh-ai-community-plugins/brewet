@@ -1,6 +1,6 @@
 {
   "name": "brewet-storage-backend",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Per-project storage backend for the Brewet RHOAI dashboard plugin",
   "main": "dist/server.js",
   "scripts": {

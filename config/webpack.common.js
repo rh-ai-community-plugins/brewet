@@ -61,9 +61,6 @@ module.exports = {
         process.env.STORAGE_BACKEND_IMAGE ||
           `quay.io/rh-ai-community-plugins/brewet-storage-backend:${version}`,
       ),
-      'process.env.BFF_NAMESPACE': JSON.stringify(
-        process.env.BFF_NAMESPACE || 'cp-brewet',
-      ),
       'process.env.BFF_BASE_URL': JSON.stringify(
         process.env.BFF_BASE_URL || '',
       ),

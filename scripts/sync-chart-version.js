@@ -64,23 +64,21 @@ let values = fs.readFileSync(valuesPath, 'utf8');
 
 before = values;
 values = values.replace(
-  /(^image:\s*\n\s+repository:[^\n]*\n\s+tag:)\s*"[^"]*"/m,
+  /(^image:\s*\n(?:\s*#[^\n]*\n)*\s+repository:[^\n]*\n(?:\s*#[^\n]*\n)*\s+tag:)\s*"[^"]*"/m,
   `$1 "${version}"`,
 );
 verifyReplace(before, values, `image.tag in ${valuesPath}`);
 
 before = values;
-// Use [\s\S]*? to skip any intervening keys (non-order-dependent)
 values = values.replace(
-  /(^bff:[\s\S]*?  image:\n    repository:[^\n]*\n    tag:)\s*"[^"]*"/m,
+  /(^bff:[\s\S]*?  image:\n(?:\s*#[^\n]*\n)*    repository:[^\n]*\n(?:\s*#[^\n]*\n)*    tag:)\s*"[^"]*"/m,
   `$1 "${version}"`,
 );
 verifyReplace(before, values, `bff.image.tag in ${valuesPath}`);
 
 before = values;
-// Use [\s\S]*? to skip any intervening keys (non-order-dependent)
 values = values.replace(
-  /(^storageBackend:[\s\S]*?  image:\n    repository:[^\n]*\n    tag:)\s*"[^"]*"/m,
+  /(^storageBackend:[\s\S]*?  image:\n(?:\s*#[^\n]*\n)*    repository:[^\n]*\n(?:\s*#[^\n]*\n)*    tag:)\s*"[^"]*"/m,
   `$1 "${version}"`,
 );
 verifyReplace(before, values, `storageBackend.image.tag in ${valuesPath}`);
