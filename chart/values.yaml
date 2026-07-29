@@ -1,6 +1,10 @@
 # Default values for brewet.
 # This is a YAML-formatted file.
 
+# -- Target namespace for all namespaced resources.
+# Override with --set namespace=<ns> to deploy elsewhere.
+namespace: cp-brewet
+
 image:
   # -- Container image registry and repository.
   # Format: <registry>/<org>/<image> (e.g. quay.io/my-org/brewet).
