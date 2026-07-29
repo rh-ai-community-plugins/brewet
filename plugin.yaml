@@ -32,6 +32,7 @@ storage_backend_image:
 # --- Installation (required) ---
 install:
   method: automatic
+  namespace: cp-brewet
   helm:
     chart_path: chart/
     registry: oci://quay.io/rh-ai-community-plugins/brewet-chart   # [PLUGIN-SPECIFIC] Helm chart OCI registry
