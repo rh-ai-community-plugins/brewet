@@ -1,6 +1,8 @@
+{{- if ne (include "brewet.namespace" .) .Release.Namespace }}
 apiVersion: v1
 kind: Namespace
 metadata:
   name: {{ include "brewet.namespace" . }}
   labels:
     {{- include "brewet.labels" . | nindent 4 }}
+{{- end }}
