@@ -3,6 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "brewet.bffFullname" . }}
+  namespace: {{ include "brewet.namespace" . }}
   labels:
     {{- include "brewet.labels" . | nindent 4 }}
     app.kubernetes.io/component: bff

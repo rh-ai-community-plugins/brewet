@@ -1,4 +1,11 @@
 {{/*
+Target namespace for all namespaced resources.
+*/}}
+{{- define "brewet.namespace" -}}
+{{- .Values.namespace | default .Release.Namespace }}
+{{- end }}
+
+{{/*
 Expand the name of the chart.
 */}}
 {{- define "brewet.name" -}}
