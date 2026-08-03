@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-03
+
+### Changed
+
+- HuggingFace imports now preserve the `owner/model` hierarchy as nested folders instead of flattening to `owner_model` — models are organized by owner for easier navigation on both S3 and PVC storage
+
 ## [0.1.1] - 2026-07-29
 
 ### Added
@@ -190,5 +196,7 @@ Initial release of the Brewet plugin, providing S3 and PVC storage management fo
 - Node.js version updated to 22 in CI to match Containerfiles
 - Security, resilience, accessibility, and cleanup hardening
 
-[Unreleased]: https://github.com/rh-ai-community-plugins/brewet/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/rh-ai-community-plugins/brewet/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/rh-ai-community-plugins/brewet/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/rh-ai-community-plugins/brewet/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/rh-ai-community-plugins/brewet/releases/tag/v0.1.0

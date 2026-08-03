@@ -174,7 +174,7 @@ const HuggingFaceImportModal: React.FC<HuggingFaceImportModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      const effectivePrefix = modelId.replace('/', '_');
+      const effectivePrefix = modelId;
       const fullPrefix = currentPath
         ? `${currentPath.replace(/\/+$/, '')}/${effectivePrefix}`
         : effectivePrefix;

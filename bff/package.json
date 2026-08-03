@@ -1,6 +1,6 @@
 {
   "name": "brewet-bff",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "BFF service for the Brewet RHOAI dashboard plugin",
   "main": "dist/server.js",
   "scripts": {

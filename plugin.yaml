@@ -2,7 +2,7 @@
 name: brewet                        # [PLUGIN-SPECIFIC] Module Federation remote name
 displayName: Brewet                 # [PLUGIN-SPECIFIC] Human-readable name in dashboard sidebar
 description: S3 and PVC storage management for Red Hat OpenShift AI — browse, upload, download, and transfer files across storage backends
-version: 0.1.1
+version: 0.1.2
 
 # --- Maintainer (required) ---
 maintainer:
@@ -19,15 +19,15 @@ deployment_model: cluster-shared
 
 image:
   repository: quay.io/rh-ai-community-plugins/brewet              # [PLUGIN-SPECIFIC] Frontend container image
-  tag: "0.1.1"
+  tag: "0.1.2"
 
 bff_image:
   repository: quay.io/rh-ai-community-plugins/brewet-bff          # [PLUGIN-SPECIFIC] BFF container image
-  tag: "0.1.1"
+  tag: "0.1.2"
 
 storage_backend_image:
   repository: quay.io/rh-ai-community-plugins/brewet-storage-backend  # [PLUGIN-SPECIFIC] Storage backend container image
-  tag: "0.1.1"
+  tag: "0.1.2"
 
 # --- Installation (required) ---
 install:

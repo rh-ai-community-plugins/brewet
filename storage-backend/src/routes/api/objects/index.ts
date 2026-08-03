@@ -796,7 +796,7 @@ export default async (fastify: FastifyInstance): Promise<void> => {
       }
 
       let modelFiles = modelInfo.siblings as Array<{ rfilename: string }>;
-      const prefix = body.prefix || body.modelId.replace('/', '_');
+      const prefix = body.prefix || body.modelId;
 
       if (body.excludeExtensions && body.excludeExtensions.length > 0) {
         const excluded = body.excludeExtensions.map((e) =>
