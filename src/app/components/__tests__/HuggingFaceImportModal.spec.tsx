@@ -81,7 +81,7 @@ describe('HuggingFaceImportModal', () => {
           modelId: 'meta-llama/Llama-2-7b',
           destinationType: 's3',
           bucketName: 'my-bucket',
-          prefix: 'meta-llama_Llama-2-7b',
+          prefix: 'meta-llama/Llama-2-7b',
         }),
       );
     });
@@ -110,7 +110,7 @@ describe('HuggingFaceImportModal', () => {
       expect(mockStorageService.importHuggingFace).toHaveBeenCalledWith(
         'test-ns',
         expect.objectContaining({
-          prefix: 'some/folder/meta-llama_Llama-2-7b',
+          prefix: 'some/folder/meta-llama/Llama-2-7b',
         }),
       );
     });
@@ -142,7 +142,7 @@ describe('HuggingFaceImportModal', () => {
           modelId: 'owner/model',
           destinationType: 'local',
           localLocationId: 'local-0',
-          prefix: 'owner_model',
+          prefix: 'owner/model',
         }),
       );
     });
@@ -216,7 +216,7 @@ describe('HuggingFaceImportModal', () => {
         'test-ns',
         expect.objectContaining({
           hfToken: 'hf_test_token',
-          prefix: 'owner_model',
+          prefix: 'owner/model',
         }),
       );
     });

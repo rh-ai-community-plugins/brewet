@@ -5,7 +5,7 @@ export const SETTINGS_SECRET_NAME = 'brewet-storage-backend-settings';
 const SERVICE_PORT = 8888;
 const CONTAINER_IMAGE_DEFAULT =
   process.env.STORAGE_BACKEND_IMAGE ||
-  'quay.io/rh-ai-community-plugins/brewet-storage-backend:0.1.1';
+  'quay.io/rh-ai-community-plugins/brewet-storage-backend:0.1.2';
 const DEFAULT_MOUNT_PREFIX = '/opt/app-root/src';
 
 const DANGEROUS_PATHS = ['/', '/etc', '/proc', '/sys', '/dev', '/var', '/tmp', '/root', '/home'];

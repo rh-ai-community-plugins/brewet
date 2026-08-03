@@ -10,7 +10,7 @@ image:
   # Format: <registry>/<org>/<image> (e.g. quay.io/my-org/brewet).
   repository: quay.io/rh-ai-community-plugins/brewet
   # -- Image tag override. When empty (""), defaults to the chart's appVersion.
-  tag: "0.1.1"
+  tag: "0.1.2"
   pullPolicy: IfNotPresent
 
 # -- Overrides .Chart.Name so deployed resources use the plugin name, not the
@@ -78,7 +78,7 @@ bff:
     # Format: <registry>/<org>/<image>.
     repository: quay.io/rh-ai-community-plugins/brewet-bff
     # -- BFF image tag override. When empty (""), defaults to appVersion.
-    tag: "0.1.1"
+    tag: "0.1.2"
     pullPolicy: IfNotPresent
   # -- Number of BFF pod replicas. Must be a positive integer (>= 1).
   replicaCount: 1
@@ -109,5 +109,5 @@ storageBackend:
     # Format: <registry>/<org>/<image>.
     repository: quay.io/rh-ai-community-plugins/brewet-storage-backend
     # -- Storage backend image tag override. When empty (""), defaults to appVersion.
-    tag: "0.1.1"
+    tag: "0.1.2"
     pullPolicy: IfNotPresent
